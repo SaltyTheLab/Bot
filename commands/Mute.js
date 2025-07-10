@@ -1,4 +1,4 @@
-import { Integration, PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
+import { EmbedBuilder, PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
 
 export const data = new SlashCommandBuilder()
     .setName('mute')
@@ -44,13 +44,34 @@ export async function execute(interaction) {
         d: 86400000  // days
     };
     const timeMs = duration * unitMap[unit];
+    const embed = new EmbedBuilder()
+        .setTitle(`${interaction.user.tag} issued a mute`)
+        .setColor(0xFFa500) //orange
+        .addFields(
+            { name: 'User', value: `<@${target.id}>`, inline: true },
+            { name: 'Duration', value: `${duration} ${unit}`, inline: true },
+            { name: 'Reason', value: reason, inline: false },
+        )
+        .setFooter({ text: `Muted by ${interaction.user.tag}` })
+        .setTimestamp();
+    const dmembed = new EmbedBuilder()
+        .setTitle(`${interaction.user.tag} issued a mute`)
+        .setColor(0xFFa500) //orange
+        .addFields(
+            { name: 'User', value: `<@${target.id}>`, inline: true },
+            { name: 'Duration', value: `${duration} ${unit}`, inline: true },
+            { name: 'Reason', value: reason, inline: false },
+        )
+        .setTimestamp();
     if (!timeMs || timeMs <= 0) {
         return interaction.reply({ content: 'Invalid duration.', ephemeral: true });
     }
     const member = await interaction.guild.members.fetch(target.id).catch(() => null);
     if (!member) return interaction.reply({ content: 'user not found.', ephemeral: true });
-    await member.timeout(timeMs, reason).catch(() => interaction.reply({ content: 'failed to mute user.', ephemeral: true }));
+    await target.send({ embeds: [dmembed] }).catch(() => {
+        console.warn('Unable to DM ${target.tag}');
+    })
 
-    return interaction.reply(`<@${target.id}> was issued a ${duration} ${unit} mute.`);
+    return interaction.reply({ embeds: [embed] });
 }
 

@@ -3,7 +3,7 @@ import { config } from 'dotenv';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { data as pingData } from './commands/ping.js';
+
 
 config();
 

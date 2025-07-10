@@ -1,4 +1,4 @@
-import { PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
+import { PermissionFlagsBits, SlashCommandBuilder, EmbedBuilder } from "discord.js";
 
 export const data = new SlashCommandBuilder()
     .setName('ban')
@@ -20,10 +20,11 @@ export async function execute(interaction) {
                 content: 'You do not have permission to use this command.', ephemeral: true
             });
     }
+    
     const target = interaction.options.getUser('target');
     const reason = interaction.options.getString('reason');
     await member.ban();
 
-    return interaction.reply(`<@${target.id}> was banned.`)
+    return interaction.reply({ embeds: [embed] });
 };
 
