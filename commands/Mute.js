@@ -43,8 +43,9 @@ export async function execute(interaction) {
         h: 3600000,  // hours
         d: 86400000  // days
     };
-    const timeMs = duration * unitMap[unit];
-    const commandembed = new EmbedBuilder() //embed for later use in logging channels
+    const timeMs = duration * unitMap[unit]; // map days, hours, minutes to milliseconds
+    //embed for commands
+    const commandembed = new EmbedBuilder() 
         .setAuthor({
             name: interaction.user.tag + ' muted a member',
             iconURL: interaction.user.displayAvatarURL()
@@ -83,7 +84,7 @@ export async function execute(interaction) {
         )
 
     const member = await interaction.guild.members.fetch(target.id).catch(() => null);
-    
+
     if (!timeMs || timeMs <= 0) {
         return interaction.reply({ content: 'Invalid duration.', ephemeral: true });
     }
