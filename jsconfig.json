@@ -3,5 +3,7 @@
     "module": "CommonJS",
     "target": "ES6"
   },
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules"],
+  "quiet": "true",
+  "processEnv": "myObject"
 }
