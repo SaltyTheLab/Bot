@@ -28,12 +28,15 @@ export const data = new SlashCommandBuilder()
             )
     );
 export async function execute(interaction) {
+    //check if permissions are present.
     if (!interaction.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
         return interaction.reply({
             content: 'You do not have permission to use this command.',
             ephemeral: true
         })
     }
+    //fetch the values entered into the command
+    let dmstatus = 'User was dmed.';
     const target = interaction.options.getUser('target');
     const duration = interaction.options.getInteger('duration');
     const unit = interaction.options.getString('unit');
@@ -45,34 +48,55 @@ export async function execute(interaction) {
     };
     const timeMs = duration * unitMap[unit]; // map days, hours, minutes to milliseconds
     //embed for commands
-    const commandembed = new EmbedBuilder() 
+    const commandembed = new EmbedBuilder()
         .setAuthor({
-            name: interaction.user.tag + ' muted a member',
-            iconURL: interaction.user.displayAvatarURL()
+            name: `${target.tag} was issued a ${duration}${unit} mute.`,
+            icon: target.displayAvatarURL({ dynamic: true })
+                .setColor(0x0099ff)
         })
-        .setColor(0xFFa500) //orange
-        .setThumbnail(target.displayAvatarURL())
-        .addFields(
-            { name: 'User', value: `<@${target.id}>`, inline: true },
-            { name: 'Duration', value: `\`${duration} ${unit}\``, inline: true },
-            { name: 'Channel', value: `<#${interaction.channel.id}>`, inline: true },
-            { name: 'Reason', value: `\`${reason}\``, inline: false }
-        )
-        .setTimestamp();
-    const dmembed = new EmbedBuilder() //embed for user dm
+
+    //embed for user dm
+    const dmembed = new EmbedBuilder()
         .setAuthor({
-            name: target.tag,
-            icon: target.displayAvatarURL()
+            name: `${target.tag} was issued a 1m mute.`,
+            iconURL: target.displayAvatarURL({ dynamic: true })
         })
-        .setColor(0xFFa500) //orange
+        .setColor(0x0099ff) //orange
         .setThumbnail(interaction.guild.iconURL())
         .setDescription(`<@${target.id}>, you have been issued a ` + `\`${duration} ${unit} mute\`` + ` in Salty's Cave.`)
         .addFields(
             { name: 'Reason', value: `\`${reason}\``, inline: false },
         )
         .setTimestamp();
+
+
+    const member = await interaction.guild.members.fetch(target.id).catch(() => null);
+
+    if (!timeMs || timeMs <= 0)
+        return interaction.reply({ content: 'Invalid duration.', ephemeral: true });
+
+    //check if user is in the server
+    if (!member)
+        return interaction.reply({ content: 'user not found.', ephemeral: true });
+
+
+    //apply the timeout
+    try {
+        await member.timeout(timeMs, reason);
+    } catch (err) {
+        return interaction.reply({ content: '⚠️ Failed to apply mute.', ephemeral: true });
+    }
+    //attempt to dm the user
+    try {
+        target.send({ embeds: [dmembed] })
+    }
+    catch {
+        dmstatus = 'user was not dmed.'
+    }
+    //build the log embed.
     const logembed = new EmbedBuilder()
         .setColor(0x0099ff)
+        .setThumbnail(target.displayAvatarURL())
         .setAuthor({
             name: interaction.user.tag + `muted a member`,
             icon: interaction.user.displayAvatarURL()
@@ -82,26 +106,16 @@ export async function execute(interaction) {
             { name: 'Channel:', value: `<#${interaction.channel.id}>`, inline: true },
             { name: 'Reason', value: `\`${reason}\``, inline: false }
         )
+        .setFooter({ text: dmstatus })
 
-    const member = await interaction.guild.members.fetch(target.id).catch(() => null);
-
-    if (!timeMs || timeMs <= 0) {
-        return interaction.reply({ content: 'Invalid duration.', ephemeral: true });
-    }
-
-    if (!member) return interaction.reply({ content: 'user not found.', ephemeral: true });
-    await target.send({ embeds: [dmembed] }).catch(() => {
-        console.warn('Unable to DM ${target.tag}');
-    })
-
-
+    //log the action in the mute logs channel.
+    const logchannelid = '1392889476686020700';
+    const logchannel = interaction.guild.channels.cache.get(logchannelid);
     try {
-        await member.timeout(timeMs, reason);
-    } catch (error) {
-        console.error('Mute failed:', error);
-        await interaction.followUp({ content: '⚠️ Failed to apply mute.', ephemeral: true });
+        logchannel.send({ embeds: [logembed] });
+    } catch {
+        return interaction.reply('could not find my logs channel.');
     }
 
     return interaction.reply({ embeds: [commandembed] });
-}
-
+};

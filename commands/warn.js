@@ -1,5 +1,4 @@
 import { PermissionFlagsBits, SlashCommandBuilder, EmbedBuilder } from "discord.js";
-
 export const data = new SlashCommandBuilder()
     .setName('warn')
     .setDescription('Warns a member')
@@ -12,7 +11,10 @@ export const data = new SlashCommandBuilder()
         .setDescription('reason')
         .setRequired(true)
     );
+
 export async function execute(interaction) {
+
+    const logchannelid = '1392889476686020700';
     const target = interaction.options.getUser('target')
     const reason = interaction.options.getString('reason')
     if (!interaction.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
@@ -20,11 +22,55 @@ export async function execute(interaction) {
             content: 'you do not have permission to use this command.'
         });
     }
+    //build embed response after command
     const commandembed = new EmbedBuilder()
         .setAuthor({
-            name: target.tag + `was issued a warning`,
-            icon: target.displayAvatarURL()
-
+            name: target.tag + ` was issued a warning`,
+            icon: target.displayAvatarURL({ dynamic: true })
         })
-    return interaction.replay({ embed: [commandembed] })
+
+
+
+    const dmembed = new EmbedBuilder()
+        .setAuthor({
+            name: `${target.tag} was issued a warning`,
+            icon: `${target.displayAvatarURL()}`
+        })
+        .setThumbnail(interaction.guild.iconURL())
+        .setDescription(`<@${target.id}>, you were given a warning in Salty's Cave.`)
+        .addFields(
+            { name: 'reason:', value: `\`${reason}\``, inline: false }
+        )
+        .setTimestamp()
+
+    let dmstatus = 'User was dmed.';
+    try {
+        await target.send({ embeds: [dmembed] });
+    }
+    catch {
+        dmstatus = 'User was not dmed.'
+    }
+    const logchannel = interaction.guild.channels.cache.get(logchannelid);
+    const logembed = new EmbedBuilder()
+        .setColor(0xff00ff)
+        .setAuthor({
+            name: interaction.user.tag + `warned a member`,
+            icon: interaction.user.displayAvatarURL({ dynamic: true })
+        })
+        .setThumbnail(target.displayAvatarURL())
+        .setFields(
+            { name: 'Target:', value: `${target}`, inline: true },
+            { name: 'Channel:', value: `<#${interaction.channel.id}>`, inline: true },
+            { name: 'Reason', value: `\`${reason}\``, inline: false }
+        )
+        .setFooter({ text: dmstatus })
+        .setTimestamp()
+
+    try {
+        await logchannel.send({ embeds: [logembed] });
+    } catch {
+        return interaction.reply('I can not find mute logs.');
+    }
+
+    return interaction.reply({ embeds: [commandembed] })
 }

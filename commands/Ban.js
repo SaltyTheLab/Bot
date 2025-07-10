@@ -26,29 +26,62 @@ export async function execute(interaction) {
     const commandembed = new EmbedBuilder()  //command embed format
         .setAuthor(
             {
-                name: target.tag + ' was banned.',
+                name: target.id + ' was banned.',
                 icon: target.displayAvatarURL()
             }
         )
+        .setColor(0xFF0000);
+
+    const dmembed = new EmbedBuilder() //dm embed ban format notice 
+        .setTitle(`${target.tag}`)
+        .setThumbnail(interaction.guild.iconURL())
         .setColor(0xFF0000)
+        .setDescription(
+            `<@${target.id}>, you have been banned from Salty's Cave. 
+            To appeal your ban [click here](https://dyno.gg/form/9dd2f880) which will taky you to the appeal link.
+        `)
+        .addFields({ name: "Reason:", value: `\`${reason}\``, inline: true })
+        .setFooter({ text: `${interaction.guild.name}` })
+        .setTimestamp();
 
-    const dmembed = new EmbedBuilder() //dm format notice 
-        .setTitle(`${target.id}`)
-        .setDescription(`<@${target.tag}, you have been banned from Salty's Cave for the following reason: ${reason}.
-        You may appeal this ban through [here](https://dyno.gg/form/9dd2f880)`)
 
-    const member = await interaction.guild.members.fetch(target.id).catch(() => null);
 
+    const member = await interaction.guild.members.fetch(target.id).catch(() => null); //fetch the users id
     if (!member) // check for user in server
     {
-        return interaction.reply({ content: 'User not found in this server.' })
+        return interaction.reply({ content: 'User not found.' });
     }
-
-    await target.send({ embeds: [dmembed] }).catch(() => {
-        console.warn(`Unable to DM ${target.tag}`);
-    })
-    await member.ban();
+    await member.ban()
+    let dmstatus = 'User was Dmed.'
+    try {
+        await target.send({ embeds: [dmembed] });
+    }
+    catch (err) {
+        dmstatus = 'User was not Dmed';
+    }
+    //log the ban
+    const logembed = new EmbedBuilder()
+        .setAuthor(
+            {
+                name: interaction.user.tag + 'banned a member.',
+                icon: interaction.user.displayAvatarURL()
+            }
+        )
+        .setColor(0xFF0000)
+        .setThumbnail(target.displayAvatarURL())
+        .addFields(
+            { name: "Target", value: `${target}`, inline: true },
+            { name: "Channel", value: `<#${interaction.channel.id}`, inline: true },
+            { name: "reason", value: `\`${reason}\``, inline: false }
+        )
+        .setFooter({ text: dmstatus });
+    const banlogchannelid = '945821977187328082';
+    const banlogchannel = interaction.guild.channels.cache.get(banlogchannelid);
+    try {
+        banlogchannel.send({ embeds: [logembed] })
+    } catch {
+        console.warn('I can not find my ban logs.');
+    }
 
     return interaction.reply({ embeds: [commandembed] });
 };
-
