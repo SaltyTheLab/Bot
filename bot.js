@@ -21,29 +21,30 @@ const client = new Client({
         GatewayIntentBits.GuildMembers
     ]
 });
-
+// add in the list of commands to the bot
 client.commands = new Collection();
 
 for (const file of commandFiles) {
-    const filePath  = path.join(commandsPath, file);
+    const filePath = path.join(commandsPath, file);
     const command = await import(pathToFileURL(filePath).href);
     client.commands.set(command.data.name, command);
 }
-
+// universal method for every slash command, making them modular
 client.on('interactionCreate', async interaction => {
-  if (!interaction.isChatInputCommand()) return;
+    if (!interaction.isChatInputCommand()) return;
 
-  const command = client.commands.get(interaction.commandName);
-  if (!command) return;
+    const command = client.commands.get(interaction.commandName);
+    if (!command) return;
 
-  try {
-    await command.execute(interaction);
-  } catch (error) {
-    console.error(error);
-    await interaction.reply({ content: 'Something went wrong.', ephemeral: true });
-  }
+    try {
+        await command.execute(interaction);
+    } catch (error) {
+        console.error(error);
+        await interaction.reply({ content: 'Something went wrong.', ephemeral: true });
+    }
 });
 
+//needed something to prove bot was active
 client.on('messageCreate', message => {
     if (message.content == 'dmme') {
         message.author.send('Hey! This is a DM from the bot.')
@@ -52,16 +53,18 @@ client.on('messageCreate', message => {
 })
 
 client.once('ready', () => {
-    console.log('Logged in as ${client.user.tag}');
+    console.log(`Logged in as ${client.user.tag}`);
 });
-client.on('messageCreate', message => {
-    if (message.content.toLowerCase() == 'ping')
-        message.reply('Pong!');
-})
+
 client.on('messageCreate', message => {
     if (message.content.toLowerCase() == 'cute')
         message.reply('You\'re Cute'
         );
 })
+
+client.on('messageCreate', message => {
+    if (message.content.toLowerCase() == 'adorable')
+        message.reply('You\'re Adorable')
+});
 
 client.login(process.env.TOKEN);
