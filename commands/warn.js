@@ -1,4 +1,8 @@
 import { PermissionFlagsBits, SlashCommandBuilder, EmbedBuilder } from "discord.js";
+import { logRecentCommand } from "../recentcommands.js";
+
+let warncounter = 0;
+
 export const data = new SlashCommandBuilder()
     .setName('warn')
     .setDescription('Warns a member')
@@ -13,7 +17,6 @@ export const data = new SlashCommandBuilder()
     );
 
 export async function execute(interaction) {
-
     const logchannelid = '1392889476686020700';
     const target = interaction.options.getUser('target')
     const reason = interaction.options.getString('reason')
@@ -71,6 +74,7 @@ export async function execute(interaction) {
         } catch {
             return interaction.reply({ content: 'I can not find mute logs.', ephemeral: true });
         }
-
+    warncounter++;
+    logRecentCommand(`warn: ${target.tag} - ${reason} - ${warncounter} warns`);
     return interaction.reply({ embeds: [commandembed] })
 }

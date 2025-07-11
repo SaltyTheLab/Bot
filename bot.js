@@ -29,6 +29,7 @@ for (const file of commandFiles) {
     const command = await import(pathToFileURL(filePath).href);
     client.commands.set(command.data.name, command);
 }
+ 
 // universal method for every slash command, making them modular
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
@@ -202,6 +203,10 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
         ].join('\n'))
         .setTimestamp()
     if (oldMember.nickname !== newMember.nickname) {
+        if(oldMember.nickname == null)
+            oldMember.nickname = ' '
+        if(newMember.nickname = null)
+            newMember.nickname = ' '
         await namelogchannel.send({ embeds: [nicknameembed] });
     }
 });

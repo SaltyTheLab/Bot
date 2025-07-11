@@ -1,4 +1,5 @@
 import { EmbedBuilder, PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
+import { logRecentCommand } from "../recentcommands.js";
 
 export const data = new SlashCommandBuilder()
     .setName('mute')
@@ -28,6 +29,7 @@ export const data = new SlashCommandBuilder()
             )
     );
 export async function execute(interaction) {
+    let mutecounter = 0;
     //check if permissions are present.
     if (!interaction.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
         return interaction.reply({
@@ -81,11 +83,15 @@ export async function execute(interaction) {
 
 
     //apply the timeout
-    try {
-        await member.timeout(timeMs, reason);
-    } catch (err) {
-        return interaction.reply({ content: '⚠️ Failed to apply mute.', ephemeral: true });
-    }
+
+    if (!member.communicationDisabledUntilTimestop) {
+        try {
+            await member.timeout(timeMs, reason);
+        }
+        catch (err) {
+            return interaction.reply({ content: '⚠️ Failed to apply mute.', ephemeral: true });
+        }
+    } else return interaction.reply({ content: 'User already has a applied timeout.', ephemeral: true })
     //attempt to dm the user
     try {
         await target.send({ embeds: [dmembed] })
@@ -117,8 +123,9 @@ export async function execute(interaction) {
         try {
             await logchannel.send({ embeds: [logembed] });
         } catch {
-            return interaction.reply({ content: 'could not find my logs channel.', ephemeral: true });
+            return interaction.reply({ content: 'I could not find my logs channel.', ephemeral: true });
         }
-
+    mutecounter++;
+    logRecentCommand(`mute [${mutecounter}] - ${target.tag} - ${duration} - ${reason} `)
     return interaction.reply({ embeds: [commandembed] });
 };

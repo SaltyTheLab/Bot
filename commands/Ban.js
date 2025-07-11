@@ -1,5 +1,5 @@
 import { PermissionFlagsBits, SlashCommandBuilder, EmbedBuilder } from "discord.js";
-
+import { logRecentCommand } from "../recentcommands.js";
 export const data = new SlashCommandBuilder()
     .setName('ban')
     .setDescription('Ban')
@@ -12,6 +12,8 @@ export const data = new SlashCommandBuilder()
         .setDescription('reason')
         .setRequired(true)
     );
+
+let banCounter = 0;
 
 export async function execute(interaction) {
     if (!interaction.member.permissions.has(PermissionFlagsBits.BanMembers)) { // check for member permission
@@ -81,8 +83,10 @@ export async function execute(interaction) {
         try {
             await banlogchannel.send({ embeds: [logembed] })
         } catch {
-            return onsole.warn({ content: 'I can not find my ban logs.', ephemeral: true });
+            return interaction.reply({content:'I can not find my ban logs.', ephemeral: true});
         }
-
+    banCounter++;
+    logRecentCommand(`ban - ${banCounter} - ${target.tag}] - ${reason}`);
     return interaction.reply({ embeds: [commandembed] });
+
 };
