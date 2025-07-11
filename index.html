@@ -1,45 +1,22 @@
-<!DOCTYPE = html>
-<html lang= "en">
-  <head>
-    <meta charset="utf-8">
-    <title>SaltyTheLab BOT</title>
-    <!--Connecting the JavaScript sources to the HTML file-->
-    <script src = "../Ban.js"></script>
-    <script src = "../Mute.js"></script>
-    <script src = "../warn.js"></script>
-  </head>
-  <body>
-    <!--This is where the count will go for the bot uses-->
-    <h1 class = "useCount">The Bot Has Been Used: <input type= "text" id = "uses" value = "0" readonly></input></h1>
-    <!--This is where a listbox containing the last 5 commands used will go-->
-    <select type = "list" id = "commandHistory" size = "5">
-      <!--Recent commands will appear here-->
-      <!--
-      Please review the following to add into the js files:
+<!DOCTYPE html>
+<html lang="en">
 
-      const commandHistory = document.getElementById('commandHistory');
-const maxCommands = 5; // Show up to 5 recent commands
-let recentCommands = [];
+<head>
+  <meta charset="utf-8">
+  <title>SaltyTheLab BOT</title>
+  <script type="module" src="Logging/recentcommandslog.js"></script>
+  <viewport content="width=device-width, initial-scale=1.0"></viewport>
+</head>
 
-function addCommand(command) {
-    // Add new command to the beginning of the array
-    recentCommands.unshift(command);
+
+<body>
+  <!--This is where the count will go for the bot uses-->
+  <h1 class="useCount">The Bot Has Been Used: <input title="data" type="text" id="uses" value="0" readonly></input>
+  </h1>
+  <!--This is where a listbox containing the last 5 commands used will go-->
+  <select title="Commands" type="list" id="commandHistory" size="5">
+    <!--Recent commands will appear here-->
     
-    // Limit array length
-    if (recentCommands.length > maxCommands) {
-        recentCommands.pop();
-    }
-
-    // Clear current listbox items
-    commandHistory.innerHTML = "";
-
-    // Add updated commands to the listbox
-    recentCommands.forEach(cmd => {
-        const option = document.createElement('option');
-        option.text = cmd;
-        commandHistory.add(option);
-    });
-}
 
 // Example usage: simulate a few commands
 setInterval(() => {
@@ -47,6 +24,14 @@ setInterval(() => {
     addCommand(simulatedCommand);
 }, 5000);  //this section can be edited to a trigger in the js
       -->
-    <select>
-  </body>
+    <script>
+      async function getLogs() {
+        const response = await fetch('/log');
+        const logs = await response.json();
+        document.body.innerHTM = logs.map(log => `<p>${log.timestamp} - ${log.user}: ${log.command}</p>`).join('');
+      }
+      getLogs();
+    </script>
+</body>
+
 </html>
