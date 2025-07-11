@@ -18,7 +18,8 @@ const client = new Client({
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMembers
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildPresences
     ]
 });
 // add in the list of commands to the bot
@@ -66,7 +67,7 @@ client.on('messageCreate', message => {
 client.on('messageCreate', message => {
     if (message.content.toLowerCase() == 'adorable')
         message.reply('You\'re Adorable')
-});
+})
 
 client.on('guildMemberAdd', async (member) => {
     const WelcomeEmbed = new EmbedBuilder()
@@ -92,11 +93,65 @@ client.on('guildMemberRemove', async (member) => {
         .setColor(0xa90000)
         .setDescription(
             `${member} has left the cave.`
-
         )
         .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
         .addFields({ name: 'Joined the cave on:', value: `${member.guild.joinedAt()}`, inline: true })
-}
-)
+    if (welcomeChannel) {
+        await welcomeChannel.send({ embeds: [LeaveEmbed] })
+    } else {
+        console.warn('I can not find my welcome logs.')
+    }
 
+})
+
+client.on('messageUpdate', async (message, newMessage) => {
+    if (message.author.bot || message.content == newMessage.content) return;
+    const editschannelid = '1392990612990595233';
+    const logchannel = newMessage.guild.channels.cache.get(editschannelid);
+    const messageLink = `https://discord.com/channels/${message.guild.id}/${message.channel.id}/${message.id}`;
+    const editembed = new EmbedBuilder()
+        .setDescription(
+            `<@${newMessage.author.id}> edited a message in <#${newMessage.channelId}>
+
+            **Before:**
+            ${message.content}  
+            **After:**
+            ${newMessage.content}   
+             
+
+            [Event Link](${messageLink})`
+        )
+        .setColor(0x309eff)
+        .setThumbnail(newMessage.author.displayAvatarURL())
+        .setFooter({ text: `ID: ${newMessage.id}` })
+        .setTimestamp()
+    if (logchannel)
+        logchannel.send({ embeds: [editembed] })
+})
+
+client.on('messageDelete', async (message) => {
+    const deleteschannelid = '1393011824114270238';
+    const messageLink = `https://discord.com/channels/${message.guild.id}/${message.channel.id}/${message.id}`;
+    const logchannel = message.guild.channels.cache.get(deleteschannelid);
+    const hasAttachment = message.attachments.size > 0;
+    let title = `message by <@${message.author.id}> was deleted in <#${message.channel.id}>`
+    if (hasAttachment.size != 0)
+        title = `Image and text by <@${message.author.id}> was deleted in <#${message.channel.id}>`
+    if (message.partial || !message.author || message.author.bot) return;
+    const deletedembed = new EmbedBuilder()
+        .setDescription([
+            title,
+
+            message.content ? `**Content:**\n${message.content}` : '_No content_',
+            hasAttachment ? '\n📎 **An attachment was present' : ''`
+
+            [Event Link](${messageLink})`
+        ].join('\n'))
+        .setThumbnail(message.author.displayAvatarURL())
+        .setFooter({ text: `ID: ${message.id} ` })
+        .setTimestamp()
+
+    if (logchannel)
+        logchannel.send({ embeds: [deletedembed] })
+});
 client.login(process.env.TOKEN);
