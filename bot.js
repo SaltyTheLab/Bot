@@ -115,6 +115,7 @@ client.on('messageUpdate', async (message, newMessage) => {
 
             **Before:**
             ${message.content}  
+            
             **After:**
             ${newMessage.content}   
              
@@ -143,7 +144,7 @@ client.on('messageDelete', async (message) => {
             title,
 
             message.content ? `**Content:**\n${message.content}` : '_No content_',
-            hasAttachment ? '\n📎 **An attachment was present' : ''`
+            hasAttachment ? `\n📎 **There were attachments present.` : ''`
 
             [Event Link](${messageLink})`
         ].join('\n'))
