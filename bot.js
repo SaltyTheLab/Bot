@@ -29,7 +29,7 @@ for (const file of commandFiles) {
     const command = await import(pathToFileURL(filePath).href);
     client.commands.set(command.data.name, command);
 }
- 
+
 // universal method for every slash command, making them modular
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
@@ -43,6 +43,23 @@ client.on('interactionCreate', async interaction => {
         console.error(error);
         await interaction.reply({ content: 'Something went wrong.', ephemeral: true });
     }
+});
+
+client.on('interactionCreate', async interaction => {
+    if (!interaction.isCommand()) return;
+    const command = client.commands.get(interaction.commandName);
+    const logEntery = {
+        command: interaction.commandName,
+        user: interaction.user.tag,
+        timestamp: new Date().toISOString(),
+    };
+    await fetch('http://localhost:5500/log', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(logEntery)
+    });
 });
 
 
@@ -203,11 +220,12 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
         ].join('\n'))
         .setTimestamp()
     if (oldMember.nickname !== newMember.nickname) {
-        if(oldMember.nickname == null)
+        if (oldMember.nickname == null)
             oldMember.nickname = ' '
-        if(newMember.nickname = null)
+        if (newMember.nickname = null)
             newMember.nickname = ' '
         await namelogchannel.send({ embeds: [nicknameembed] });
     }
+
 });
 client.login(process.env.TOKEN);
