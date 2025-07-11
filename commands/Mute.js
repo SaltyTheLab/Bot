@@ -1,6 +1,5 @@
 import { EmbedBuilder, PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
-import { logRecentCommand } from "../recentcommands.js";
-
+import {  logRecentCommand } from "../Logging/recentcommands.js";
 export const data = new SlashCommandBuilder()
     .setName('mute')
     .setDescription('Mute')

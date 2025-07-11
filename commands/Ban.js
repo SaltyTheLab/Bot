@@ -1,5 +1,5 @@
 import { PermissionFlagsBits, SlashCommandBuilder, EmbedBuilder } from "discord.js";
-import { logRecentCommand } from "../recentcommands.js";
+import {logRecentCommand } from "../Logging/recentcommands.js";
 export const data = new SlashCommandBuilder()
     .setName('ban')
     .setDescription('Ban')
