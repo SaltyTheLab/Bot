@@ -11,5 +11,41 @@
     <!--This is where the count will go for the bot uses-->
     <h1 class = "useCount">The Bot Has Been Used: <input type= "text" id = "uses" value = "0" readonly></input></h1>
     <!--This is where a listbox containing the last 5 commands used will go-->
+    <select type = "list" id = "commandHistory" size = "5">
+      <!--Recent commands will appear here-->
+      <!--
+      Please review the following to add into the js files:
+
+      const commandHistory = document.getElementById('commandHistory');
+const maxCommands = 5; // Show up to 5 recent commands
+let recentCommands = [];
+
+function addCommand(command) {
+    // Add new command to the beginning of the array
+    recentCommands.unshift(command);
+    
+    // Limit array length
+    if (recentCommands.length > maxCommands) {
+        recentCommands.pop();
+    }
+
+    // Clear current listbox items
+    commandHistory.innerHTML = "";
+
+    // Add updated commands to the listbox
+    recentCommands.forEach(cmd => {
+        const option = document.createElement('option');
+        option.text = cmd;
+        commandHistory.add(option);
+    });
+}
+
+// Example usage: simulate a few commands
+setInterval(() => {
+    const simulatedCommand = `Command ${Math.floor(Math.random() * 100)}`;
+    addCommand(simulatedCommand);
+}, 5000);  //this section can be edited to a trigger in the js
+      -->
+    <select>
   </body>
 </html>
