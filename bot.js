@@ -49,17 +49,20 @@ client.once('ready', () => {
     console.log(`Logged in as ${client.user.tag}`);
 });
 
+// Improved messageCreate event handler
 client.on('messageCreate', message => {
-    switch (message) {
-        case "cute": message.reply('You\'re Cute');
-        case "adoarable": message.reply('You\'re Cute');
-        case "dmme": {
-            try { message.author.send('Hey! This is a DM from the bot.') }
-            catch { message.reply('I coudn\'t DM you-maybe your settings block it'); }
+    const content = message.content.toLowerCase();
+    if (content === "cute") return message.reply("You're Cute");
+    if (content === "adorable") return message.reply("You're Adorable");
+    if (content === "dmme") {
+        try {
+            message.author.send("Hey! This is a DM from the bot.");
+        } catch {
+            message.reply("I couldn't DM you—maybe your settings block it.");
         }
-        case "ping": message.reply('pong!');
-
+        return;
     }
+    if (content === "ping") return message.reply("pong!");
 });
 
 client.on('guildMemberAdd', async (member) => {
@@ -81,18 +84,21 @@ client.on('guildMemberAdd', async (member) => {
     }
 });
 
+// Fix welcomeChannel reference in guildMemberRemove
 client.on('guildMemberRemove', async (member) => {
+    const welcomechannelid = '1392972733704572959';
+    const welcomeChannel = member.guild.channels.cache.get(welcomechannelid);
     const LeaveEmbed = new EmbedBuilder()
         .setColor(0xa90000)
         .setDescription(
             `${member} has left the cave.`
         )
         .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
-        .addFields({ name: 'Joined the cave on:', value: `${member.guild.joinedAt()}`, inline: true })
+        .addFields({ name: 'Joined the cave on:', value: `${member.guild.joinedAt()}`, inline: true });
     if (welcomeChannel) {
-        await welcomeChannel.send({ embeds: [LeaveEmbed] })
+        await welcomeChannel.send({ embeds: [LeaveEmbed] });
     } else {
-        console.warn('I can not find my welcome logs.')
+        console.warn('I can not find my welcome logs.');
     }
 
 });
@@ -187,12 +193,12 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
         .setThumbnail(newMember.displayAvatarURL())
         .setDescription([
             `<@${newMember.id}> **changed their nickname**`,
-            
+
             '**Before:**',
             `${oldMember.nickname}`,
 
-            '**After:**', 
-              `${newMember.nickname}`
+            '**After:**',
+            `${newMember.nickname}`
         ].join('\n'))
         .setTimestamp()
     if (oldMember.nickname !== newMember.nickname) {
