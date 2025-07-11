@@ -28,6 +28,7 @@ export async function execute(interaction) {
             name: target.tag + ` was issued a warning`,
             iconURL: target.displayAvatarURL({ dynamic: true })
         })
+        .setColor(0xffff00)
 
     const dmembed = new EmbedBuilder()
         .setAuthor({
@@ -50,7 +51,7 @@ export async function execute(interaction) {
     }
     const logchannel = interaction.guild.channels.cache.get(logchannelid);
     const logembed = new EmbedBuilder()
-        .setColor(0xff00ff)
+        .setColor(0xffff00)
         .setAuthor({
             name: interaction.user.tag + ` warned a member`,
             icon: interaction.user.displayAvatarURL({ dynamic: true })

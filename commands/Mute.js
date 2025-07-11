@@ -53,7 +53,7 @@ export async function execute(interaction) {
             name: `${target.tag} was issued a ${duration}${unit} mute.`,
             iconURL: target.displayAvatarURL({ dynamic: true })
         })
-        .setColor(0x0099ff)
+        .setColor(0xffa500)
 
     //embed for user dm
     const dmembed = new EmbedBuilder()
@@ -61,7 +61,7 @@ export async function execute(interaction) {
             name: `${target.tag} was issued a 1m mute.`,
             iconURL: target.displayAvatarURL({ dynamic: true })
         })
-        .setColor(0x0099ff) //orange
+        .setColor(0xffa500) //orange
         .setThumbnail(interaction.guild.iconURL())
         .setDescription(`<@${target.id}>, you have been issued a ` + `\`${duration} ${unit} mute\`` + ` in Salty's Cave.`)
         .addFields(
