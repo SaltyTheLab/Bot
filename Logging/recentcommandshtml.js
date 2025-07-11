@@ -1,9 +1,6 @@
-import path from 'path';
-import { fetch } from 'node-fetch';
 const commandHistory = document.getElementById('commandHistory');
 const maxCommands = 5; // Show up to 5 recent commands
 let recentCommands = [];
-const recentCommandsPath = path.join(process.cwd(), '../recentCommandslog.json');
 async function fetchRecentCommands() {
     try {
         const response = await fetch('Logging\\recentCommandslog.json');
