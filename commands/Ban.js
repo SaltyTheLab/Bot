@@ -84,7 +84,7 @@ export async function execute(interaction) {
         } catch {
             return interaction.reply({ content: 'I can not find my ban logs.', ephemeral: true });
         }
-    logRecentCommand(`ban - ${target.tag}] - ${reason}`);
+    logRecentCommand(`ban - ${target.tag}] - ${reason} - issuer: ${interaction.user.tag}`);
     return interaction.reply({ embeds: [commandembed] });
 
 };

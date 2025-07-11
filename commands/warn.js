@@ -75,6 +75,6 @@ export async function execute(interaction) {
             return interaction.reply({ content: 'I can not find mute logs.', ephemeral: true });
         }
     warncounter++;
-    logRecentCommand(`warn #${warncounter} : ${target.tag} - ${reason}`);
+    logRecentCommand(`warn #${warncounter} : ${target.tag} - ${reason}- issuer: ${interaction.user.tag}`);
     return interaction.reply({ embeds: [commandembed] })
 }

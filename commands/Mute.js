@@ -125,6 +125,6 @@ export async function execute(interaction) {
             return interaction.reply({ content: 'I could not find my logs channel.', ephemeral: true });
         }
     mutecounter++;
-    logRecentCommand(`mute [${mutecounter}] - ${target.tag} - ${duration} - ${reason} `)
+    logRecentCommand(`mute [${mutecounter}] - ${target.tag} - ${duration} - ${reason}- issuer: ${interaction.user.tag}`);
     return interaction.reply({ embeds: [commandembed] });
 };
