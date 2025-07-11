@@ -98,8 +98,8 @@ export async function execute(interaction) {
         .setColor(0x0099ff)
         .setThumbnail(target.displayAvatarURL())
         .setAuthor({
-            name: interaction.user.tag + `muted a member`,
-            iconURL: interaction.user.displayAvatarURL()
+            name: interaction.user.tag + ` muted a member`,
+            iconURL: interaction.user.displayAvatarURL({ dynamic: true })
         })
         .setFields(
             { name: 'Target:', value: `${target}`, inline: true },

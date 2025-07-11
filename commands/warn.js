@@ -35,6 +35,7 @@ export async function execute(interaction) {
             name: `${target.tag} was issued a warning`,
             iconURL: `${target.displayAvatarURL()}`
         })
+        .setColor(0xffff00)
         .setThumbnail(interaction.guild.iconURL())
         .setDescription(`<@${target.id}>, you were given a warning in Salty's Cave.`)
         .setFields(
@@ -54,7 +55,7 @@ export async function execute(interaction) {
         .setColor(0xffff00)
         .setAuthor({
             name: interaction.user.tag + ` warned a member`,
-            icon: interaction.user.displayAvatarURL({ dynamic: true })
+            iconURL: interaction.user.displayAvatarURL({ dynamic: true })
         })
         .setThumbnail(target.displayAvatarURL())
         .setFields(
