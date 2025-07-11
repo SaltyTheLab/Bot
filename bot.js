@@ -184,24 +184,19 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
     const namelogchannelid = '1393076616326021181'
     const namelogchannel = newMember.guild.channels.cache.get(namelogchannelid)
     const nicknameembed = new EmbedBuilder()
-        .setAuthor({
-            name: `<@${newMember.id} changed their nickname`,
-            iconURL: newMember.displayAvatarURL()
-        })
         .setThumbnail(newMember.displayAvatarURL())
-        .setDescription(
-            `<@${newMessage.author.id}> changed their nickname
-            **Before:**
+        .setDescription([
+            `<@${newMember.id}> **changed their nickname**`,
+            
+            '**Before:**',
+            `${oldMember.nickname}`,
 
-            ${oldMember}
-
-            '**After**
-
-            ${newMember}`
-        )
+            '**After:**', 
+              `${newMember.nickname}`
+        ].join('\n'))
         .setTimestamp()
     if (oldMember.nickname !== newMember.nickname) {
-        newMember.send({ embed: [nicknameembed] })
+        await namelogchannel.send({ embeds: [nicknameembed] });
     }
 });
 client.login(process.env.TOKEN);
