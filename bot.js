@@ -1,4 +1,3 @@
-
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'url';
@@ -45,29 +44,23 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-//needed something to prove bot was active
-client.on('messageCreate', message => {
-    if (message.content == 'dmme') {
-        message.author.send('Hey! This is a DM from the bot.')
-            .catch(() => message.reply('I coudn\'t DM you-maybe your settings block it.'));
-    }
-})
-
 
 client.once('ready', () => {
     console.log(`Logged in as ${client.user.tag}`);
 });
 
 client.on('messageCreate', message => {
-    if (message.content.toLowerCase() == 'cute')
-        message.reply('You\'re Cute'
-        );
-})
+    switch (message) {
+        case "cute": message.reply('You\'re Cute');
+        case "adoarable": message.reply('You\'re Cute');
+        case "dmme": {
+            try { message.author.send('Hey! This is a DM from the bot.') }
+            catch { message.reply('I coudn\'t DM you-maybe your settings block it'); }
+        }
+        case "ping": message.reply('pong!');
 
-client.on('messageCreate', message => {
-    if (message.content.toLowerCase() == 'adorable')
-        message.reply('You\'re Adorable')
-})
+    }
+});
 
 client.on('guildMemberAdd', async (member) => {
     const WelcomeEmbed = new EmbedBuilder()
@@ -86,7 +79,7 @@ client.on('guildMemberAdd', async (member) => {
     } else {
         console.warn('I can not find my welcome logs.')
     }
-})
+});
 
 client.on('guildMemberRemove', async (member) => {
     const LeaveEmbed = new EmbedBuilder()
@@ -102,7 +95,7 @@ client.on('guildMemberRemove', async (member) => {
         console.warn('I can not find my welcome logs.')
     }
 
-})
+});
 
 client.on('messageUpdate', async (message, newMessage) => {
     if (message.author.bot || message.content == newMessage.content) return;
@@ -135,24 +128,80 @@ client.on('messageDelete', async (message) => {
     const messageLink = `https://discord.com/channels/${message.guild.id}/${message.channel.id}/${message.id}`;
     const logchannel = message.guild.channels.cache.get(deleteschannelid);
     const hasAttachment = message.attachments.size > 0;
-    let title = `message by <@${message.author.id}> was deleted in <#${message.channel.id}>`
-    if (hasAttachment.size != 0)
-        title = `Image and text by <@${message.author.id}> was deleted in <#${message.channel.id}>`
+    // Determine title based on content and attachments
+    let title = '';
+    if (hasAttachment && !message.content) {
+        title = `Image by <@${message.author.id}> was deleted in <#${message.channel.id}>`;
+    } else if (hasAttachment && message.content) {
+        title = `Image and text by <@${message.author.id}> was deleted in <#${message.channel.id}>`;
+    } else {
+        title = `Message by <@${message.author.id}> was deleted in <#${message.channel.id}>`;
+    }
     if (message.partial || !message.author || message.author.bot) return;
+
+    // Get all image attachment URLs
+    let imageAttachments = [];
+    if (hasAttachment) {
+        imageAttachments = message.attachments.filter(att => att.contentType && att.contentType.startsWith('image/')).map(att => att.url);
+    };
+
+    // Create the main embed (with content and first image if present)
     const deletedembed = new EmbedBuilder()
+        .setColor(0xf03030)
         .setDescription([
             title,
-
-            message.content ? `**Content:**\n${message.content}` : '_No content_',
-            hasAttachment ? `\n📎 **There were attachments present.` : ''`
-
-            [Event Link](${messageLink})`
+            message.content ? `\n${message.content}` : '_No content_',
+            `[Event Link](${messageLink})`
         ].join('\n'))
         .setThumbnail(message.author.displayAvatarURL())
         .setFooter({ text: `ID: ${message.id} ` })
-        .setTimestamp()
+        .setTimestamp();
+
+    if (imageAttachments.length > 0) {
+        deletedembed.setImage(imageAttachments[0]);
+    };
+
+    // Create additional embeds for other images (if any)
+    const imageEmbeds = imageAttachments.slice(1, 9).map(url =>
+        new EmbedBuilder()
+            .setColor(0xf03030)
+            .setDescription(
+                title,
+
+                `[Event link](${messageLink})`
+            )
+            .setImage(url)
+            .setThumbnail(message.author.displayAvatarURL())
+            .setFooter({ text: `ID: ${message.id}` })
+            .setTimestamp()
+    );
 
     if (logchannel)
-        logchannel.send({ embeds: [deletedembed] })
+        logchannel.send({ embeds: [deletedembed, ...imageEmbeds] });
+});
+
+client.on('guildMemberUpdate', async (oldMember, newMember) => {
+    const namelogchannelid = '1393076616326021181'
+    const namelogchannel = newMember.guild.channels.cache.get(namelogchannelid)
+    const nicknameembed = new EmbedBuilder()
+        .setAuthor({
+            name: `<@${newMember.id} changed their nickname`,
+            iconURL: newMember.displayAvatarURL()
+        })
+        .setThumbnail(newMember.displayAvatarURL())
+        .setDescription(
+            `<@${newMessage.author.id}> changed their nickname
+            **Before:**
+
+            ${oldMember}
+
+            '**After**
+
+            ${newMember}`
+        )
+        .setTimestamp()
+    if (oldMember.nickname !== newMember.nickname) {
+        newMember.send({ embed: [nicknameembed] })
+    }
 });
 client.login(process.env.TOKEN);

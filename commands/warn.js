@@ -19,27 +19,25 @@ export async function execute(interaction) {
     const reason = interaction.options.getString('reason')
     if (!interaction.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
         return interaction.reply({
-            content: 'you do not have permission to use this command.'
+            content: 'you do not have permission to use this command.', ephemeral: true
         });
     }
     //build embed response after command
     const commandembed = new EmbedBuilder()
         .setAuthor({
             name: target.tag + ` was issued a warning`,
-            icon: target.displayAvatarURL({ dynamic: true })
+            iconURL: target.displayAvatarURL({ dynamic: true })
         })
-
-
 
     const dmembed = new EmbedBuilder()
         .setAuthor({
             name: `${target.tag} was issued a warning`,
-            icon: `${target.displayAvatarURL()}`
+            iconURL: `${target.displayAvatarURL()}`
         })
         .setThumbnail(interaction.guild.iconURL())
         .setDescription(`<@${target.id}>, you were given a warning in Salty's Cave.`)
-        .addFields(
-            { name: 'reason:', value: `\`${reason}\``, inline: false }
+        .setFields(
+            { name: 'Reason:', value: `\`${reason}\``, inline: false }
         )
         .setTimestamp()
 
@@ -54,23 +52,23 @@ export async function execute(interaction) {
     const logembed = new EmbedBuilder()
         .setColor(0xff00ff)
         .setAuthor({
-            name: interaction.user.tag + `warned a member`,
+            name: interaction.user.tag + ` warned a member`,
             icon: interaction.user.displayAvatarURL({ dynamic: true })
         })
         .setThumbnail(target.displayAvatarURL())
         .setFields(
             { name: 'Target:', value: `${target}`, inline: true },
             { name: 'Channel:', value: `<#${interaction.channel.id}>`, inline: true },
-            { name: 'Reason', value: `\`${reason}\``, inline: false }
+            { name: 'Reason:', value: `\`${reason}\``, inline: false }
         )
         .setFooter({ text: dmstatus })
         .setTimestamp()
-
-    try {
-        await logchannel.send({ embeds: [logembed] });
-    } catch {
-        return interaction.reply('I can not find mute logs.');
-    }
+    if (logchannel)
+        try {
+            await logchannel.send({ embeds: [logembed] });
+        } catch {
+            return interaction.reply({ content: 'I can not find mute logs.', ephemeral: true });
+        }
 
     return interaction.reply({ embeds: [commandembed] })
 }

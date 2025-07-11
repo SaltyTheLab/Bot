@@ -51,9 +51,9 @@ export async function execute(interaction) {
     const commandembed = new EmbedBuilder()
         .setAuthor({
             name: `${target.tag} was issued a ${duration}${unit} mute.`,
-            icon: target.displayAvatarURL({ dynamic: true })
-                .setColor(0x0099ff)
+            iconURL: target.displayAvatarURL({ dynamic: true })
         })
+        .setColor(0x0099ff)
 
     //embed for user dm
     const dmembed = new EmbedBuilder()
@@ -65,7 +65,7 @@ export async function execute(interaction) {
         .setThumbnail(interaction.guild.iconURL())
         .setDescription(`<@${target.id}>, you have been issued a ` + `\`${duration} ${unit} mute\`` + ` in Salty's Cave.`)
         .addFields(
-            { name: 'Reason', value: `\`${reason}\``, inline: false },
+            { name: 'Reason:', value: `\`${reason}\``, inline: false },
         )
         .setTimestamp();
 
@@ -88,7 +88,7 @@ export async function execute(interaction) {
     }
     //attempt to dm the user
     try {
-        target.send({ embeds: [dmembed] })
+        await target.send({ embeds: [dmembed] })
     }
     catch {
         dmstatus = 'user was not dmed.'
@@ -99,23 +99,26 @@ export async function execute(interaction) {
         .setThumbnail(target.displayAvatarURL())
         .setAuthor({
             name: interaction.user.tag + `muted a member`,
-            icon: interaction.user.displayAvatarURL()
+            iconURL: interaction.user.displayAvatarURL()
         })
         .setFields(
             { name: 'Target:', value: `${target}`, inline: true },
             { name: 'Channel:', value: `<#${interaction.channel.id}>`, inline: true },
-            { name: 'Reason', value: `\`${reason}\``, inline: false }
+            { name: 'Reason:', value: `\`${reason}\``, inline: false }
         )
         .setFooter({ text: dmstatus })
 
     //log the action in the mute logs channel.
     const logchannelid = '1392889476686020700';
     const logchannel = interaction.guild.channels.cache.get(logchannelid);
-    try {
-        logchannel.send({ embeds: [logembed] });
-    } catch {
-        return interaction.reply('could not find my logs channel.');
-    }
+    if (!logchannel) {
+        return interaction.reply({ content: 'You are missing the channel id', ephemeral: true })
+    } else
+        try {
+            await logchannel.send({ embeds: [logembed] });
+        } catch {
+            return interaction.reply({ content: 'could not find my logs channel.', ephemeral: true });
+        }
 
     return interaction.reply({ embeds: [commandembed] });
 };

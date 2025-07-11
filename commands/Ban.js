@@ -27,7 +27,7 @@ export async function execute(interaction) {
         .setAuthor(
             {
                 name: target.id + ' was banned.',
-                icon: target.displayAvatarURL()
+                iconURL: target.displayAvatarURL()
             }
         )
         .setColor(0xFF0000);
@@ -38,20 +38,17 @@ export async function execute(interaction) {
         .setColor(0xFF0000)
         .setDescription(
             `<@${target.id}>, you have been banned from Salty's Cave. 
-            To appeal your ban [click here](https://dyno.gg/form/9dd2f880) which will taky you to the appeal link.
+            To appeal your ban [click here](https://dyno.gg/form/9dd2f880) which will take you to the appeal link.
         `)
-        .addFields({ name: "Reason:", value: `\`${reason}\``, inline: true })
+        .setFields({ name: "Reason:", value: `\`${reason}\``, inline: true })
         .setFooter({ text: `${interaction.guild.name}` })
         .setTimestamp();
-
-
 
     const member = await interaction.guild.members.fetch(target.id).catch(() => null); //fetch the users id
     if (!member) // check for user in server
     {
-        return interaction.reply({ content: 'User not found.' });
+        return interaction.reply({ content: 'User not found.', ephemeral: true });
     }
-    await member.ban()
     let dmstatus = 'User was Dmed.'
     try {
         await target.send({ embeds: [dmembed] });
@@ -59,29 +56,33 @@ export async function execute(interaction) {
     catch (err) {
         dmstatus = 'User was not Dmed';
     }
+    try { await member.ban() }
+    catch {
+        return interaction.reply({ content: 'user is already banned.', ephemeral: true })
+    }
+
     //log the ban
     const logembed = new EmbedBuilder()
-        .setAuthor(
-            {
-                name: interaction.user.tag + 'banned a member.',
-                icon: interaction.user.displayAvatarURL()
-            }
-        )
+        .setAuthor({
+            name: interaction.user.tag + ' banned a member.',
+            iconURL: interaction.user.displayAvatarURL()
+        })
         .setColor(0xFF0000)
         .setThumbnail(target.displayAvatarURL())
         .addFields(
             { name: "Target", value: `${target}`, inline: true },
-            { name: "Channel", value: `<#${interaction.channel.id}`, inline: true },
-            { name: "reason", value: `\`${reason}\``, inline: false }
+            { name: "Channel", value: `<#${interaction.channel.id}>`, inline: true },
+            { name: "Reason", value: `\`${reason}\``, inline: false }
         )
         .setFooter({ text: dmstatus });
     const banlogchannelid = '945821977187328082';
     const banlogchannel = interaction.guild.channels.cache.get(banlogchannelid);
-    try {
-        banlogchannel.send({ embeds: [logembed] })
-    } catch {
-        console.warn('I can not find my ban logs.');
-    }
+    if (banlogchannel)
+        try {
+            await banlogchannel.send({ embeds: [logembed] })
+        } catch {
+            return onsole.warn({ content: 'I can not find my ban logs.', ephemeral: true });
+        }
 
     return interaction.reply({ embeds: [commandembed] });
 };
