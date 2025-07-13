@@ -1,5 +1,5 @@
 import { EmbedBuilder, PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
-import {  logRecentCommand } from "../Logging/recentcommands.js";
+import { logRecentCommand } from "../Logging/recentcommands.js";
 export const data = new SlashCommandBuilder()
     .setName('mute')
     .setDescription('Mute')
@@ -28,7 +28,7 @@ export const data = new SlashCommandBuilder()
             )
     );
 export async function execute(interaction) {
-    let mutecounter = 0;
+
     //check if permissions are present.
     if (!interaction.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
         return interaction.reply({
@@ -124,7 +124,7 @@ export async function execute(interaction) {
         } catch {
             return interaction.reply({ content: 'I could not find my logs channel.', ephemeral: true });
         }
-    mutecounter++;
+
     logRecentCommand(`mute [${mutecounter}] - ${target.tag} - ${duration} - ${reason}- issuer: ${interaction.user.tag}`);
     return interaction.reply({ embeds: [commandembed] });
 };

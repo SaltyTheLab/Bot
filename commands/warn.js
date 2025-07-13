@@ -1,8 +1,6 @@
 import { PermissionFlagsBits, SlashCommandBuilder, EmbedBuilder } from "discord.js";
 import { logRecentCommand } from "../Logging/recentcommands.js";
 
-let warncounter = 0;
-
 export const data = new SlashCommandBuilder()
     .setName('warn')
     .setDescription('Warns a member')
@@ -26,7 +24,7 @@ export async function execute(interaction) {
         });
     }
     //build embed response after command
-    const commandembed = new EmbedBuilder()
+     const commandembed = new EmbedBuilder()
         .setAuthor({
             name: target.tag + ` was issued a warning`,
             iconURL: target.displayAvatarURL({ dynamic: true })
