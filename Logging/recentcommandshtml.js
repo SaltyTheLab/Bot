@@ -1,9 +1,10 @@
 const commandHistory = document.getElementById('commandHistory');
 const maxCommands = 5; // Show up to 5 recent commands
+
 let recentCommands = [];
-async function fetchRecentCommands() {
+  async function fetchRecentCommands() {
     try {
-        const response = await fetch('Logging\\recentCommandslog.json');
+        const response = await fetch('Logging/recentCommandslog.json');
         if (!response.ok) throw new Error('Failed to fetch recent commands');
         const recentCommands = await response.json();
         updateCommandHistory(recentCommands);
