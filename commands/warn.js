@@ -24,7 +24,7 @@ export async function execute(interaction) {
         });
     }
     //build embed response after command
-     const commandembed = new EmbedBuilder()
+    const commandembed = new EmbedBuilder()
         .setAuthor({
             name: target.tag + ` was issued a warning`,
             iconURL: target.displayAvatarURL({ dynamic: true })
@@ -72,7 +72,12 @@ export async function execute(interaction) {
         } catch {
             return interaction.reply({ content: 'I can not find mute logs.', ephemeral: true });
         }
-    warncounter++;
-    logRecentCommand(`warn #${warncounter} : ${target.tag} - ${reason}- issuer: ${interaction.user.tag}`);
-    return interaction.reply({ embeds: [commandembed] })
+        
+    logRecentCommand(`warn: ${target.tag} - ${reason}- issuer: ${interaction.user.tag}`);
+    if (interaction.replied || !interaction.reply) {
+        // message-based (AutoMod)
+        await interaction.channel.send({ embeds: [commandembed] });
+    } else {
+        await interaction.reply({ embeds: [commandembed] });
+    }
 }
