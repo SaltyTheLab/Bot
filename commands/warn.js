@@ -1,6 +1,9 @@
 import { PermissionFlagsBits, SlashCommandBuilder, EmbedBuilder } from "discord.js";
 import { logRecentCommand } from "../Logging/recentcommands.js";
 
+
+const logchannelid = '1392889476686020700';
+
 export const data = new SlashCommandBuilder()
     .setName('warn')
     .setDescription('Warns a member')
@@ -13,16 +16,14 @@ export const data = new SlashCommandBuilder()
         .setDescription('reason')
         .setRequired(true)
     );
-
 export async function execute(interaction) {
-    const logchannelid = '1392889476686020700';
-    const target = interaction.options.getUser('target')
-    const reason = interaction.options.getString('reason')
-    if (!interaction.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
-        return interaction.reply({
-            content: 'you do not have permission to use this command.', ephemeral: true
-        });
-    }
+    const target = interaction.options.getUser('target');
+    const reason = interaction.options.getString('reason');
+    const logchannel = interaction.guild.channels.cache.get(logchannelid);
+    //setup variables for decaying warns
+    let dmstatus = 'User was dmed.';
+    //check for repeated offenses and update embeds accordingly
+
     //build embed response after command
     const commandembed = new EmbedBuilder()
         .setAuthor({
@@ -44,14 +45,6 @@ export async function execute(interaction) {
         )
         .setTimestamp()
 
-    let dmstatus = 'User was dmed.';
-    try {
-        await target.send({ embeds: [dmembed] });
-    }
-    catch {
-        dmstatus = 'User was not dmed.'
-    }
-    const logchannel = interaction.guild.channels.cache.get(logchannelid);
     const logembed = new EmbedBuilder()
         .setColor(0xffff00)
         .setAuthor({
@@ -66,14 +59,16 @@ export async function execute(interaction) {
         )
         .setFooter({ text: dmstatus })
         .setTimestamp()
+
     if (logchannel)
         try {
             await logchannel.send({ embeds: [logembed] });
         } catch {
-            return interaction.reply({ content: 'I can not find mute logs.', ephemeral: true });
+            return await interaction.reply({ content: 'I can not find mute logs.', ephemeral: true });
         }
-        
+
     logRecentCommand(`warn: ${target.tag} - ${reason}- issuer: ${interaction.user.tag}`);
+    target.send({ embeds: [dmembed] })
     if (interaction.replied || !interaction.reply) {
         // message-based (AutoMod)
         await interaction.channel.send({ embeds: [commandembed] });

@@ -59,7 +59,7 @@ export async function execute(interaction) {
     //embed for user dm
     const dmembed = new EmbedBuilder()
         .setAuthor({
-            name: `${target.tag} was issued a 1m mute.`,
+            name: `${target.tag}`,
             iconURL: target.displayAvatarURL({ dynamic: true })
         })
         .setColor(0xffa500) //orange
@@ -124,7 +124,6 @@ export async function execute(interaction) {
         } catch {
             return interaction.reply({ content: 'I could not find my logs channel.', ephemeral: true });
         }
-
-    logRecentCommand(`mute [${mutecounter}] - ${target.tag} - ${duration} - ${reason}- issuer: ${interaction.user.tag}`);
+    logRecentCommand(`mute - ${target.tag} - ${duration} - ${reason}- issuer: ${interaction.user.tag}`);
     return interaction.reply({ embeds: [commandembed] });
 };
