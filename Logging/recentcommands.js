@@ -12,6 +12,6 @@ export function logRecentCommand(commandString) {
     } catch (err) {
         recentCommands = [];
     }
-
+    recentCommands.unshift(commandString);
     fs.writeFileSync(recentCommandsPath, JSON.stringify(recentCommands, null, 2));
 }

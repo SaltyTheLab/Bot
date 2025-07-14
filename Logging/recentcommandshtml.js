@@ -1,6 +1,5 @@
 const commandHistory = document.getElementById('commandHistory');
 let recentCommands = [];
-window.addEventListener('DOMContentLoaded', adjustLayoutByLines);
 async function fetchRecentCommands() {
     try {
         const response = await fetch('Logging/recentCommandslog.json');
@@ -42,22 +41,18 @@ function addCommand(command) {
     });
 }
 function adjustLayoutByLines(jsonString) {
-    const box = document.getElementById("jsonBox");
-    if (!box) return;
+    const data = document.getElementById("commandHistory").textContent;
+    const selectElement = document.getElementById('commandHistory');
+    const dynamicSize = data.height || 5; 
+    selectElement.size = dynamicSize;
 
-    try {
-        const prettyJson = JSON.stringify(JSON.parse(jsonString), null, 2); // Ensure formatting
-        const lineCount = prettyJson.split("\n").length;
+    const lineCount = data.lineCount; // e.g., 7
+    const fontSize = Math.max(1, 5 - lineCount * 0.2); // tweak scale as needed
 
-        const lineHeight = 18; // px, tweak this to match your CSS
-        const padding = 20;    // extra room for breathing
-        box.style.height = `${lineCount * lineHeight + padding}px`;
-
-        box.textContent = prettyJson;
-    } catch (err) {
-        console.error("Invalid JSON provided to adjustLayoutByLines:", err);
-    }
+    selectElement.textContent = `Line count: ${lineCount}`;
+    selectElement.style.fontSize = `${fontSize}em`;
 }
+
 
 fetch('Logging/recentCommandslog.json')
     .then(response => response.text())
