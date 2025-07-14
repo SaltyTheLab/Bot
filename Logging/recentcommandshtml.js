@@ -1,68 +1,46 @@
 const commandHistory = document.getElementById('commandHistory');
 let recentCommands = [];
+const maxCommands = 50; // define limit if not already
+
 async function fetchRecentCommands() {
     try {
         const response = await fetch('Logging/recentCommandslog.json');
         if (!response.ok) throw new Error('Failed to fetch recent commands');
-        const recentCommands = await response.json();
-        updateCommandHistory(recentCommands);
+
+        const commands = await response.json();
+        recentCommands = commands.slice(0, maxCommands); // trim if too long
+        updateCommandList();
+        adjustLayout(recentCommands.length);
     } catch (err) {
         console.error('Error fetching recent commands:', err);
     }
 }
 
-function updateCommandHistory(commands) {
-    const commandHistory = document.getElementById('commandHistory');
+function updateCommandList() {
     commandHistory.innerHTML = '';
-    commands.forEach(cmd => {
+    recentCommands.forEach(cmd => {
         const option = document.createElement('option');
-        option.text = cmd;
-        commandHistory.add(option);
+        option.textContent = cmd;
+        commandHistory.appendChild(option);
     });
 }
 
 function addCommand(command) {
-    // Add new command to the beginning of the array
     recentCommands.unshift(command);
-
-    // Limit array length
-    if (recentCommands.length > maxCommands) {
-        recentCommands.pop();
-    }
-
-    // Clear current listbox items
-    commandHistory.innerHTML = "";
-
-    // Add updated commands to the listbox
-    recentCommands.forEach(cmd => {
-        const option = document.createElement('option');
-        option.text = cmd;
-        commandHistory.add(option);
-    });
-}
-function adjustLayoutByLines(jsonString) {
-    const data = document.getElementById("commandHistory").textContent;
-    const selectElement = document.getElementById('commandHistory');
-    const dynamicSize = data.height || 5; 
-    selectElement.size = dynamicSize;
-
-    const lineCount = data.lineCount; // e.g., 7
-    const fontSize = Math.max(1, 5 - lineCount * 0.2); // tweak scale as needed
-
-    selectElement.textContent = `Line count: ${lineCount}`;
-    selectElement.style.fontSize = `${fontSize}em`;
+    if (recentCommands.length > maxCommands) recentCommands.pop();
+    updateCommandList();
+    adjustLayout(recentCommands.length);
 }
 
+function adjustLayout(lineCount) {
+    // Adjust height
+    commandHistory.size = Math.min(Math.max(lineCount, 5), 20); // min 5, max 20
 
-fetch('Logging/recentCommandslog.json')
-    .then(response => response.text())
-    .then(text => {
-        const lineCount = text.split('\n').length;
-        adjustLayoutByLines(lineCount);
-    });
+    // Adjust font size (optional)
+    const fontSize = Math.max(0.8, 1.2 - lineCount * 0.02); // scale with line count
+    commandHistory.style.fontSize = `${fontSize}em`;
+}
 
-// Fetch and update every 5 seconds
+// Initial load and periodic refresh
 window.addEventListener('DOMContentLoaded', fetchRecentCommands);
 setInterval(fetchRecentCommands, 5000);
-
-

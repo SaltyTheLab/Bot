@@ -1,4 +1,12 @@
 [
-  "mute [1] - oxalis_folf - 1 - test ",
-  "warn: saltythebeatsaberlabrador - test - 3 warns"
+  "mute: saltythebeatsaberlabrador - AM: forbidden word \"butt\" - 2 hours - issuer: Bloq#9231",
+  "mute: saltythebeatsaberlabrador - AM: forbidden word \"butt\" - 1 hours - issuer: Bloq#9231",
+  "mute: saltythebeatsaberlabrador - AM: forbidden word \"butt\" - 30 minutes - issuer: Bloq#9231",
+  "warn - saltythebeatsaberlabrador - AutoMod: Forbidden word \"butt\" - issuer: saltythebeatsaberlabrador",
+  "mute: saltythebeatsaberlabrador - AM: saying forbbiden word butt- 128 hours - issuer: Bloq#9231",
+  "mute: saltythebeatsaberlabrador - AM: saying forbbiden word butt- 64 hours - issuer: Bloq#9231",
+  "mute: saltythebeatsaberlabrador - AM: saying forbbiden word butt- 32 hours - issuer: Bloq#9231",
+  "mute: saltythebeatsaberlabrador - AM: saying forbbiden word butt- 16 hours - issuer: Bloq#9231",
+  "mute: saltythebeatsaberlabrador - AM: saying forbbiden word butt- 8 hours - issuer: Bloq#9231",
+  "mute: saltythebeatsaberlabrador - AM: saying forbbiden word butt- 4 hours - issuer: Bloq#9231"
 ]
