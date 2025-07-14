@@ -5,16 +5,14 @@ import { Client, GatewayIntentBits, Collection } from 'discord.js';
 import { config } from 'dotenv';
 import { botlisteners } from './botlisteners.js';
 
-//This sets up the commands to be added to the bot.
+// Setup dotenv
+config();
 
+// Setup paths for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const commandsPath = path.join(__dirname, 'commands');
-const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
-
-config();
-//bot intents
+// Initialize client with required intents
 export const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -24,16 +22,29 @@ export const client = new Client({
         GatewayIntentBits.GuildPresences
     ]
 });
-// add in the list of commands to the bot
+
+// Initialize command collection
 client.commands = new Collection();
-//register commands to the bot
+
+// Load all command modules dynamically
+const commandsPath = path.join(__dirname, 'commands');
+const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+
 for (const file of commandFiles) {
-    const filePath = path.join(commandsPath, file);
-    const command = await import(pathToFileURL(filePath).href);
-    client.commands.set(command.data.name, command);
+    try {
+        const filePath = path.join(commandsPath, file);
+        const command = await import(pathToFileURL(filePath).href);
+        if (command?.data?.name && typeof command.execute === 'function') {
+            client.commands.set(command.data.name, command);
+        } else {
+            console.warn(`[WARN] Skipping invalid command module: ${file}`);
+        }
+    } catch (err) {
+        console.error(`[ERROR] Failed to load command: ${file}`, err);
+    }
 }
 
-// universal method for adding every slash command, making them modular
+// Slash command handler
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
@@ -43,15 +54,22 @@ client.on('interactionCreate', async interaction => {
     try {
         await command.execute(interaction);
     } catch (error) {
-        console.error(error);
-        await interaction.reply({ content: 'Something went wrong.', ephemeral: true });
+        console.error(`[COMMAND ERROR] ${interaction.commandName}`, error);
+        if (!interaction.replied) {
+            await interaction.reply({ content: '❌ Something went wrong executing that command.', ephemeral: true });
+        } else {
+            await interaction.followUp({ content: '❌ An error occurred.', ephemeral: true });
+        }
     }
 });
 
+// Log when the bot is ready
 client.once('ready', () => {
-    console.log(`Logged in as ${client.user.tag}`);
+    console.log(`✅ Logged in as ${client.user.tag}`);
 });
 
+// Register listeners
 botlisteners(client);
 
+// Start the bot
 client.login(process.env.TOKEN);

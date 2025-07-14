@@ -2,21 +2,21 @@
 <html lang="en">
 
 <head>
-
-  <meta charset="utf-8">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SaltyTheLab BOT</title>
-  <script type="module" src="Logging/recentcommandshtml.js"></script>
-  <viewport content="width=device-width, initial-scale=1.0"></viewport>
+  <script type="module" src="Logging/recentcommandshtml.js" defer></script>
 </head>
 
 <body>
-  </h1>
-  <!-- This is where a listbox containing the last 5 commands used will
-go-->
+  <h1>SaltyTheLab BOT - Recent Commands</h1>
+
+  <!-- Listbox to display the last 5 commands used -->
+  <label for="commandHistory">Recent Commands:</label>
+  <select id="commandHistory" size="5" aria-label="Recent commands list"></select>
+
+  <!-- Optional container if you want to display other info -->
   <div id="targetId"></div>
-    <select title="Command log" type="list" id="commandHistory">
-      <!--Recent commands will appear here-->
-  
 </body>
 
 </html>
