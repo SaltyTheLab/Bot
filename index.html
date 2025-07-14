@@ -2,6 +2,7 @@
 <html lang="en">
 
 <head>
+
   <meta charset="utf-8">
   <title>SaltyTheLab BOT</title>
   <script type="module" src="Logging/recentcommandshtml.js"></script>
@@ -9,12 +10,13 @@
 </head>
 
 <body>
-  <!--This is where the count will go for the bot uses-->
-  <h1 class="useCount">The Bot Has Been Used: <input title="data" type="text" id="uses" readonly></input>
   </h1>
-  <!--This is where a listbox containing the last 5 commands used will go-->
-  <select title="Commands" type="list" id="commandHistory" size="5">
-    <!--Recent commands will appear here-->
+  <!-- This is where a listbox containing the last 5 commands used will
+go-->
+  <div id="targetId"></div>
+    <select title="Command log" type="list" id="commandHistory">
+      <!--Recent commands will appear here-->
+  
 </body>
 
 </html>

@@ -1,6 +1,4 @@
 import express from 'express';
-import fs from 'fs';
-const fs = require('fs');
 const app = express();
 const PORT = 3000;
 let commandLog = [];
