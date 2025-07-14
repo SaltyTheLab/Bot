@@ -7,24 +7,29 @@ export async function botlisteners(client) {
         const command = client.commands.get('warn');
         const matched = forbiddenWords.find(word => message.content.toLowerCase().includes(word.toLowerCase()));
         //autofill the command options if forbbiden words are detected
-        const fakeInteraction = {
-            guild: message.guild,
-            member: message.member,
-            user: message.author,
-            channel: message.channel,
-            options: {
-                getUser: (key) => key === 'target' ? message.author : null,
-                getString: (key) => key === 'reason' ? `AutoMod: Forbidden word ${matched}` : null
-            },
-            reply: async (response) => {
-                await message.channel.send(response);
-            }
-        };
-
         if (!matched)
             return null;
         else {
             message.delete();
+            const fakeInteraction = {
+                guild: message.guild,
+                member: message.member,
+                user: message.author,
+                channel: message.channel,
+                options: {
+                    getUser: (key) => key === 'target' ? message.author : null,
+                    getString: (key) => key === 'reason' ? `AutoMod: Forbidden word ${matched}` : null
+                },
+                replied: false,
+                deferred: false,
+                reply: async (response) => {
+                    message.channel.send(response);
+                },
+                edittReply: async (response) => {
+                    await message.channel.send(response);
+                    fakeInteraction.replied = true;
+                }
+            };
             command.execute(fakeInteraction);
         }
 
