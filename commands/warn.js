@@ -1,77 +1,90 @@
-import { PermissionFlagsBits, SlashCommandBuilder, EmbedBuilder } from "discord.js";
-import { logRecentCommand } from "../Logging/recentcommands.js";
+import { PermissionFlagsBits, SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { logRecentCommand } from '../Logging/recentcommands.js';
 
-
-const logchannelid = '1392889476686020700';
+const logChannelId = '1392889476686020700';
 
 export const data = new SlashCommandBuilder()
     .setName('warn')
     .setDescription('Warns a member')
     .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
-    .addUserOption(opt => opt.setName('target')
-        .setDescription('Target user ID')
-        .setRequired(true)
+    .addUserOption(opt =>
+        opt.setName('target')
+            .setDescription('Target user to warn')
+            .setRequired(true)
     )
-    .addStringOption(opt => opt.setName('reason')
-        .setDescription('reason')
-        .setRequired(true)
+    .addStringOption(opt =>
+        opt.setName('reason')
+            .setDescription('Reason for the warning')
+            .setRequired(true)
     );
+
 export async function execute(interaction) {
     const target = interaction.options.getUser('target');
     const reason = interaction.options.getString('reason');
-    const logchannel = interaction.guild.channels.cache.get(logchannelid);
-    //setup variables for decaying warns
-    let dmstatus = 'User was dmed.';
-    
-    //build embed response after command
-    const commandembed = new EmbedBuilder()
-        .setAuthor({
-            name: target.tag + ` was issued a warning`,
-            iconURL: target.displayAvatarURL({ dynamic: true })
-        })
-        .setColor(0xffff00)
 
-    const dmembed = new EmbedBuilder()
-        .setAuthor({
-            name: `${target.tag} was issued a warning`,
-            iconURL: `${target.displayAvatarURL()}`
-        })
+    if (!target) {
+        return interaction.reply({ content: '⚠️ Could not find the user.', ephemeral: true });
+    }
+
+    let dmStatus = 'User was DMed.';
+
+    // Embed sent to the warned user via DM
+    const dmEmbed = new EmbedBuilder()
         .setColor(0xffff00)
+        .setAuthor({ name: `${target.tag} was issued a warning`, iconURL: target.displayAvatarURL({ dynamic: true }) })
         .setThumbnail(interaction.guild.iconURL())
         .setDescription(`<@${target.id}>, you were given a warning in Salty's Cave.`)
-        .setFields(
-            { name: 'Reason:', value: `\`${reason}\``, inline: false }
-        )
-        .setTimestamp()
+        .addFields({ name: 'Reason:', value: `\`${reason}\`` })
+        .setTimestamp();
 
-    const logembed = new EmbedBuilder()
-        .setColor(0xffff00)
-        .setAuthor({
-            name: interaction.user.tag + ` warned a member`,
-            iconURL: interaction.user.displayAvatarURL({ dynamic: true })
-        })
-        .setThumbnail(target.displayAvatarURL())
-        .setFields(
-            { name: 'Target:', value: `${target}`, inline: true },
-            { name: 'Channel:', value: `<${interaction.channel.id}>`, inline: true },
-            { name: 'Reason:', value: `\`${reason}\``, inline: false }
-        )
-        .setFooter({ text: dmstatus })
-        .setTimestamp()
-
-    if (logchannel)
-        try {
-            await logchannel.send({ embeds: [logembed] });
-        } catch {
-            return await interaction.reply({ content: 'I can not find mute logs.', ephemeral: true });
-        }
-
-    logRecentCommand(`warn: ${target.tag} - ${reason}- issuer: ${interaction.user.tag}`);
-    target.send({ embeds: [dmembed] })
-    if (interaction.replied || !interaction.reply) {
-        // message-based (AutoMod)
-        await interaction.channel.send({ embeds: [commandembed] });
-    } else {
-        await interaction.reply({ embeds: [commandembed] });
+    try {
+        await target.send({ embeds: [dmEmbed] });
+    } catch {
+        dmStatus = '⚠️ Could not DM the user.';
     }
+
+    // Embed for the user who issued the command
+    const commandEmbed = new EmbedBuilder()
+        .setColor(0xffff00)
+        .setAuthor({ name: `${target.tag} was issued a warning`, iconURL: target.displayAvatarURL({ dynamic: true }) });
+
+    // Embed for logging
+    const logEmbed = new EmbedBuilder()
+        .setColor(0xffff00)
+        .setAuthor({ name: `${interaction.user.tag} warned a member`, iconURL: interaction.user.displayAvatarURL({ dynamic: true }) })
+        .setThumbnail(target.displayAvatarURL())
+        .addFields(
+            { name: 'Target:', value: `${target}`, inline: true },
+            { name: 'Channel:', value: `<#${interaction.channel.id}>`, inline: true },
+            { name: 'Reason:', value: `\`${reason}\``, inline: false }
+        )
+        .setFooter({ text: dmStatus })
+        .setTimestamp();
+
+    // Log to moderation channel
+    const logChannel = interaction.guild.channels.cache.get(logChannelId);
+    if (logChannel) {
+        try {
+            await logChannel.send({ embeds: [logEmbed] });
+        } catch (err) {
+            console.warn('⚠️ Failed to send log message:', err);
+            return interaction.reply({ content: '⚠️ Failed to send to log channel.', ephemeral: true });
+        }
+    } else {
+        console.warn('⚠️ Log channel not found.');
+    }
+
+    // Command response
+    try {
+        if (typeof interaction.reply === 'function') {
+            await interaction.reply({ embeds: [commandEmbed] });
+        } else if (interaction.channel) {
+            await interaction.channel.send({ embeds: [commandEmbed] });
+        }
+    } catch (err) {
+        console.warn('⚠️ Failed to send reply:', err);
+    }
+
+    // Logging locally
+    logRecentCommand(`warn - ${target.tag} - ${reason} - issuer: ${interaction.user.tag}`);
 }

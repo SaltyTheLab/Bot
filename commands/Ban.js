@@ -1,91 +1,93 @@
 import { PermissionFlagsBits, SlashCommandBuilder, EmbedBuilder } from "discord.js";
 import { logRecentCommand } from "../Logging/recentcommands.js";
+
+const banlogChannelId = '945821977187328082';
+
 export const data = new SlashCommandBuilder()
     .setName('ban')
-    .setDescription('Ban')
+    .setDescription('Ban a member')
     .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
-    .addUserOption(opt => opt.setName('target')
-        .setDescription('Target user ID')
-        .setRequired(true)
+    .addUserOption(opt =>
+        opt.setName('target')
+            .setDescription('User to ban')
+            .setRequired(true)
     )
-    .addStringOption(opt => opt.setName('reason')
-        .setDescription('reason')
-        .setRequired(true)
+    .addStringOption(opt =>
+        opt.setName('reason')
+            .setDescription('Reason for the ban')
+            .setRequired(true)
     );
 
-
 export async function execute(interaction) {
-    if (!interaction.member.permissions.has(PermissionFlagsBits.BanMembers)) { // check for member permission
-        return interaction.reply(
-            {
-                content: 'You do not have permission to use this command.', ephemeral: true
-            });
-    }
     const target = interaction.options.getUser('target');
     const reason = interaction.options.getString('reason');
 
-    const commandembed = new EmbedBuilder()  //command embed format
-        .setAuthor(
-            {
-                name: target.id + ' was banned.',
-                iconURL: target.displayAvatarURL()
-            }
-        )
-        .setColor(0xFF0000);
+    if (!target) {
+        return interaction.reply({ content: '⚠️ User not found.', ephemeral: true });
+    }
 
-    const dmembed = new EmbedBuilder() //dm embed ban format notice 
+    const member = await interaction.guild.members.fetch(target.id).catch(() => null);
+    if (!member) {
+        return interaction.reply({ content: '⚠️ This user is not in the server.', ephemeral: true });
+    }
+
+    // Prepare embeds
+    const dmEmbed = new EmbedBuilder()
+        .setColor(0xff0000)
         .setTitle(`${target.tag}`)
         .setThumbnail(interaction.guild.iconURL())
-        .setColor(0xFF0000)
         .setDescription(
-            `<@${target.id}>, you have been banned from Salty's Cave. 
-            To appeal your ban [click here](https://dyno.gg/form/9dd2f880) which will take you to the appeal link.
-        `)
-        .setFields({ name: "Reason:", value: `\`${reason}\``, inline: true })
-        .setFooter({ text: `${interaction.guild.name}` })
+            `<@${target.id}>, you have been **banned** from **Salty's Cave**.\n\n` +
+            `To appeal, please [click here](https://dyno.gg/form/9dd2f880).`
+        )
+        .addFields({ name: 'Reason:', value: `\`${reason}\`` })
+        .setFooter({ text: interaction.guild.name })
         .setTimestamp();
 
-    const member = await interaction.guild.members.fetch(target.id).catch(() => null); //fetch the users id
-    if (!member) // check for user in server
-    {
-        return interaction.reply({ content: 'User not found.', ephemeral: true });
-    }
-    let dmstatus = 'User was Dmed.'
-    try {
-        await target.send({ embeds: [dmembed] });
-    }
-    catch (err) {
-        dmstatus = 'User was not Dmed';
-    }
-    try { await member.ban() }
-    catch {
-        return interaction.reply({ content: 'user is already banned.', ephemeral: true })
-    }
+    const commandEmbed = new EmbedBuilder()
+        .setColor(0xff0000)
+        .setAuthor({ name: `${target.tag} was banned.`, iconURL: target.displayAvatarURL() });
 
-    //log the ban
-    const logembed = new EmbedBuilder()
-        .setAuthor({
-            name: interaction.user.tag + ' banned a member.',
-            iconURL: interaction.user.displayAvatarURL()
-        })
-        .setColor(0xFF0000)
+    const logEmbed = new EmbedBuilder()
+        .setColor(0xff0000)
+        .setAuthor({ name: `${interaction.user.tag} banned a member`, iconURL: interaction.user.displayAvatarURL() })
         .setThumbnail(target.displayAvatarURL())
         .addFields(
-            { name: "Target", value: `${target}`, inline: true },
-            { name: "Channel", value: `<#${interaction.channel.id}>`, inline: true },
-            { name: "Reason", value: `\`${reason}\``, inline: false }
+            { name: 'Target:', value: `${target}`, inline: true },
+            { name: 'Channel:', value: `<#${interaction.channel.id}>`, inline: true },
+            { name: 'Reason:', value: `\`${reason}\``, inline: false }
         )
-        .setFooter({ text: dmstatus });
-    const banlogchannelid = '945821977187328082';
-    const banlogchannel = interaction.guild.channels.cache.get(banlogchannelid);
-    if (banlogchannel)
+        .setTimestamp();
+
+    // Attempt to DM the user
+    let dmStatus = '✅ User was DMed.';
+    try {
+        await target.send({ embeds: [dmEmbed] });
+    } catch {
+        dmStatus = '⚠️ Could not DM the user.';
+    }
+
+    // Attempt the ban
+    try {
+        await member.ban({ reason: `Issued by ${interaction.user.tag}: ${reason}` });
+    } catch (err) {
+        return interaction.reply({ content: '❌ I failed to ban this user. Make sure my role is higher.', ephemeral: true });
+    }
+
+    logEmbed.setFooter({ text: dmStatus });
+
+    // Log the action
+    const banLogChannel = interaction.guild.channels.cache.get(banlogChannelId);
+    if (banLogChannel) {
         try {
-            await banlogchannel.send({ embeds: [logembed] })
-        } catch {
-            return interaction.reply({ content: 'I can not find my ban logs.', ephemeral: true });
+            await banLogChannel.send({ embeds: [logEmbed] });
+        } catch (err) {
+            console.warn('⚠️ Failed to send ban log:', err);
         }
+    }
 
-    logRecentCommand(`ban - ${target.tag}] - ${reason} - issuer: ${interaction.user.tag}`);
-    return interaction.reply({ embeds: [commandembed] });
+    // Log to recent command system
+    logRecentCommand(`ban - ${target.tag} - ${reason} - issuer: ${interaction.user.tag}`);
 
-};
+    return interaction.reply({ embeds: [commandEmbed] });
+}
