@@ -22,8 +22,7 @@ export async function execute(interaction) {
     const logchannel = interaction.guild.channels.cache.get(logchannelid);
     //setup variables for decaying warns
     let dmstatus = 'User was dmed.';
-    //check for repeated offenses and update embeds accordingly
-
+    
     //build embed response after command
     const commandembed = new EmbedBuilder()
         .setAuthor({
@@ -54,7 +53,7 @@ export async function execute(interaction) {
         .setThumbnail(target.displayAvatarURL())
         .setFields(
             { name: 'Target:', value: `${target}`, inline: true },
-            { name: 'Channel:', value: `<#${interaction.channel.id}>`, inline: true },
+            { name: 'Channel:', value: `<${interaction.channel.id}>`, inline: true },
             { name: 'Reason:', value: `\`${reason}\``, inline: false }
         )
         .setFooter({ text: dmstatus })

@@ -27,25 +27,22 @@ export const data = new SlashCommandBuilder()
                 { name: 'Days', value: 'd' }
             )
     );
-export async function execute(interaction) {
+export async function execute(interaction,) {
 
-    //check if permissions are present.
-    if (!interaction.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
-        return interaction.reply({
-            content: 'You do not have permission to use this command.',
-            ephemeral: true
-        })
-    }
     //fetch the values entered into the command
     let dmstatus = 'User was dmed.';
     const target = interaction.options.getUser('target');
-    const duration = interaction.options.getInteger('duration');
-    const unit = interaction.options.getString('unit');
+    const duration = interaction.options.getInteger('duration') ?? 0;
+    const unit = interaction.options.getString('unit') ?? 'm';
     const reason = interaction.options.getString('reason');
     const unitMap = {
-        m: 60000,    // minutes
-        h: 3600000,  // hours
-        d: 86400000  // days
+        m: 60000,
+        min: 60000,
+        minutes: 60000,    // minutes
+        h: 3600000,
+        hours: 3600000, // hours
+        d: 86400000,
+        days: 86400000  // days
     };
     const timeMs = duration * unitMap[unit]; // map days, hours, minutes to milliseconds
     //embed for commands
@@ -85,7 +82,7 @@ export async function execute(interaction) {
 
     if (!member.communicationDisabledUntilTimestop) {
         try {
-            await member.timeout(timeMs, reason);
+            await member.timeout(finalduration);
         }
         catch (err) {
             return interaction.reply({ content: '⚠️ Failed to apply mute.', ephemeral: true });
@@ -125,5 +122,5 @@ export async function execute(interaction) {
             return interaction.reply({ content: 'I could not find my logs channel.', ephemeral: true });
         }
     logRecentCommand(`mute - ${target.tag} - ${duration} - ${reason}- issuer: ${interaction.user.tag}`);
-    return interaction.reply({ embeds: [commandembed] });
+    interaction.reply({ embeds: [commandembed] });
 };
