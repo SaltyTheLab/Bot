@@ -5,30 +5,43 @@ import forbiddenWordsData from './forbiddenwords.json' with { type: 'json' };
 const warnings = new Map();
 const threshold = 24 * 60 * 60 * 1000; //24 hours
 const baseduration = 15 * 60 * 1000;
+const maxduration = 6 * 60 * 60 * 1000;
 const now = Date.now();
 const forbiddenWords = forbiddenWordsData.forbiddenWords;
 const deletedlogsid = "1393011824114270238";
-const mutelogsid = "1392889476686020700";
 
 
 
 
 
-async function escalation(message, client, guild) {
-    const matched = forbiddenWords.find(word => message.content.toLowerCase().includes(word.toLowerCase()));
-    const target = message.author
+function muteescalation(message, client) {
+    const target = message.author;
     const escalatedcommand = client.commands.get('mute');
+    const matched = forbiddenWords.find(word => message.content.toLowerCase().includes(word.toLowerCase()));
+    const botuser = client.user.tag;
+
+    //setup max mute time for automod
     const allWarnings = warnings.get(target);
     const ValidWarnings = Array.isArray(allWarnings) ? allWarnings : [];
     const activeWarnings = ValidWarnings.filter(warn => now - warn.timestamp < threshold);
-    const botAvatar = client.user.displayAvatarURL({ dynamic: true });
-    const botuser = client.user.tag;
-    const mute = await client.channels.fetch(mutelogsid);
-    let dmstatus = "user dmed.";
+
+    //variables for decaying warns
     const escalationDuration = baseduration * Math.pow(2, activeWarnings.length - 1);
-    const reason = `Automod: saying forbbiden word ${matched}`;
+    const durationminutes = Math.floor(escalationDuration / 60000);
+    let convertedminutes = durationminutes;
+    let convertedunit = 'minutes';
+    if (durationminutes >= 60) {
+        convertedminutes = durationminutes / 60;
+        convertedunit = 'hours'
+    }
+    const finalduration = Math.min(convertedminutes, maxduration)
+
+
+
+    const reason = `AM: saying forbbiden word ${matched}`;
 
     const mutefakeInteraction = {
+
         guild: message.guild,
         member: message.member,
         user: message.author,
@@ -36,68 +49,19 @@ async function escalation(message, client, guild) {
         options: {
             getUser: (key) => key === 'target' ? message.author : null,
             getString: (key) => key === 'reason' ? `AutoMod: Forbidden word ${matched}` : null,
-            getInteger: (key) => key === 'duration' ? `${Math.floor(escalationDuration / 60000)}` : null,
-            getString: (key) => key === 'unit' ? 'minutes' : null
+            getInteger: (key) => key === 'duration' ? `${finalduration}` : null,
+            getString: (key) => key === 'unit' ? `${convertedunit}` : null
 
         },
         replied: false,
         deferred: false,
         reply: async (response) => {
             message.channel.send(response);
-        },
-
-    };
-
-    const dmmuteembed = new EmbedBuilder()
-        .setAuthor({
-            name: `${target.tag} was issued a mute`,
-            iconURL: `${target.displayAvatarURL()}`
-        })
-        .setColor(0xffff00)
-        .setThumbnail(message.guild.iconURL())
-        .setDescription(`<@${target.id}>, you were given a ${String(activeWarnings.length)} in Salty's Cave.`)
-        .setFields(
-            { name: 'Reason:', value: `\`${reason}\``, inline: false },
-            { name: 'Active Punishment:', value: String(activeWarnings.length) + `,${Math.floor(escalationDuration / 60000)} miutes`, inline: true },
-            { name: 'duration', value: `${Math.floor(escalationDuration / 60000)} miutes`, inline: true },
-        )
-        .setFooter({ text: dmstatus })
-        .setTimestamp()
-
-    const mutecommandembed = new EmbedBuilder()
-        .setAuthor({
-            name: `${target.tag} was issued a ${Math.floor(escalationDuration / 60000)} minute mute.`,
-            iconURL: target.displayAvatarURL({ dynamic: true })
-        })
-        .setColor(0xffa500)
-
-    const logembed = new EmbedBuilder()
-        .setColor(0xffff00)
-        .setAuthor({
-            name: botuser + ` warned a member`,
-            iconURL: botAvatar
-        })
-        .setThumbnail(target.displayAvatarURL())
-        .setFields(
-            { name: 'Target:', value: `${target}`, inline: true },
-            { name: 'Channel:', value: `<#${message.channel}>`, inline: true },
-            { name: 'Reason:', value: `\`${reason}\``, inline: false }
-        )
-        .setFooter({ text: dmstatus })
-        .setTimestamp()
-
-    try {
-        target.send({ embeds: [dmembed] });
+        }
     }
-    catch {
-        dmstatus = 'User was not dmed.'
-    }
+    logRecentCommand(`mute: ${target.tag} - ${reason}- ${finalduration} ${convertedunit} - issuer: ${botuser}`);
+    return escalatedcommand.execute(mutefakeInteraction);
 
-    logRecentCommand(`mute: ${target.tag} - ${reason}- ${Math.floor(escalationDuration / 60000)} minutes - issuer: ${botuser}`);
-    mute.send({ embeds: [logembed] });
-    target.send({ embeds: [dmmuteembed] });
-    message.channel.send({ embeds: [mutecommandembed] })
-    escalatedcommand.execute(mutefakeInteraction);
 }
 
 export async function botlisteners(client) {
@@ -137,7 +101,8 @@ export async function botlisteners(client) {
             }
         };
         if (newCount >= 2) {
-            escalation(message, client)
+
+            muteescalation(message, client)
         } else {
             command.execute(fakeInteraction);
         }
