@@ -12,7 +12,6 @@ export function logRecentCommand(commandString) {
     } catch (err) {
         recentCommands = [];
     }
-    recentCommands.unshift(commandString);
-    if (recentCommands.length > 5) recentCommands = recentCommands.slice(0, 5);
+
     fs.writeFileSync(recentCommandsPath, JSON.stringify(recentCommands, null, 2));
 }

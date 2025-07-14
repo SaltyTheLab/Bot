@@ -1,8 +1,7 @@
 const commandHistory = document.getElementById('commandHistory');
-const maxCommands = 5; // Show up to 5 recent commands
-
 let recentCommands = [];
-  async function fetchRecentCommands() {
+window.addEventListener('DOMContentLoaded', adjustLayoutByLines);
+async function fetchRecentCommands() {
     try {
         const response = await fetch('Logging/recentCommandslog.json');
         if (!response.ok) throw new Error('Failed to fetch recent commands');
@@ -42,7 +41,33 @@ function addCommand(command) {
         commandHistory.add(option);
     });
 }
+function adjustLayoutByLines(jsonString) {
+    const box = document.getElementById("jsonBox");
+    if (!box) return;
+
+    try {
+        const prettyJson = JSON.stringify(JSON.parse(jsonString), null, 2); // Ensure formatting
+        const lineCount = prettyJson.split("\n").length;
+
+        const lineHeight = 18; // px, tweak this to match your CSS
+        const padding = 20;    // extra room for breathing
+        box.style.height = `${lineCount * lineHeight + padding}px`;
+
+        box.textContent = prettyJson;
+    } catch (err) {
+        console.error("Invalid JSON provided to adjustLayoutByLines:", err);
+    }
+}
+
+fetch('Logging/recentCommandslog.json')
+    .then(response => response.text())
+    .then(text => {
+        const lineCount = text.split('\n').length;
+        adjustLayoutByLines(lineCount);
+    });
+
 // Fetch and update every 5 seconds
-setInterval(fetchRecentCommands, 5000);
 window.addEventListener('DOMContentLoaded', fetchRecentCommands);
+setInterval(fetchRecentCommands, 5000);
+
 
