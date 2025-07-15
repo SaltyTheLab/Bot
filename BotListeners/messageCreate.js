@@ -17,8 +17,6 @@ const SPAM_WINDOW = 15 * 1000;
 const SPAM_THRESHOLD = 4;
 const messageHistory = new Map();
 
-const warnings = new Map();
-
 const inviteRegex = /(https?:\/\/)?(www\.)?(discord\.gg|discordapp\.com\/invite|discord\.com\/invite)\/[a-zA-Z0-9-]+/i;
 
 export async function onMessageCreate(client, message) {
@@ -57,8 +55,9 @@ export async function onMessageCreate(client, message) {
     //bad word and link check
     const matchedWord = forbiddenWords.find(word => content.includes(word.toLowerCase()));
     const hasInvite = inviteRegex.test(content);
+    const everyoneping = message.mentions.everyone;
 
-    if (!matchedWord && !hasInvite && !isMediaViolation && matchingMessages.length < SPAM_THRESHOLD) return;
+    if (!matchedWord && !hasInvite && !isMediaViolation && matchingMessages.length < SPAM_THRESHOLD || everyoneping) return;
 
     //update embed warn reason accordingly
     let reasonText = '';
@@ -70,7 +69,9 @@ export async function onMessageCreate(client, message) {
         reasonText = 'AutoMod: Posting too much media (1 per 20 messages allowed)';
     } else if (matchingMessages.length >= SPAM_THRESHOLD) {
         reasonText = 'AutoMod: Spamming the same message';
+    } else if (everyoneping) {
+        reasonText = 'AutoMod: Mass ping';
     }
 
-    await handleAutoMod(message, client, reasonText, warnings, forbiddenWords);
+    await handleAutoMod(message, client, reasonText, forbiddenWords);
 }
