@@ -1,6 +1,8 @@
 import { EmbedBuilder, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import { logRecentCommand } from '../Logging/recentcommands.js';
 
+const logChannelId = '1392889476686020700';
+
 export const data = new SlashCommandBuilder()
     .setName('mute')
     .setDescription('Mute a member')
@@ -106,7 +108,7 @@ export async function execute(interaction) {
         .setFooter({ text: dmStatus })
         .setTimestamp();
 
-    const logChannelId = '1392889476686020700';
+
     const logChannel = interaction.guild.channels.cache.get(logChannelId);
 
     if (!logChannel) {
