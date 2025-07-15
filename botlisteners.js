@@ -1,148 +1,94 @@
 import { EmbedBuilder } from 'discord.js';
-import { logRecentCommand } from './Logging/recentcommands.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { updateTracker } from './moderation/trackers.js';
+import { handleAutoMod } from './moderation/autoMod.js';
+
+
+
 
 // Resolve __dirname for ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// Read and parse forbiddenwords.json
-const forbiddenWordsPath = path.join(__dirname, 'forbiddenwords.json');
-const forbiddenWordsData = JSON.parse(fs.readFileSync(forbiddenWordsPath, 'utf8'));
-
+const forbiddenWords = JSON.parse(fs.readFileSync(path.join(__dirname, 'forbiddenwords.json'), 'utf8')).forbiddenWords;
 
 const warnings = new Map();
-const THRESHOLD = 24 * 60 * 60 * 1000; // 24h in ms
-const BASE_DURATION = 15 * 60 * 1000; // 15min in ms
-const MAX_DURATION = 6 * 60 * 60 * 1000; // 6h in ms
-const forbiddenWords = forbiddenWordsData.forbiddenWords;
+const inviteRegex = /(https?:\/\/)?(www\.)?(discord\.gg|discordapp\.com\/invite|discord\.com\/invite)\/[a-zA-Z0-9-]+/i;
+
+//log channel ids
 const deletedLogsId = "1393011824114270238";
 const welcomeChannelId = '1392972733704572959';
 const updatedMessagesChannelId = '1392990612990595233';
 const nameLogChannelId = '1393076616326021181';
 
-async function muteEscalation(message, client) {
-    const target = message.author;
-    const muteCommand = client.commands.get('mute');
-    if (!muteCommand) {
-        console.warn('⚠️ Mute command not found.');
-        return;
-    }
-
-    const now = Date.now();
-    const allWarnings = warnings.get(target) ?? [];
-    const activeWarnings = allWarnings.filter(warn => now - warn.timestamp < THRESHOLD);
-
-    // Calculate escalation duration with exponential backoff
-    const escalationDurationMs = Math.min(
-        BASE_DURATION * 2 ** (activeWarnings.length - 1),
-        MAX_DURATION
-    );
-    const durationMinutes = Math.floor(escalationDurationMs / 60000);
-    const convertedUnit = durationMinutes >= 60 ? 'hours' : 'minutes';
-    const finalDuration = convertedUnit === 'hours' ? durationMinutes / 60 : durationMinutes;
-
-    const matchedWord = forbiddenWords.find(word =>
-        message.content.toLowerCase().includes(word.toLowerCase())
-    );
-    const reason = `AM: forbidden word "${matchedWord}"`;
-
-    // Create a "fake" interaction object to reuse command logic
-    const fakeInteraction = {
-        guild: message.guild,
-        member: message.member,
-        user: client.user,
-        channel: message.channel,
-        options: {
-            getUser: key => key === 'target' ? target : null,
-            getString: key => key === 'reason' ? `AutoMod: Forbidden word "${matchedWord}"` : key === 'unit' ? convertedUnit : null,
-            getInteger: key => key === 'duration' ? finalDuration : null,
-        },
-        replied: false,
-        deferred: false,
-        reply: async (response) => {
-            if (typeof response === 'string') await message.channel.send({ content: response });
-            else await message.channel.send(response);
-        },
-    };
-
-    logRecentCommand(`mute: ${target.tag} - ${reason} - ${finalDuration} ${convertedUnit} - issuer: ${client.user.tag}`);
-    await muteCommand.execute(fakeInteraction);
-}
 
 export async function botlisteners(client) {
-    const automodCooldowns = new Map();
-    const COOLDOWN_MS = 2000; // 2 seconds
-
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.guild) return;
 
-        const content = message.content.toLowerCase();
         const userId = message.author.id;
+        const content = message.content.toLowerCase();
 
-        // Simple keyword replies (bypass automod)
-        if (content === 'cute') return message.reply("You're Cute");
-        if (content === 'adorable') return message.reply("You're Adorable");
-        if (content === 'ping') return message.reply("pong!");
+        // Check if message contains media attachments or embeds with media URLs
+        const hasMedia = message.attachments.size > 0 || message.embeds.some(embed => {
+            // Check image, video, or thumbnail URLs explicitly
+            const mediaUrls = [
+                embed.image?.url,
+                embed.video?.url,
+                embed.thumbnail?.url,
+            ].filter(Boolean); // filter out undefined
 
-        // Check forbidden words
-        const matched = forbiddenWords.find(word => content.includes(word.toLowerCase()));
-        if (!matched) return;
+            // Return true if any media URL matches supported media
+            // extensions
 
-        // Rate limiting per user
-        const now = Date.now();
-        const lastTrigger = automodCooldowns.get(userId);
-        if (lastTrigger && now - lastTrigger < COOLDOWN_MS) return;
-        automodCooldowns.set(userId, now);
-        setTimeout(() => automodCooldowns.delete(userId), COOLDOWN_MS);
+            return mediaUrls.some(url => /\.(gif|mp4|webm|png|jpe?g)$/i.test(url));
 
-        // Attempt to delete message
-        try {
-            await message.delete();
-        } catch (err) {
-            console.warn('⚠️ Failed to delete message:', err);
-        }
+        });
 
-        // Manage warnings
-        const allWarnings = warnings.get(message.author) ?? [];
-        const activeWarnings = allWarnings.filter(warn => now - warn.timestamp < THRESHOLD);
-        activeWarnings.push({ timestamp: now });
-        warnings.set(message.author, activeWarnings);
+        // Update user tracker and determine if this message violates media limits
+        const isMediaViolation = updateTracker(userId, hasMedia, message);
 
-        // Build fake interaction for warn command
-        const warnCommand = client.commands.get('warn');
-        const fakeInteraction = {
-            guild: message.guild,
-            member: message.member,
-            user: message.author,
-            channel: message.channel,
-            options: {
-                getUser: key => key === 'target' ? message.author : null,
-                getString: key => key === 'reason' ? `AutoMod: Forbidden word "${matched}"` : null,
-            },
-            replied: false,
-            deferred: false,
-            reply: async (response) => {
-                if (typeof response === 'string') await message.channel.send({ content: response });
-                else await message.channel.send(response);
-            },
-            editReply: async (response) => {
-                await message.channel.send(response);
-                fakeInteraction.replied = true;
-            },
+        // Quick respond for simple keyword commands
+        const keywords = {
+            cute: "You're Cute",
+            adorable: "You're Adorable",
+            ping: "pong!"
         };
-
-        // Escalate or warn
-        if (activeWarnings.length >= 2) {
-            await muteEscalation(message, client);
-        } else if (warnCommand) {
-            await warnCommand.execute(fakeInteraction);
-        } else {
-            console.warn('⚠️ Warn command not found.');
+        if (keywords[content]) {
+            return message.reply(keywords[content]);
         }
+
+        // Check forbidden words and invite links
+        const matchedWord = forbiddenWords.find(word => content.includes(word.toLowerCase()));
+        const hasInvite = inviteRegex.test(content);
+
+        // If no violations at all, do nothing
+        if (!matchedWord && !hasInvite && !isMediaViolation) return;
+
+        // Delete message if not already deleted by media violation handler
+        if (!isMediaViolation) {
+            try {
+                await message.delete();
+            } catch (err) {
+                console.warn('⚠️ Failed to delete message:', err);
+            }
+        }
+
+        // Determine reason for moderation action
+        let reasonText = '';
+        if (hasInvite) {
+            reasonText = 'AutoMod: Discord invite detected';
+        } else if (matchedWord) {
+            reasonText = `AutoMod: Forbidden word "${matchedWord}"`;
+        } else if (isMediaViolation) {
+            reasonText = 'AutoMod: Posting too much media (1 per 20 messages allowed)';
+        }
+
+        // Handle further moderation actions
+        await handleAutoMod(message, client, reasonText, warnings, forbiddenWords);
     });
+
 
     client.on('guildMemberAdd', async (member) => {
         const welcomeChannel = member.guild.channels.cache.get(welcomeChannelId);
@@ -159,6 +105,7 @@ export async function botlisteners(client) {
 
         await welcomeChannel.send({ embeds: [embed] });
     });
+
 
     client.on('guildMemberRemove', async (member) => {
         const welcomeChannel = member.guild.channels.cache.get(welcomeChannelId);
@@ -259,4 +206,5 @@ export async function botlisteners(client) {
 
         await logChannel.send({ embeds: [embed] });
     });
-}
+};
+
