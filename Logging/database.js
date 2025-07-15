@@ -29,9 +29,38 @@ dbPromise.then(async db => {
         timestamp INTEGER NOT NULL
       )
     `);
+
+    await db.exec(`CREATE TABLE IF NOT EXISTS users (
+    userId TEXT,
+    guildId TEXT,
+    xp INTEGER DEFAULT 0,
+    level INTEGER DEFAULT 1,
+    PRIMARY KEY (userId, guildId)
+    )`
+    );
 });
 
 // Database functions
+export async function getUserAsync(userId, guildId) {
+    const db = await dbPromise;
+
+    const row = await db.get(`SELECT * FROM users WHERE userId = ? AND guildId = ?`, [userId, guildId]);
+
+    if (row) return row;
+
+    await db.run(`INSERT INTO users (userId, guildId, xp, level) VALUES (?, ?, 0, 0)`, [userId, guildId]);
+    return { userId, guildId, xp: 0, level: 0 };
+}
+
+
+export async function updateUser(userId, guildId, xp, level) {
+    const db = await dbPromise;
+    await db.run(
+        `UPDATE users SET xp=  ?, level = ? WHERE userId =? AND guildId =?`, [xp, level, userId, guildId]
+    );
+}
+
+
 export async function addWarn(userId, moderatorId, reason) {
     const db = await dbPromise;
     return db.run(
@@ -62,4 +91,16 @@ export async function clearWarns(userId) {
     const db = await dbPromise;
     const result = await db.run('DELETE FROM warns WHERE userId = ?', userId);
     return result.changes > 0;
+}
+export async function saveUserAsync(userData) {
+    const db = await dbPromise;
+    if (!db) await init();
+
+    // Insert or update user data
+    await db.run(`
+    INSERT INTO users (userId, guildId, xp, level) VALUES (?, ?, ?, ?)
+    ON CONFLICT(userId, guildId) DO UPDATE SET
+      xp = excluded.xp,
+      level = excluded.level
+  `, userData.userId, userData.guildId, userData.xp, userData.level);
 }
