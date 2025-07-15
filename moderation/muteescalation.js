@@ -1,7 +1,7 @@
 import * as constants from './constants.js';
 import fs from "node:fs"
 import { logRecentCommand } from '../Logging/recentcommands.js'; // adjust path as needed
-const forbiddenWords = JSON.parse(fs.readFileSync('./forbiddenwords.json', 'utf-8')).forbiddenWords;
+const forbiddenWords = JSON.parse(fs.readFileSync('./moderation/forbiddenwords.json', 'utf-8')).forbiddenWords;
 
 /**
  * Escalates to mute a user based on warnings.

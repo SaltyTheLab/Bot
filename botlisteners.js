@@ -5,13 +5,10 @@ import { fileURLToPath } from 'node:url';
 import { updateTracker } from './moderation/trackers.js';
 import { handleAutoMod } from './moderation/autoMod.js';
 
-
-
-
 // Resolve __dirname for ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const forbiddenWords = JSON.parse(fs.readFileSync(path.join(__dirname, 'forbiddenwords.json'), 'utf8')).forbiddenWords;
+const forbiddenWords = JSON.parse(fs.readFileSync(path.join(__dirname, './moderation/forbiddenwords.json'), 'utf8')).forbiddenWords;
 
 const warnings = new Map();
 const inviteRegex = /(https?:\/\/)?(www\.)?(discord\.gg|discordapp\.com\/invite|discord\.com\/invite)\/[a-zA-Z0-9-]+/i;
@@ -21,7 +18,6 @@ const deletedLogsId = "1393011824114270238";
 const welcomeChannelId = '1392972733704572959';
 const updatedMessagesChannelId = '1392990612990595233';
 const nameLogChannelId = '1393076616326021181';
-
 
 export async function botlisteners(client) {
     client.on('messageCreate', async (message) => {
@@ -81,7 +77,6 @@ export async function botlisteners(client) {
         await handleAutoMod(message, client, reasonText, warnings, forbiddenWords);
     });
 
-
     client.on('guildMemberAdd', async (member) => {
         const welcomeChannel = member.guild.channels.cache.get(welcomeChannelId);
         if (!welcomeChannel) {
@@ -97,7 +92,6 @@ export async function botlisteners(client) {
 
         await welcomeChannel.send({ embeds: [embed] });
     });
-
 
     client.on('guildMemberRemove', async (member) => {
         const welcomeChannel = member.guild.channels.cache.get(welcomeChannelId);
@@ -199,4 +193,3 @@ export async function botlisteners(client) {
         await logChannel.send({ embeds: [embed] });
     });
 };
-
