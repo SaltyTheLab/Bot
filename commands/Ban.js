@@ -1,7 +1,6 @@
 import { PermissionFlagsBits, SlashCommandBuilder, EmbedBuilder } from "discord.js";
 import { logRecentCommand } from "../Logging/recentcommands.js";
-
-const banlogChannelId = '945821977187328082';
+import { banlogChannelid } from "../BotListeners/channelids.js";
 
 export const data = new SlashCommandBuilder()
     .setName('ban')
@@ -17,6 +16,8 @@ export const data = new SlashCommandBuilder()
             .setDescription('Reason for the ban')
             .setRequired(true)
     );
+
+
 
 export async function execute(interaction) {
     const target = interaction.options.getUser('target');
@@ -77,7 +78,7 @@ export async function execute(interaction) {
     logEmbed.setFooter({ text: dmStatus });
 
     // Log the action
-    const banLogChannel = interaction.guild.channels.cache.get(banlogChannelId);
+    const banLogChannel = interaction.guild.channels.cache.get(banlogChannelid);
     if (banLogChannel) {
         try {
             await banLogChannel.send({ embeds: [logEmbed] });

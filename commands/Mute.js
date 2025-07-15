@@ -1,9 +1,9 @@
 import { EmbedBuilder, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import { logRecentCommand } from '../Logging/recentcommands.js';
-
-const logChannelId = '1392889476686020700';
+import { mutelogChannelid } from '../BotListeners/channelids.js';
 
 export const data = new SlashCommandBuilder()
+
     .setName('mute')
     .setDescription('Mute a member')
     .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
@@ -34,6 +34,8 @@ export const data = new SlashCommandBuilder()
     );
 
 export async function execute(interaction) {
+    const nextpunishment = interaction.nextPunishment;
+    const activewarnings = interaction.activeWarnings;
     const target = interaction.options.getUser('target');
     const reason = interaction.options.getString('reason');
     const duration = interaction.options.getInteger('duration');
@@ -65,14 +67,6 @@ export async function execute(interaction) {
 
     let dmStatus = 'User was DMed.';
 
-    const dmEmbed = new EmbedBuilder()
-        .setColor(0xffa500)
-        .setAuthor({ name: target.tag, iconURL: target.displayAvatarURL({ dynamic: true }) })
-        .setThumbnail(interaction.guild.iconURL())
-        .setDescription(`<@${target.id}>, you have been issued a \`${duration} ${unit}\` mute in Salty's Cave.`)
-        .addFields({ name: 'Reason:', value: `\`${reason}\`` })
-        .setTimestamp();
-
     try {
         await target.send({ embeds: [dmEmbed] });
     } catch {
@@ -83,8 +77,21 @@ export async function execute(interaction) {
         await member.timeout(timeMs, reason);
     } catch (err) {
         console.error('Failed to apply timeout:', err);
-        return interaction.reply({ content: '⚠️ Failed to apply mute.', ephemeral: true });
+        interaction.reply("I couldn't apply the mute.");
+        return false;
     }
+
+
+    const dmEmbed = new EmbedBuilder()
+        .setColor(0xffa500)
+        .setAuthor({ name: target.tag, iconURL: target.displayAvatarURL({ dynamic: true }) })
+        .setThumbnail(interaction.guild.iconURL())
+        .setDescription(`<@${target.id}>, you have been issued a \`${duration} ${unit}\` mute in Salty's Cave.`)
+        .addFields({ name: 'Reason:', value: `\`${reason}\`` },
+            { name: "Next Punishment:", value: `\`${nextpunishment}\``, inline: false },
+            { name: "Active Warnings: ", value: `\`${activewarnings}\``, inline: false }
+        )
+        .setTimestamp();
 
     const commandEmbed = new EmbedBuilder()
         .setColor(0xffa500)
@@ -103,13 +110,15 @@ export async function execute(interaction) {
         .addFields(
             { name: 'Target:', value: `${target}`, inline: true },
             { name: 'Channel:', value: `<#${interaction.channel.id}>`, inline: true },
-            { name: 'Reason:', value: `\`${reason}\``, inline: false }
+            { name: 'Reason:', value: `\`${reason}\``, inline: false },
+            { name: "Next Punishment:", value: `\`${nextpunishment}\``, inline: false },
+            { name: "Active Warnings: ", value: `\`${activewarnings}\``, inline: false }
         )
         .setFooter({ text: dmStatus })
         .setTimestamp();
 
 
-    const logChannel = interaction.guild.channels.cache.get(logChannelId);
+    const logChannel = interaction.guild.channels.cache.get(mutelogChannelid);
 
     if (!logChannel) {
         return interaction.reply({ content: '❌ Log channel not found.', ephemeral: true });

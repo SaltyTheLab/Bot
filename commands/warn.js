@@ -1,7 +1,7 @@
 import { PermissionFlagsBits, SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { logRecentCommand } from '../Logging/recentcommands.js';
+import { mutelogChannelid } from '../BotListeners/channelids.js';
 
-const logChannelId = '1392889476686020700';
 
 export const data = new SlashCommandBuilder()
     .setName('warn')
@@ -21,7 +21,8 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
     const target = interaction.options.getUser('target');
     const reason = interaction.options.getString('reason');
-
+    const nextpunishment = interaction.nextPunishment;
+    const activewarnings = interaction.activeWarnings;
     if (!target) {
         return interaction.reply({ content: '⚠️ Could not find the user.', ephemeral: true });
     }
@@ -34,7 +35,11 @@ export async function execute(interaction) {
         .setAuthor({ name: `${target.tag} was issued a warning`, iconURL: target.displayAvatarURL({ dynamic: true }) })
         .setThumbnail(interaction.guild.iconURL())
         .setDescription(`<@${target.id}>, you were given a warning in Salty's Cave.`)
-        .addFields({ name: 'Reason:', value: `\`${reason}\`` })
+        .addFields(
+            { name: 'Reason:', value: `\`${reason}\`` },
+            { name: "Next Punishment:", value: `\`${nextpunishment}\``, inline: false },
+            { name: "Active Warnings: ", value: `\`${activewarnings}\``, inline: false }
+        )
         .setTimestamp();
 
     try {
@@ -56,13 +61,15 @@ export async function execute(interaction) {
         .addFields(
             { name: 'Target:', value: `${target}`, inline: true },
             { name: 'Channel:', value: `<#${interaction.channel.id}>`, inline: true },
-            { name: 'Reason:', value: `\`${reason}\``, inline: false }
+            { name: 'Reason:', value: `\`${reason}\``, inline: false },
+            { name: "Next Punishment:", value: `\`${nextpunishment}\``, inline: false },
+            { name: "Active Warnings: ", value: `\`${activewarnings}\``, inline: false }
         )
         .setFooter({ text: dmStatus })
         .setTimestamp();
 
     // Log to moderation channel
-    const logChannel = interaction.guild.channels.cache.get(logChannelId);
+    const logChannel = interaction.guild.channels.cache.get(mutelogChannelid);
     if (logChannel) {
         try {
             await logChannel.send({ embeds: [logEmbed] });
