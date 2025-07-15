@@ -25,9 +25,9 @@ export const data = new SlashCommandBuilder()
             .setDescription('Duration unit')
             .setRequired(true)
             .addChoices(
-                { name: 'Minutes', value: 'm' },
-                { name: 'Hours', value: 'h' },
-                { name: 'Days', value: 'd' }
+                { name: 'Minute', value: 'm' },
+                { name: 'Hour', value: 'h' },
+                { name: 'Day', value: 'd' }
             )
     );
 
@@ -92,7 +92,7 @@ export async function execute(interaction) {
         });
 
     const logEmbed = new EmbedBuilder()
-        .setColor(0x0099ff)
+        .setColor(0xffa500)
         .setThumbnail(target.displayAvatarURL())
         .setAuthor({
             name: `${interaction.user.tag} muted a member`,
