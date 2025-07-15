@@ -1,6 +1,10 @@
 import { PermissionFlagsBits, SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { logRecentCommand } from '../Logging/recentcommands.js';
 import { mutelogChannelid } from '../BotListeners/channelids.js';
+import { getNextPunishment } from '../moderation/punishments.js';
+import { getWarns, addWarn } from '../Logging/database.js';
+import { THRESHOLD } from '../moderation/constants.js';
+
 
 
 export const data = new SlashCommandBuilder()
@@ -21,13 +25,20 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
     const target = interaction.options.getUser('target');
     const reason = interaction.options.getString('reason');
-    const nextpunishment = interaction.nextPunishment;
-    const activewarnings = interaction.activeWarnings;
+    const moderatorId = interaction.user.tag;
+
     if (!target) {
         return interaction.reply({ content: '⚠️ Could not find the user.', ephemeral: true });
     }
 
     let dmStatus = 'User was DMed.';
+    await addWarn(target.id, moderatorId, reason);
+
+    const expiresAt = Date(Date.now() + THRESHOLD);
+    const formattedExpiry = `<t:${Math.florr(expiresAt.getTime() / 1000)}:R>`;
+
+    const updatedWarnings = await getWarns(target.id);
+    const nextpunishment = getNextPunishment(updatedWarnings.length)
 
     // Embed sent to the warned user via DM
     const dmEmbed = new EmbedBuilder()
@@ -38,7 +49,8 @@ export async function execute(interaction) {
         .addFields(
             { name: 'Reason:', value: `\`${reason}\`` },
             { name: "Next Punishment:", value: `\`${nextpunishment}\``, inline: false },
-            { name: "Active Warnings: ", value: `\`${activewarnings}\``, inline: false }
+            { name: "Active Warnings: ", value: `\`${updatedWarnings.length}\``, inline: false },
+            { name: "Warn expires on: ", value: formattedExpiry, inline: false }
         )
         .setTimestamp();
 
@@ -63,7 +75,7 @@ export async function execute(interaction) {
             { name: 'Channel:', value: `<#${interaction.channel.id}>`, inline: true },
             { name: 'Reason:', value: `\`${reason}\``, inline: false },
             { name: "Next Punishment:", value: `\`${nextpunishment}\``, inline: false },
-            { name: "Active Warnings: ", value: `\`${activewarnings}\``, inline: false }
+            { name: "Active Warnings: ", value: `\`${updatedWarnings.length}\``, inline: false }
         )
         .setFooter({ text: dmStatus })
         .setTimestamp();
@@ -81,7 +93,7 @@ export async function execute(interaction) {
         console.warn('⚠️ Log channel not found.');
     }
 
-    // Command response
+    // handle both automod and real interactions
     try {
         if (typeof interaction.reply === 'function') {
             await interaction.reply({ embeds: [commandEmbed] });
