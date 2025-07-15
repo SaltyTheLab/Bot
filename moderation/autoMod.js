@@ -14,13 +14,21 @@ export async function handleAutoMod(message, client, reasonText, warnings, forbb
     const fakeInteraction = buildFakeInteraction(client, message, reasonText);
 
     if (activeWarnings.length >= 2) {
-        console.log('warnings before muteEscalation:', warnings instanceof Map);
-
         await muteEscalation(message, client, warnings, forbbidenWords);
     } else if (warnCommand) {
         await warnCommand.execute(fakeInteraction);
-        await message.delete();
     } else {
         console.warn('⚠️ Warn command not found.');
     }
-}
+    try {
+        await message.delete();
+    } catch (error) {
+        if (error.code === 10008) {
+            // Message already deleted, ignore
+            console.warn('Message was already deleted, skipping.');
+        } else {
+            // rethrow or log other errors
+            console.error('Failed to delete message:', error);
+        }
+    }
+} 
