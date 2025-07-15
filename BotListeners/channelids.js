@@ -5,3 +5,4 @@ export const nameLogChannelId = '1394761880366616657';
 export const banlogChannelid = '1256029364768997406';
 export const mutelogChannelid = '1311483105206472745';
 export const generalChannelid = '1231453115937587273';
+export const bottestingchannelid = '1394768988046626980';
