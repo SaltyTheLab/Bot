@@ -66,14 +66,6 @@ export async function botlisteners(client) {
         // If no violations at all, do nothing
         if (!matchedWord && !hasInvite && !isMediaViolation) return;
 
-        // Delete message if not already deleted by media violation handler
-        if (!isMediaViolation) {
-            try {
-                await message.delete();
-            } catch (err) {
-                console.warn('⚠️ Failed to delete message:', err);
-            }
-        }
 
         // Determine reason for moderation action
         let reasonText = '';
