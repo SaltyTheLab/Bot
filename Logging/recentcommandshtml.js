@@ -1,6 +1,15 @@
 const commandHistory = document.getElementById('commandHistory');
+const maxCommands = 50;
+
+// Create and insert search input dynamically
+const searchInput = document.createElement('input');
+searchInput.type = 'text';
+searchInput.id = 'searchInput';
+searchInput.placeholder = 'Search commands...';
+commandHistory.parentNode.insertBefore(searchInput, commandHistory);
+
 let recentCommands = [];
-const maxCommands = 50; // define limit if not already
+let filteredCommands = [];
 
 async function fetchRecentCommands() {
     try {
@@ -8,9 +17,10 @@ async function fetchRecentCommands() {
         if (!response.ok) throw new Error('Failed to fetch recent commands');
 
         const commands = await response.json();
-        recentCommands = commands.slice(0, maxCommands); // trim if too long
+        recentCommands = commands.slice(0, maxCommands);
+        filteredCommands = recentCommands;
         updateCommandList();
-        adjustLayout(recentCommands.length);
+        adjustLayout(filteredCommands.length);
     } catch (err) {
         console.error('Error fetching recent commands:', err);
     }
@@ -18,7 +28,7 @@ async function fetchRecentCommands() {
 
 function updateCommandList() {
     commandHistory.innerHTML = '';
-    recentCommands.forEach(cmd => {
+    filteredCommands.forEach(cmd => {
         const option = document.createElement('option');
         option.textContent = cmd;
         commandHistory.appendChild(option);
@@ -28,19 +38,37 @@ function updateCommandList() {
 function addCommand(command) {
     recentCommands.unshift(command);
     if (recentCommands.length > maxCommands) recentCommands.pop();
-    updateCommandList();
-    adjustLayout(recentCommands.length);
+    filterCommands(searchInput.value);
+    adjustLayout(filteredCommands.length);
 }
 
 function adjustLayout(lineCount) {
-    // Adjust height
-    commandHistory.size = Math.min(Math.max(lineCount, 5), 20); // min 5, max 20
-
-    // Adjust font size (optional)
-    const fontSize = Math.max(0.8, 1.2 - lineCount * 0.02); // scale with line count
+    commandHistory.size = Math.min(Math.max(lineCount, 5), 20);
+    const fontSize = Math.max(0.8, 1.2 - lineCount * 0.02);
     commandHistory.style.fontSize = `${fontSize}em`;
 }
 
-// Initial load and periodic refresh
+function filterCommands(query) {
+    if (!query) {
+        filteredCommands = recentCommands;
+    } else {
+        const lowerQuery = query.toLowerCase();
+        filteredCommands = recentCommands.filter(cmd => cmd.toLowerCase().includes(lowerQuery));
+    }
+    updateCommandList();
+    adjustLayout(filteredCommands.length);
+}
+
+searchInput.addEventListener('input', (e) => {
+    filterCommands(e.target.value);
+});
+
+// Initial load
 window.addEventListener('DOMContentLoaded', fetchRecentCommands);
-setInterval(fetchRecentCommands, 5000);
+
+// Refresh only when search bar is empty
+setInterval(() => {
+    if (!searchInput.value.trim()) {
+        fetchRecentCommands();
+    }
+}, 5000);
