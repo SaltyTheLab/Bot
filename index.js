@@ -3,7 +3,12 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { Client, GatewayIntentBits, Collection } from 'discord.js';
 import { config } from 'dotenv';
-import { botlisteners } from './botlisteners.js';
+import { GuildMemberAdd } from './BotListeners/guildMemberAdd.js';
+import { GuildMemberRemove } from './BotListeners/guildMemberRemove.js';
+import { GuildMemberUpdate } from './BotListeners/guildMemberUpdate.js';
+import { messageUpdate } from './BotListeners/messageUpdate.js';
+import { onMessageCreate } from './BotListeners/messageCreate.js';
+import { messageDelete } from './BotListeners/messageDelete.js';
 
 // Setup dotenv
 config();
@@ -17,7 +22,8 @@ export const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers
     ]
 });
 
@@ -67,7 +73,12 @@ client.once('ready', () => {
 });
 
 // Register listeners
-botlisteners(client);
+client.on('messageCreate', (message) => onMessageCreate(client, message));
+client.on('messageDelete', (message) => messageDelete(message));
+client.on('guildMemberAdd', (member) => GuildMemberAdd(member));
+client.on('guildMemberRemove', (member) => GuildMemberRemove(member));
+client.on('guildMemberUpdate', (member) => GuildMemberUpdate(member));
+client.on('messageUpdate', (message) => messageUpdate(message));
 
 // Start the bot
 client.login(process.env.TOKEN);
