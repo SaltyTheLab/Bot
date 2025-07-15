@@ -75,10 +75,10 @@ client.once('ready', () => {
 // Register listeners
 client.on('messageCreate', (message) => onMessageCreate(client, message));
 client.on('messageDelete', (message) => messageDelete(message));
-client.on('guildMemberAdd', (member) => GuildMemberAdd(member));
+client.on('guildMemberAdd', (member) => GuildMemberAdd(member, client));
 client.on('guildMemberRemove', (member) => GuildMemberRemove(member));
-client.on('guildMemberUpdate', (member) => GuildMemberUpdate(member));
-client.on('messageUpdate', (message) => messageUpdate(message));
+client.on('guildMemberUpdate', GuildMemberUpdate);
+client.on('messageUpdate', (message) => messageUpdate(client, message));
 
 // Start the bot
 client.login(process.env.TOKEN);
