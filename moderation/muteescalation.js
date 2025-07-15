@@ -15,11 +15,21 @@ const forbiddenWords = JSON.parse(fs.readFileSync('./forbiddenwords.json', 'utf-
 export async function muteEscalation(message, client, warnings) {
     const target = message.author;
     const muteCommand = client.commands.get('mute');
+    const member = message.guild.members.cache.get(target.id);
 
     if (!muteCommand) {
         console.warn('⚠️ Mute command not found.');
         return;
     }
+    if (!member) {
+        console.warn(`⚠️ Member not found for ID ${target.id}`);
+        return;
+    }
+    if (member.isCommunicationDisabled()) {
+        console.warn(`⚠️ ${target.tag} is already muted.`);
+        return;
+    }
+
 
     const now = Date.now();
     const allWarnings = warnings.get(target) ?? [];
