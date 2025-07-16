@@ -75,7 +75,7 @@ export async function execute(interaction) {
 
     const member = await interaction.guild.members.fetch(interaction.user.id);
     const isAdmin = member.permissions.has(PermissionsBitField.Flags.Administrator);
-
+    //post interaction buttons, admin check for delete button
     const getButtons = (index) => {
         const buttons = [
             new ButtonBuilder()
@@ -128,10 +128,9 @@ export async function execute(interaction) {
             const log = allLogs[currentIndex];
 
             if (log.type === 'Warn') {
-                // Assuming you have a deleteWarn function that takes id
+                
                 await deleteWarn(log.id);
             } else if (log.type === 'Mute') {
-                // Assuming you have a deleteMute function that takes id
                 await deleteMute(log.id);
             }
 
