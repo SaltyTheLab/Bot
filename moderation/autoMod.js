@@ -49,28 +49,49 @@ export async function handleAutoMod(message, client, reasonText, warnings, forbb
         unit = 'm';
     if (nextpunishment > MAX_TIMEOUT_MS)
         nextpunishment = MAX_TIMEOUT_MS
-    
+
     const convertedpunishment = formatDuration(nextpunishment);
     const warnCommand = client.commands.get('warn');
     const muteCommand = client.commands.get('mute');
 
     const durationInUnits = Math.floor(nextpunishment / (unit === 'd' ? 86400000 : unit === 'h' ? 3600000 : 60000));
 
-    const fakeInteraction = buildFakeInteraction(
-        client,
-        message,
-        reasonText,
-        durationInUnits,
-        activeWarnings.length,
-        unit,
-        convertedpunishment
-    );
-
+    function buildFakeInteraction(client, message, reason, duration, unit) {
+        return {
+            client,
+            guild: message.guild,
+            channel: message.channel,
+            user: client.user, // or some moderator user
+            member: message.member,
+            options: {
+                getUser: (name) => (name === 'target' ? message.author : null),
+                getString: (name) => {
+                    if (name === 'reason') return reason;
+                    if (name === 'unit') return unit;
+                    return null;
+                },
+                getInteger: (name) => {
+                    if (name === 'duration') return duration; // 🔥 CRUCIAL: return number, not string
+                    return null;
+                }
+            },
+            editReply: async (data) => {
+                console.log('[FAKE] editReply:', data);
+            },
+            deferReply: async () => {
+                console.log('[FAKE] deferReply called');
+            },
+            fetchReply: async () => {
+                return { content: 'Fake reply content' };
+            },
+            guildId: message.guild.id,
+        };
+    }
 
     if (activeWarnings.length >= 1) {
-        await muteCommand.execute(fakeInteraction);
+        await muteCommand.execute( buildFakeInteraction(client, message, reason, duration, warningCount, unit));
     } else if (warnCommand) {
-        await warnCommand.execute(fakeInteraction);
+        await warnCommand.execute(buildFakeInteraction(client, message, reason, duration, warningCount, unit));
     } else {
         console.warn('⚠️ Warn command not found.');
     }
