@@ -36,34 +36,37 @@ function roundRect(ctx, x, y, width, height, radius) {
 }
 // Generate rank image
 export async function generateRankCard(userData, targetUser, xpNeeded) {
-    const canvas = Canvas.createCanvas(328, 104);
+    const canvas = Canvas.createCanvas(500, 100);
     const ctx = canvas.getContext('2d');
 
-    const xpPercent = userData.xp / xpNeeded;
+    const xpPercent = Math.min(userData.xp / xpNeeded, 1);
 
+    // Background
     ctx.fillStyle = '#2c2f33';
-    roundRect(ctx, 0, 0, canvas.width, canvas.height, 20);
+    roundRect(ctx, 0, 0, canvas.width, canvas.height, 16);
     ctx.fill();
 
-    // Avatar with border
+    // === Avatar with thin green border ===
     const avatarSize = 64;
     const avatarX = 20;
-    const avatarY = 20;
+    const avatarY = canvas.height / 2 - avatarSize / 2;
+    const borderColor = '#3ba55d';
 
+    // Outer border
     ctx.save();
     ctx.beginPath();
-    ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2 + 4, 0, Math.PI * 2);
-    ctx.fillStyle = '#ff9955';
+    ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2 + 3, 0, Math.PI * 2);
+    ctx.fillStyle = borderColor;
     ctx.fill();
-    ctx.clip();
-
-    ctx.beginPath();
-    ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2);
     ctx.closePath();
     ctx.clip();
 
-    const avatarUrl = targetUser.displayAvatarURL({ extension: 'png', size: 128 });
+    // Avatar inner circle
+    ctx.beginPath();
+    ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2);
+    ctx.clip();
 
+    const avatarUrl = targetUser.displayAvatarURL({ extension: 'png', size: 128 });
     const response = await fetch(avatarUrl);
     const buffer = await response.arrayBuffer();
     const avatar = await Canvas.loadImage(Buffer.from(buffer));
@@ -71,43 +74,54 @@ export async function generateRankCard(userData, targetUser, xpNeeded) {
     ctx.drawImage(avatar, avatarX, avatarY, avatarSize, avatarSize);
     ctx.restore();
 
-    // Level text
-    ctx.font = '28px sans-serif';
+    // === Text ===
+    ctx.font = '20px sans-serif';
     ctx.fillStyle = '#ffffff';
+    ctx.fillText(`LEVEL ${userData.level}`, 110, 30);
+
+    ctx.textAlign = 'right';
+    ctx.fillText(`RANK ${userData.level}`, canvas.width - 20, 30);
+
     ctx.textAlign = 'left';
-    ctx.fillText(`Level ${userData.level}`, 100, 45);
-
-    // XP Text
     ctx.font = '16px sans-serif';
+    const username = targetUser.username.length > 20 ? targetUser.username.slice(0, 18) + '…' : targetUser.username;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(username, 110, 52);
+
+    ctx.textAlign = 'right';
     ctx.fillStyle = '#cccccc';
-    ctx.fillText(`XP: ${userData.xp} / ${xpNeeded}`, 100, 65);
+    ctx.fillText(`${userData.xp} / ${xpNeeded}`, canvas.width - 20, 52);
 
-    // XP Progress bar
-    const barX = 100;
-    const barY = 75;
-    const barWidth = 200;
-    const barHeight = 10;
+    // === XP Progress Bar ===
+    const barX = 110;
+    const barY = 65;
+    const barWidth = canvas.width - 130;
+    const barHeight = 15;
+    const radius = barHeight / 2;
 
-    ctx.fillStyle = '#444';
-    ctx.fillRect(barX, barY, barWidth, barHeight);
+    // Background
+    ctx.fillStyle = '#40444b';
+    roundRect(ctx, barX, barY, barWidth, barHeight, radius);
+    ctx.fill();
 
-    ctx.fillStyle = '#3498db';
-    ctx.fillRect(barX, barY, barWidth * Math.min(xpPercent, 1), barHeight);
+    // Fill
+    ctx.fillStyle = '#3ba55d';
+    roundRect(ctx, barX, barY, barWidth * xpPercent, barHeight, radius);
+    ctx.fill();
 
-    const bufferimage = canvas.toBuffer('image/png');
-
-    return new AttachmentBuilder(bufferimage, { name: 'rank.png' });
+    const bufferImage = canvas.toBuffer('image/png');
+    return new AttachmentBuilder(bufferImage, { name: 'rank.png' });
 }
 
 export async function execute(interaction) {
     try {
-        
+
         const targetUser = interaction.options.getUser('user') || interaction.user;
         const guildId = interaction.guild.id;
         const userId = targetUser.id;
 
         const userData = await getUserAsync(userId, guildId);
-        const xpNeeded = Math.floor((level - 1) ** 2 * 50);
+        const xpNeeded = Math.floor((userData.level - 1) ** 2 * 50);
 
         if (!userData) {
             return interaction.reply({ content: 'User data not found.', ephemeral: true });

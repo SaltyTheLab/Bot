@@ -7,7 +7,7 @@ import {
     PermissionsBitField
 } from 'discord.js';
 
-import { getWarns, getMutes, deleteMute, deleteWarn } from '../Logging/database.js'; // adjust the import path
+import { getWarns, getMutes, deleteMute, deleteWarn } from '../Logging/database.js';
 
 export const data = new SlashCommandBuilder()
     .setName('modlogs')
@@ -18,65 +18,58 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
     const user = interaction.options.getUser('user');
+    const member = await interaction.guild.members.fetch(interaction.user.id);
+    const isAdmin = member.permissions.has(PermissionsBitField.Flags.Administrator);
 
-    const warns = await getWarns(user.id);
-    const mutes = await getMutes(user.id);
+    const [warns, mutes] = await Promise.all([
+        getWarns(user.id),
+        getMutes(user.id)
+    ]);
 
-    // Combine and sort logs by timestamp
-    const allLogs = [
+    let allLogs = [
         ...warns.map(log => ({ ...log, type: 'Warn' })),
         ...mutes.map(log => ({ ...log, type: 'Mute' }))
-    ].sort((a, b) => b.timestamp - a.timestamp); // newest first
+    ].sort((a, b) => b.timestamp - a.timestamp);
 
-    if (allLogs.length === 0) {
+    if (!allLogs.length) {
         return interaction.reply({
             content: `No modlogs found for ${user.tag}.`,
             ephemeral: true
         });
     }
+
+    // Attach warn count at each point
     let warnCount = 0;
-    for (const log of allLogs) {
+    allLogs.forEach(log => {
         if (log.type === 'Warn') warnCount++;
         log.warnCountAtThisTime = warnCount;
-    }
+    });
 
     let currentIndex = 0;
 
-    const formatTimestamp = (msTimestamp) => {
-        const seconds = Math.floor(msTimestamp / 1000);
-        return `<t:${seconds}:F>`; // 'F' for full date
-    };
+    const formatTimestamp = ms => `<t:${Math.floor(ms / 1000)}:F>`;
 
-    const getEmbed = (index) => {
+    const buildEmbed = index => {
         const log = allLogs[index];
-        const embed = new EmbedBuilder()
+        return new EmbedBuilder()
             .setColor(log.type === 'Warn' ? 0xffcc00 : 0xff4444)
             .setThumbnail(user.displayAvatarURL())
             .addFields(
                 { name: 'Member:', value: `<@${user.id}>`, inline: false },
                 { name: 'Type', value: `\`${log.type}\``, inline: true },
-                { name: 'Reason', value: `\`${log.reason}\`` || 'No reason provided', inline: false },
+                { name: 'Reason', value: `\`${log.reason || 'No reason provided'}\``, inline: false },
                 { name: 'Moderator ID', value: `<@${log.moderatorId}>`, inline: false },
                 { name: 'Warns at warn:', value: `\`${log.warnCountAtThisTime}\``, inline: false },
                 ...(log.type === 'Mute'
-                    ? [{ name: 'Duration', value: `\`${Math.round(log.duration / 60000)} minutes\``, inline: true }]
+                    ? [{ name: 'Duration:', value: `\`${Math.round(log.duration / 60000)} minutes\``, inline: true }]
                     : []),
-                { name: 'Status', value: log.active ? '✅ Active' : '❌ Inactive', inline: true },
-                { name: 'Timestamp', value: formatTimestamp(log.timestamp), inline: false },
+                { name: 'Warn Status:', value: log.active ? '✅ Active' : '❌ Inactive/cleared', inline: true },
+                { name: 'Timestamp:', value: formatTimestamp(log.timestamp), inline: false }
             )
             .setFooter({ text: `Log ${index + 1} of ${allLogs.length}` });
-
-
-
-        return embed;
     };
 
-
-
-    const member = await interaction.guild.members.fetch(interaction.user.id);
-    const isAdmin = member.permissions.has(PermissionsBitField.Flags.Administrator);
-    //post interaction buttons, admin check for delete button
-    const getButtons = (index) => {
+    const buildButtons = index => {
         const buttons = [
             new ButtonBuilder()
                 .setCustomId('prev_log')
@@ -95,7 +88,7 @@ export async function execute(interaction) {
                 new ButtonBuilder()
                     .setCustomId('dellog')
                     .setLabel('Delete')
-                    .setStyle(ButtonStyle.Danger) // red button
+                    .setStyle(ButtonStyle.Danger)
             );
         }
 
@@ -103,62 +96,68 @@ export async function execute(interaction) {
     };
 
     const message = await interaction.reply({
-        embeds: [getEmbed(currentIndex)],
-        components: [getButtons(currentIndex)],
-        fetchReply: true,
-        ephemeral: false // public response
+        embeds: [buildEmbed(currentIndex)],
+        components: [buildButtons(currentIndex)],
+        fetchReply: true
     });
 
     const collector = message.createMessageComponentCollector({
-        filter: i => i.user.id === interaction.user.id || (isAdmin && i.user.id !== interaction.user.id),
+        filter: i =>
+            i.user.id === interaction.user.id || (isAdmin && i.user.id !== interaction.user.id),
         time: 60_000
     });
 
     collector.on('collect', async i => {
         await i.deferUpdate();
 
-        if (i.customId === 'next_log') currentIndex++;
-        else if (i.customId === 'prev_log') currentIndex--;
-        else if (i.customId === 'dellog') {
-            if (!isAdmin) {
-                return i.followUp({ content: 'You do not have permission to delete logs.', ephemeral: true });
-            }
+        const log = allLogs[currentIndex];
 
-            // Delete the log from DB
-            const log = allLogs[currentIndex];
+        switch (i.customId) {
+            case 'next_log':
+                currentIndex++;
+                break;
 
-            if (log.type === 'Warn') {
-                
-                await deleteWarn(log.id);
-            } else if (log.type === 'Mute') {
-                await deleteMute(log.id);
-            }
+            case 'prev_log':
+                currentIndex--;
+                break;
 
-            // Remove log from array so UI updates
-            allLogs.splice(currentIndex, 1);
+            case 'dellog':
+                if (!isAdmin) {
+                    return i.followUp({
+                        content: 'You do not have permission to delete logs.',
+                        ephemeral: true
+                    });
+                }
 
-            // If no logs left
-            if (allLogs.length === 0) {
-                await interaction.editReply({
-                    content: `All modlogs for ${user.tag} have been deleted.`,
-                    embeds: [],
-                    components: []
-                });
-                return collector.stop();
-            }
+                if (log.type === 'Warn') {
+                    await deleteWarn(log.id);
+                } else if (log.type === 'Mute') {
+                    await deleteMute(log.id);
+                }
 
-            // Adjust currentIndex if needed
-            if (currentIndex >= allLogs.length) currentIndex = allLogs.length - 1;
+                allLogs.splice(currentIndex, 1);
+
+                if (!allLogs.length) {
+                    await interaction.editReply({
+                        content: `All modlogs for ${user.tag} have been deleted.`,
+                        embeds: [],
+                        components: []
+                    });
+                    return collector.stop();
+                }
+
+                if (currentIndex >= allLogs.length) currentIndex = allLogs.length - 1;
+                break;
         }
 
         await interaction.editReply({
-            embeds: [getEmbed(currentIndex)],
-            components: [getButtons(currentIndex)]
+            embeds: [buildEmbed(currentIndex)],
+            components: [buildButtons(currentIndex)]
         });
     });
 
     collector.on('end', async () => {
-        const disabledRow = getButtons(currentIndex);
+        const disabledRow = buildButtons(currentIndex);
         disabledRow.components.forEach(btn => btn.setDisabled(true));
 
         await interaction.editReply({
@@ -166,4 +165,3 @@ export async function execute(interaction) {
         });
     });
 }
-
