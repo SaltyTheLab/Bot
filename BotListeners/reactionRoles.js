@@ -1,6 +1,6 @@
 const roleMessageId = '1395031132155674755';
 const emojiRoleMap = {
-  '👍': '1395015929062232126',
+  '👍': '1395015929062232126', 
 };
 
 export async function messageReactionAdd(reaction, user) {
