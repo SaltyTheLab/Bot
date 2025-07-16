@@ -97,16 +97,13 @@ export async function getMutes(userId) {
 
 export async function clearActiveWarns(userId) {
     const db = await dbPromise;
-    const now = Date.now();
-    const WARN_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
-    const expiryCutoff = now - WARN_EXPIRY_MS;
 
     // Only mark as inactive if warn is still active and not expired
-    const result = await db.run(`
+     const result = await db.run(`
         UPDATE warns
         SET active = 0
-        WHERE userId = ? AND active = 1 AND timestamp > ?
-    `, [userId, expiryCutoff]);
+        WHERE userId = ? AND active = 1
+    `, [userId]);
 
     return result.changes > 0;
 }
