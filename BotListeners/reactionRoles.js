@@ -1,9 +1,10 @@
-const roleMessageId = '1395031132155674755';
-const emojiRoleMap = {
-  '👍': '1395015929062232126', 
+export let roleMessageId;
+export const emojiRoleMap = {
+  '👍': '1395015929062232126',
 };
 
 export async function messageReactionAdd(reaction, user) {
+  console.log('🧪 Add reaction event fired:', reaction.emoji.name, 'from', user.username);
 
   if (user.bot) return;
 
@@ -18,7 +19,7 @@ export async function messageReactionAdd(reaction, user) {
 
   if (reaction.message.id !== roleMessageId) return;
 
-  const emoji = reaction.emoji.id || '👍';
+  const emoji = reaction.emoji.id || reaction.emoji.name;
   const roleID = emojiRoleMap[emoji];
   if (!roleID) {
     console.log(`⚠️ No role mapped to emoji: ${emoji}`);
@@ -35,9 +36,8 @@ export async function messageReactionAdd(reaction, user) {
   console.log(`✅ Adding role ${user.tag} to user ${reaction.emoji.name}`);
   member.roles.add(roleID).catch(console.error);
 }
-
 export async function messageReactionRemove(reaction, user) {
-  console.log('🧪 Reaction event fired:', reaction.emoji.name, 'from', user.username);
+  console.log('🧪 Remove reaction event fired:', reaction.emoji.name, 'from', user.username);
 
   if (user.bot) return;
 
@@ -52,7 +52,7 @@ export async function messageReactionRemove(reaction, user) {
 
   if (reaction.message.id !== roleMessageId) return;
 
-  const emoji = reaction.emoji.id || '👍';
+  const emoji = reaction.emoji.id || reaction.emoji.name;
   const roleID = emojiRoleMap[emoji];
   if (!roleID) {
     console.log(`⚠️ No role mapped to emoji: ${emoji}`);
@@ -69,3 +69,5 @@ export async function messageReactionRemove(reaction, user) {
   console.log(`🗑️ Removing role ${user.tag} to user ${reaction.emoji.name}`);
   member.roles.remove(roleID).catch(console.error);
 }
+
+
