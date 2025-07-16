@@ -73,9 +73,7 @@ client.on('interactionCreate', async interaction => {
 });
 
 // Log when the bot is ready, uncomment if make updates to embeds
-client.once('ready', () => {
-    console.log(`✅ Logged in as ${client.user.tag}`);
-});
+
 
 
 // Register listeners
@@ -86,9 +84,12 @@ client.on('guildMemberRemove', GuildMemberRemove);
 client.on('guildMemberUpdate', GuildMemberUpdate);
 client.on('messageUpdate', (message) => messageUpdate(client, message));
 client.on('messageReactionAdd', messageReactionAdd);
-
-client.on('messageReactionRemove',messageReactionRemove);
+client.on('messageReactionRemove', messageReactionRemove);
 
 // Start the bot
 client.login(process.env.TOKEN);
-embedsenders(client);
+
+client.once('ready', () => {
+    console.log(`✅ Logged in as ${client.user.tag}`);
+     embedsenders(client);
+});
