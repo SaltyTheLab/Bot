@@ -1,6 +1,15 @@
-export let roleMessageId;
+import { readFile } from 'fs/promises';
+
+const data = await readFile('./reactionMessage.json', 'utf-8');
+const messageids = JSON.parse(data);
 export const emojiRoleMap = {
   '👍': '1395015929062232126',
+  '💻': '1235323729936908379',
+  '📦': '1235323730628968530',
+  '🚉': '1235323732273397893',
+  '🟥': '1235323733246476329',
+  '📱': '1235323733795799154',
+  '🎧': '1272280467940573296'
 };
 
 export async function messageReactionAdd(reaction, user) {
@@ -17,7 +26,7 @@ export async function messageReactionAdd(reaction, user) {
     }
   }
 
-  if (reaction.message.id !== roleMessageId) return;
+  if (reaction.message.id !== messageids) return;
 
   const emoji = reaction.emoji.id || reaction.emoji.name;
   const roleID = emojiRoleMap[emoji];
@@ -50,7 +59,7 @@ export async function messageReactionRemove(reaction, user) {
     }
   }
 
-  if (reaction.message.id !== roleMessageId) return;
+  if (reaction.message.id !== messageids) return;
 
   const emoji = reaction.emoji.id || reaction.emoji.name;
   const roleID = emojiRoleMap[emoji];
