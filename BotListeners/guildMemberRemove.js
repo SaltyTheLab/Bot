@@ -11,7 +11,7 @@ export async function GuildMemberRemove(member) {
         .setColor(0xa90000)
         .setDescription(`${member} has left the cave.`)
         .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
-        .addFields({ name: 'Joined the cave on:', value: member.joinedAt ? member.joinedAt.toISOString() : 'Unknown', inline: true });
+        .addFields({ name: 'Joined the cave on:', value: member.joinedAt ? `<t:${Math.floor(member.joinedAt.getTime()/ 1000)}:F>`: 'Unknown', inline: true });
 
     await welcomeChannel.send({ embeds: [embed] });
 };

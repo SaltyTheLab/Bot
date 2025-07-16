@@ -6,3 +6,7 @@ export const banlogChannelid = '1256029364768997406';
 export const mutelogChannelid = '1311483105206472745';
 export const generalChannelid = '1231453115937587273';
 export const bottestingchannelid = '1394768988046626980';
+export const ruleschannelid = '1235295566356025354';
+export const mentalhealthid = '1390128922712342659';
+export const ticketappealsid = '1272261219805298729';
+export const staffguidesid = '1262533685002113155';
