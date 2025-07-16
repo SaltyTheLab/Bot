@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'url';
-import { Client, GatewayIntentBits, Collection } from 'discord.js';
+import { Client, GatewayIntentBits, Collection, ReactionEmoji } from 'discord.js';
 import { config } from 'dotenv';
 import { GuildMemberAdd } from './BotListeners/guildMemberAdd.js';
 import { GuildMemberRemove } from './BotListeners/guildMemberRemove.js';
@@ -9,6 +9,9 @@ import { GuildMemberUpdate } from './BotListeners/guildMemberUpdate.js';
 import { messageUpdate } from './BotListeners/messageUpdate.js';
 import { onMessageCreate } from './BotListeners/messageCreate.js';
 import { messageDelete } from './BotListeners/messageDelete.js';
+import { messageReactionAdd, messageReactionRemove } from './BotListeners/reactionRoles.js';
+import { embedsenders } from './embeds/embeds.js';
+
 
 // Setup dotenv
 config();
@@ -23,8 +26,10 @@ export const client = new Client({
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMembers
-    ]
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildMessageReactions
+    ],
+    partials: ['MESSAGE', 'CHANNEL', 'REACTION', 'GUILD_MEMBER', 'USER']
 });
 
 // Initialize command collection
@@ -67,18 +72,23 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-// Log when the bot is ready
+// Log when the bot is ready, uncomment if make updates to embeds
 client.once('ready', () => {
     console.log(`✅ Logged in as ${client.user.tag}`);
 });
 
+
 // Register listeners
 client.on('messageCreate', (message) => onMessageCreate(client, message));
-client.on('messageDelete', (message) => messageDelete(message));
+client.on('messageDelete', messageDelete);
 client.on('guildMemberAdd', (member) => GuildMemberAdd(member, client));
-client.on('guildMemberRemove', (member) => GuildMemberRemove(member));
+client.on('guildMemberRemove', GuildMemberRemove);
 client.on('guildMemberUpdate', GuildMemberUpdate);
 client.on('messageUpdate', (message) => messageUpdate(client, message));
+client.on('messageReactionAdd', messageReactionAdd);
+
+client.on('messageReactionRemove',messageReactionRemove);
 
 // Start the bot
 client.login(process.env.TOKEN);
+embedsenders(client);

@@ -1,6 +1,7 @@
 import { EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle } from "discord.js";
 import { ruleschannelid, mentalhealthid, ticketappealsid, staffguidesid, bottestingchannelid } from "../BotListeners/channelids.js";
 import dotenv from 'dotenv';
+import fs from 'fs/promises'
 dotenv.config();
 export let rolemessageId = '';
 export async function embedsenders(client) {
@@ -211,9 +212,27 @@ export async function embedsenders(client) {
         )
 
     const bottest = await guild.channels.fetch(bottestingchannelid)
-    const msg = await bottest.send({ embeds: [reactionroles] });
+
+
+    const reactionroles2 = new EmbedBuilder()
+        .setTitle('Get Your Roles here!')
+        .setFields(
+            { name: 'test me!!!!', value: 'example text' }
+        )
+    const msg = await bottest.send({ embeds: [reactionroles, reactionroles2] });
     await msg.react('👍');
     console.log('📝 Save this message ID for reaction roles:', msg.id);
-     rolemessageId = msg.id
+    const data = {
+        rolemessageId: msg.id
+
+    }
+
+    try {
+        await fs.writeFile('reactionMessage.json', JSON.stringify(data, null, 2));
+        console.log('📁 Reaction role message ID saved to reactionMessage.json');
+    } catch (err) {
+        console.error('❌ Failed to write message ID to file:', err);
+    }
+
 
 }
