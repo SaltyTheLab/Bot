@@ -1,7 +1,7 @@
 // commands/clearwarns.js
 
 import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
-import { clearWarns } from '../Logging/database.js';
+import { clearActiveWarns } from '../Logging/database.js';
 
 export const data = new SlashCommandBuilder()
     .setName('clearwarns')
@@ -16,7 +16,7 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
     const target = interaction.options.getUser('target');
 
-    const success = await clearWarns(target.id);
+    const success = await clearActiveWarns(target.id);
 
     if (success) {
         await interaction.reply({

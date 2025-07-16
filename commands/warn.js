@@ -25,7 +25,7 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
     const target = interaction.options.getUser('target');
     const reason = interaction.options.getString('reason');
-    const moderatorId = interaction.user.tag;
+    const moderatorId = interaction.user.id;
 
     if (!target) {
         return interaction.reply({ content: '⚠️ Could not find the user.', ephemeral: true });
@@ -34,8 +34,8 @@ export async function execute(interaction) {
     let dmStatus = 'User was DMed.';
     await addWarn(target.id, moderatorId, reason);
 
-    const expiresAt = Date(Date.now() + THRESHOLD);
-    const formattedExpiry = `<t:${Math.florr(expiresAt.getTime() / 1000)}:R>`;
+    const expiresAt = new Date(Date.now() + THRESHOLD);
+    const formattedExpiry = `<t:${Math.floor(expiresAt.getTime() / 1000)}:F>`;
 
     const updatedWarnings = await getWarns(target.id);
     const nextpunishment = getNextPunishment(updatedWarnings.length)
@@ -45,7 +45,7 @@ export async function execute(interaction) {
         .setColor(0xffff00)
         .setAuthor({ name: `${target.tag} was issued a warning`, iconURL: target.displayAvatarURL({ dynamic: true }) })
         .setThumbnail(interaction.guild.iconURL())
-        .setDescription(`<@${target.id}>, you were given a warning in Salty's Cave.`)
+        .setDescription(`<@${target.id}>, you were given a \`warning\` in Salty's Cave.`)
         .addFields(
             { name: 'Reason:', value: `\`${reason}\`` },
             { name: "Next Punishment:", value: `\`${nextpunishment}\``, inline: false },

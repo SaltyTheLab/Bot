@@ -107,7 +107,8 @@ export async function execute(interaction) {
         const userId = targetUser.id;
 
         const userData = await getUserAsync(userId, guildId);
-        const xpNeeded = Math.floor((userData.level - 1) ** 2 * 100);
+        const xpNeeded = Math.floor((level - 1) ** 2 * 50);
+
         if (!userData) {
             return interaction.reply({ content: 'User data not found.', ephemeral: true });
         }

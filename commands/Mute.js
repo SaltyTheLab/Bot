@@ -74,7 +74,7 @@ export async function execute(interaction) {
         .setColor(0xffa500)
         .setAuthor({ name: target.tag, iconURL: target.displayAvatarURL({ dynamic: true }) })
         .setThumbnail(interaction.guild.iconURL())
-        .setDescription(`<@${target.id}>, you have been issued a \`${duration} ${unit}\` mute in Salty's Cave.`)
+        .setDescription(`<@${target.id}>, you have been issued a \`${duration} ${unit} mute\` in Salty's Cave.`)
         .addFields(
             { name: 'Reason:', value: `\`${reason}\`` },
             { name: "Next Punishment:", value: `\`${nextpunishment}\``, inline: false },
