@@ -25,8 +25,8 @@ export async function handleAutoMod(message, client, reasonText, warnings, forbb
     const now = Date.now();
 
     if (reasonText === 'AutoMod: Discord invite detected' || reasonText === 'AutoMod: Mass ping') {
-        await addWarn(message.author.id, client.user.id, reasonText);
-        await addWarn(message.author.id, client.user.id, reasonText);
+        await addWarn(message.author.id, client.user.tag, reasonText);
+        await addWarn(message.author.id, client.user.tag, reasonText);
     }
 
     const allWarnings = await getWarns(message.author.id);
