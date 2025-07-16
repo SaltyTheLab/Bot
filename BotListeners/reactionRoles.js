@@ -1,7 +1,4 @@
-import { readFile } from 'fs/promises';
-
-const data = await readFile('./reactionMessage.json', 'utf-8');
-const messageids = JSON.parse(data);
+import { rolemessageid } from "../embeds/embeds.js";
 export const emojiRoleMap = {
   '👍': '1395015929062232126',
   '💻': '1235323729936908379',
@@ -13,6 +10,7 @@ export const emojiRoleMap = {
 };
 
 export async function messageReactionAdd(reaction, user) {
+
   console.log('🧪 Add reaction event fired:', reaction.emoji.name, 'from', user.username);
 
   if (user.bot) return;
@@ -26,7 +24,7 @@ export async function messageReactionAdd(reaction, user) {
     }
   }
 
-  if (reaction.message.id !== messageids) return;
+  if (reaction.message.id !== rolemessageid) return;
 
   const emoji = reaction.emoji.id || reaction.emoji.name;
   const roleID = emojiRoleMap[emoji];
@@ -59,7 +57,7 @@ export async function messageReactionRemove(reaction, user) {
     }
   }
 
-  if (reaction.message.id !== messageids) return;
+  if (reaction.message.id !== rolemessageid) return;
 
   const emoji = reaction.emoji.id || reaction.emoji.name;
   const roleID = emojiRoleMap[emoji];
