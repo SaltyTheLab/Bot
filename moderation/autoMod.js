@@ -23,75 +23,49 @@ export function formatDuration(ms) {
 }
 export async function handleAutoMod(message, client, reasonText, warnings, forbbidenWords) {
     const now = Date.now();
-
+    const MAX_TIMEOUT_MS = 2419200000;
     if (reasonText === 'AutoMod: Discord invite detected' || reasonText === 'AutoMod: Mass ping') {
         await addWarn(message.author.id, client.user.tag, reasonText);
         await addWarn(message.author.id, client.user.tag, reasonText);
     }
 
     const allWarnings = await getWarns(message.author.id);
-    let activeWarnings = allWarnings.filter(w => now - w.timestamp < THRESHOLD);
-    const MAX_TIMEOUT_MS = 2419200000;
+    const activeWarnings = allWarnings.filter(w => now - w.timestamp < THRESHOLD);
 
-    let nextpunishment = Math.min(
+    let currentPunishment = Math.min(
         BASE_DURATION * 2 ** Math.max(activeWarnings.length, 0),
-        MAX_DURATION
-
-    );
-    let unit = 'm'
-    if (nextpunishment >= 86400000) {
+        MAX_DURATION);
+    let unit = 'm'; // default to minutes
+    if (currentPunishment >= 86400000) {
         unit = 'd';
+    } else if (currentPunishment >= 3600000) {
+        unit = 'h';
     }
-    else if (nextpunishment >= 3600000) {
-        unit = 'h'
+    const convertedpunishment = formatDuration(currentPunishment);
+    const durationInUnits = Math.floor(currentPunishment / (unit === 'd' ? 86400000 : unit === 'h' ? 3600000 : 60000));
 
-    } else
-        unit = 'm';
-    if (nextpunishment > MAX_TIMEOUT_MS)
-        nextpunishment = MAX_TIMEOUT_MS
 
-    const convertedpunishment = formatDuration(nextpunishment);
     const warnCommand = client.commands.get('warn');
     const muteCommand = client.commands.get('mute');
 
-    const durationInUnits = Math.floor(nextpunishment / (unit === 'd' ? 86400000 : unit === 'h' ? 3600000 : 60000));
 
-    function buildFakeInteraction(client, message, reason, duration, unit) {
-        return {
-            client,
-            guild: message.guild,
-            channel: message.channel,
-            user: client.user, // or some moderator user
-            member: message.member,
-            options: {
-                getUser: (name) => (name === 'target' ? message.author : null),
-                getString: (name) => {
-                    if (name === 'reason') return reason;
-                    if (name === 'unit') return unit;
-                    return null;
-                },
-                getInteger: (name) => {
-                    if (name === 'duration') return duration; // 🔥 CRUCIAL: return number, not string
-                    return null;
-                }
-            },
-            editReply: async (data) => {
-                console.log('[FAKE] editReply:', data);
-            },
-            deferReply: async () => {
-                console.log('[FAKE] deferReply called');
-            },
-            fetchReply: async () => {
-                return { content: 'Fake reply content' };
-            },
-            guildId: message.guild.id,
-        };
-    }
+    const fakeInteraction = buildFakeInteraction(
+        client,
+        message,
+        reasonText,
+        durationInUnits,
+        activeWarnings.length,
+        unit,
+        durationInUnits
+    );
+
+
+    console.log(durationInUnits, activeWarnings.length, unit, convertedpunishment);
 
     if (activeWarnings.length >= 1) {
-        await muteCommand.execute( buildFakeInteraction(client, message, reason, duration, warningCount, unit));
+        await muteCommand.execute(fakeInteraction);
     } else if (warnCommand) {
-        await warnCommand.execute(buildFakeInteraction(client, message, reason, duration, warningCount, unit));
+        await warnCommand.execute(fakeInteraction);
     } else {
         console.warn('⚠️ Warn command not found.');
     }
