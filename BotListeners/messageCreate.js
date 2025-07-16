@@ -35,8 +35,7 @@ export async function onMessageCreate(client, message) {
     const xpGain = 20;
     user.xp += xpGain;
 
-    const xpNeeded = Math.floor((user.level - 1) ** 2 * 100);
-
+    const xpNeeded = Math.floor((user.level - 1) ** 2 * 50);
     if (user.xp >= xpNeeded) {
         user.level++;
         user.xp = 0;
@@ -46,7 +45,10 @@ export async function onMessageCreate(client, message) {
                 name: `${message.author.tag} leveled up to ${user.level}!`,
                 iconURL: message.author.displayAvatarURL({ dynamic: true })
             })
-            .setColor(0x00AE86);
+            .setColor(0x00AE86)
+            .setFooter({
+                text: 'keep on yapping!'
+            })
 
         await message.channel.send({ embeds: [lvlembed] });
     }
