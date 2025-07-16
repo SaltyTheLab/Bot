@@ -1,8 +1,8 @@
 
 
-const roleMessageId = ''; //Insert message ID here
+const roleMessageId = '1395021929274019954'; //Insert message ID here
 const emojiRoleMap = {
-  '': '', //Insert emoji in first apostrophe role ID in second here
+  '👍': '1395015929062232126', //Insert emoji in first apostrophe role ID in second here
 };
 
 export async function messageReactionAdd(reaction, user) {
