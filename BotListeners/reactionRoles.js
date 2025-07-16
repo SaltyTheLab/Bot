@@ -1,6 +1,6 @@
 
 
-const roleMessageId = '1395021929274019954'; //Insert message ID here
+const roleMessageId = '1395022456640770228'; //Insert message ID here
 const emojiRoleMap = {
   ':thumbsup:': '1395015929062232126', //Insert emoji in first apostrophe role ID in second here
 };
