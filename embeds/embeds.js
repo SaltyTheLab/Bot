@@ -1,9 +1,9 @@
-import { EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle } from 'discord.js';
-import { ruleschannelid, mentalhealthid, ticketappealsid, staffguidesid, bottestingchannelid } from '../BotListeners/channelids.js';
+import { EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle, Colors } from 'discord.js';
+import { ruleschannelid, mentalhealthid, ticketappealsid, staffguidesid, getrolesid } from '../BotListeners/channelids.js';
 import { loadMessageIDs, saveMessageIDs } from '../utilities/messageStorage.js';
 import dotenv from 'dotenv';
 dotenv.config();
-export let rolemessageid ='';
+export let rolemessageid = '';
 export async function embedsenders(client) {
     const guild = await client.guilds.fetch(process.env.GUILD_ID).catch(console.error);
     if (!guild) {
@@ -75,7 +75,7 @@ export async function embedsenders(client) {
         const msg = await bottest.send({ embeds: [rules, roles] });
 
 
-        console.log('📝 Saved reaction role message ID:', msg.id);
+        console.log('📝 Saved Rules message ID:', msg.id);
         messageIDs['rules'] = msg.id;
         saveMessageIDs(messageIDs);
     } else {
@@ -250,20 +250,83 @@ export async function embedsenders(client) {
 
     // === REACTION ROLE EMBED ===
 
-    const reactionroles = new EmbedBuilder()
-        .setTitle('Get Your Roles here!')
-        .setFields({ name: 'test me!!!!', value: 'example text' });
+    const consoles = new EmbedBuilder()
+        .setTitle('What do you play on?')
+        .setDescription(['💻:<@&1235323729936908379>',
+            '📦: <@&1235323730628968530>',
+            '🚉: <@&1235323732273397893>',
+            '🟥: <@&1235323733246476329>',
+            '📱: <@&1235323733795799154>',
+            '🎧: <@&1272280467940573296>'].join('\n'))
+    const roles = await guild.channels.fetch(getrolesid);
+    let msg = await roles.send({ embeds: [consoles] });
+    const consoleemotes = ['💻', '📦', '🚉', '🟥', '📱', '🎧']
+    for (const console of consoleemotes) {
+        msg.react(console)
+    }
+    const color = new EmbedBuilder()
+        .setTitle('Get Your Colors here!')
+        .setDescription([
+            '🔴: <@&1235323620163846294>',
+            '🟣: <@&1235323621015158827>',
+            '🟢: <@&1235323622546083991>',
+            '🩷: <@&1235323622969835611>',
+            '🟠: <@&1235323624055902289>',
+            '🟡: <@&1235323625037500466>',
+            '🔵: <@&1235323625452601437>'
+        ].join('\n'))
+    msg = await roles.send({ embeds: [color] })
+    const colors = ['🔴', '🟣', '🟢', '🩷', '🟠', '🟡', '🔵']
+    for (const color of colors) {
+        msg.react(color)
+    }
+    const pronouns = new EmbedBuilder()
+        .setTitle('Identity?')
+        .setDescription([
+            '🧡: <@&1235323773473783989>',
+            '💛: <@&1235323773973168274>',
+            '💜: <@&1235323774505582634>',
+            '💚: <@&1235323775772528766>'
+        ].join('\n'))
+    msg = await roles.send({ embeds: [pronouns] })
+    const nouns = ['🧡', '💛', '💜', '💚',]
+    for (const pronoun of nouns) {
+        msg.react(pronoun)
+    }
+    const continent = new EmbedBuilder()
+        .setTitle('Where you on the earth?')
+        .setDescription([
+            ' 🇪🇺: <@&1235335164436025415>',
+            '🦅: <@&1235335164758855781>',
+            '🌄: <@&1235335165631397909>',
+            '🐼: <@&1235335166772117694>',
+            '🐨: <@&1235335167560912927>',
+            '🦒: <@&1235335168458231951>'
+        ].join('\n'))
+    msg = await roles.send({ embeds: [continent] })
+    const location = [
+        '🇪🇺', '🦅', '🌄', '🐼', '🐨', '🦒'
+    ];
+    for (const continent of location) {
+        try {
+            await msg.react(continent);
 
-    const reactionroles2 = new EmbedBuilder()
-        .setTitle('Get Your Roles here!')
-        .setFields({ name: 'test me!!!!', value: 'example text' });
+        } catch (err) {
+            console.error(`❌ Failed to react with ${emoji}:`, err);
+        }
+    }
 
-    const bottest = await guild.channels.fetch(bottestingchannelid);
-    const msg = await bottest.send({ embeds: [reactionroles, reactionroles2] });
+    const twitch = new EmbedBuilder()
+        .setTitle('Twitch Pings')
+        .setDescription('React here to get notified of when <@857445139416088647> is live!')
+    msg = await roles.send({ embeds: [twitch] })
+    msg.react('▶️')
 
-    await msg.react('👍');
-
-    console.log('📝 Saved reaction role message ID:', msg.id);
-    messageIDs['myRole'] = msg.id;
-     rolemessageid = msg.id;
+    const dividers = new EmbedBuilder()
+        .setTitle('Divders')
+        .setDescription(
+            'React here to get the Divider roles for easy viewing'
+        )
+    msg = await roles.send({ embeds: [dividers] })
+    msg.react('🚧')
 }
