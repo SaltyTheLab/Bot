@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const filePath = path.join(__dirname, '../reactionRoleMessages.json');
+const filePath = path.join(__dirname, '../embeds/EmbedIDs.json');
 
 export function loadMessageIDs() {
     if (fs.existsSync(filePath)) {
