@@ -1,11 +1,8 @@
-import { EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle, Colors } from 'discord.js';
+import { EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle } from 'discord.js';
 import { ruleschannelid, mentalhealthid, ticketappealsid, staffguidesid, getrolesid } from '../BotListeners/channelids.js';
 import { loadMessageIDs, saveMessageIDs } from '../utilities/messageStorage.js';
-import dotenv from 'dotenv';
-dotenv.config();
 export let rolemessageid = '';
-export async function embedsenders(client) {
-    const guild = await client.guilds.fetch(process.env.GUILD_ID).catch(console.error);
+export async function embedsenders(guild) {
     if (!guild) {
         console.error('Guild not found');
         return;
