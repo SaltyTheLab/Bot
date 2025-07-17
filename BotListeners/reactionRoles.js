@@ -6,13 +6,34 @@ export const emojiRoleMap = {
   '🚉': '1235323732273397893',
   '🟥': '1235323733246476329',
   '📱': '1235323733795799154',
-  '🎧': '1272280467940573296'
+  '🎧': '1272280467940573296',
+  '🔴': '1235323620163846294',
+  '🟣': '1235323621015158827',
+  '🟢': '1235323622546083991',
+  '🩷': '1235323622969835611',
+  '🟠': '1235323624055902289',
+  '🟡': '1235323625037500466',
+  '🔵': '1235323625452601437',
+  '🧡': '1235323773473783989',
+  '💛': '1235323773973168274',
+  '💜': '1235323774505582634',
+  '💚': '1235323775772528766',
+  '🇪🇺': '1235335164436025415',
+  '🦅': '1235335164758855781',
+  '🌄': '1235335165631397909',
+  '🐼': '1235335166772117694',
+  '🐨': '1235335167560912927',
+  '🦒': '1235335168458231951',
+  '▶️': '1331028469794209913',
+  '🚧': ['1235337327732068353',
+    '1235337203572543561',
+    '1235336646749327392',
+    '1235337070504050735'
+  ]
 };
 
 export async function messageReactionAdd(reaction, user) {
-
-  console.log('🧪 Add reaction event fired:', reaction.emoji.name, 'from', user.username);
-
+  
   if (user.bot) return;
 
   if (reaction.partial) {
@@ -40,11 +61,9 @@ export async function messageReactionAdd(reaction, user) {
     return;
   }
 
-  console.log(`✅ Adding role ${user.tag} to user ${reaction.emoji.name}`);
   member.roles.add(roleID).catch(console.error);
 }
 export async function messageReactionRemove(reaction, user) {
-  console.log('🧪 Remove reaction event fired:', reaction.emoji.name, 'from', user.username);
 
   if (user.bot) return;
 
@@ -72,8 +91,6 @@ export async function messageReactionRemove(reaction, user) {
     console.log('❌ Member not found');
     return;
   }
-
-  console.log(`🗑️ Removing role ${user.tag} to user ${reaction.emoji.name}`);
   member.roles.remove(roleID).catch(console.error);
 }
 
