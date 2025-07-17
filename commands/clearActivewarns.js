@@ -4,7 +4,7 @@ import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
 import { clearActiveWarns } from '../Logging/database.js';
 
 export const data = new SlashCommandBuilder()
-    .setName('clearwarns')
+    .setName('clearactivewarns')
     .setDescription('Clears all warnings for a user (Admin only)')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addUserOption(opt =>
@@ -20,7 +20,7 @@ export async function execute(interaction) {
 
     if (success) {
         await interaction.reply({
-            content: `✅ Cleared all warnings for **${target.tag}**.`,
+            content: `✅ Cleared all Active warnings for **${target.tag}**.`,
             ephemeral: true
         });
     } else {
