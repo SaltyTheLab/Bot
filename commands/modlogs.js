@@ -31,10 +31,15 @@ export async function execute(interaction) {
         ...mutes.map(log => ({ ...log, type: 'Mute' }))
     ].sort((a, b) => b.timestamp - a.timestamp);
 
+    const nologs = new EmbedBuilder()
+        .setColor(0xFFFF00)
+        .setAuthor({
+            name: '⚠️ No modlogs found for that user.'
+        }
+        )
     if (!allLogs.length) {
         return interaction.reply({
-            content: `No modlogs found for ${user.tag}.`,
-            ephemeral: true
+            embeds: [nologs]
         });
     }
 
