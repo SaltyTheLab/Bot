@@ -10,7 +10,8 @@ const dbPromise = open({
 // Create tables on startup
 dbPromise.then(async db => {
 
-
+    await db.exec(`DROP TABLE IF EXISTS warns;`);
+    await db.exec(`DROP TABLE IF EXISTS mutes`);
     // Continue with normal table creation here
     await db.exec(`
       CREATE TABLE IF NOT EXISTS warns (
@@ -72,7 +73,7 @@ export async function updateUser(userId, guildId, xp, level) {
 export async function addWarn(userId, moderatorId, reason) {
     const db = await dbPromise;
     return db.run(
-        `INSERT INTO warns (userId, moderatorId, reason, timestamp) VALUES (?, ?, ?, ?)`,
+        `INSERT INTO warns (userId, moderatorId, reason, timestamp, active) VALUES (?, ?, ?, ?, 1)`,
         userId, moderatorId, reason, Date.now()
     );
 }
@@ -85,8 +86,8 @@ export async function getWarns(userId) {
 export async function addMute(userId, moderatorId, reason, durationMs) {
     const db = await dbPromise;
     return db.run(
-        `INSERT INTO mutes (userId, moderatorId, reason, duration, timestamp) VALUES (?, ?, ?, ?, ?)`,
-        userId, moderatorId, reason, durationMs, Date.now()
+        `INSERT INTO mutes (userId, moderatorId, reason, duration, timestamp, active) VALUES (?, ?, ?, ?, 1)`,
+        [userId, moderatorId, reason, durationMs, Date.now()]
     );
 }
 
