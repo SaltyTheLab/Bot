@@ -237,8 +237,8 @@ export async function embedsenders(client) {
             )
 
 
-        const bottest = await guild.channels.fetch(staffguidesid);
-        const msg = await bottest.send({ embeds: [staffguides] });
+        const staff = await guild.channels.fetch(staffguidesid);
+        const msg = await staff.send({ embeds: [staffguides] });
 
 
         console.log('📝 Saved reaction role message ID:', msg.id);
@@ -249,84 +249,134 @@ export async function embedsenders(client) {
     }
 
     // === REACTION ROLE EMBED ===
-
-    const consoles = new EmbedBuilder()
-        .setTitle('What do you play on?')
-        .setDescription(['💻:<@&1235323729936908379>',
-            '📦: <@&1235323730628968530>',
-            '🚉: <@&1235323732273397893>',
-            '🟥: <@&1235323733246476329>',
-            '📱: <@&1235323733795799154>',
-            '🎧: <@&1272280467940573296>'].join('\n'))
-    const roles = await guild.channels.fetch(getrolesid);
-    let msg = await roles.send({ embeds: [consoles] });
-    const consoleemotes = ['💻', '📦', '🚉', '🟥', '📱', '🎧']
-    for (const console of consoleemotes) {
-        msg.react(console)
-    }
-    const color = new EmbedBuilder()
-        .setTitle('Get Your Colors here!')
-        .setDescription([
-            '🔴: <@&1235323620163846294>',
-            '🟣: <@&1235323621015158827>',
-            '🟢: <@&1235323622546083991>',
-            '🩷: <@&1235323622969835611>',
-            '🟠: <@&1235323624055902289>',
-            '🟡: <@&1235323625037500466>',
-            '🔵: <@&1235323625452601437>'
-        ].join('\n'))
-    msg = await roles.send({ embeds: [color] })
-    const colors = ['🔴', '🟣', '🟢', '🩷', '🟠', '🟡', '🔵']
-    for (const color of colors) {
-        msg.react(color)
-    }
-    const pronouns = new EmbedBuilder()
-        .setTitle('Identity?')
-        .setDescription([
-            '🧡: <@&1235323773473783989>',
-            '💛: <@&1235323773973168274>',
-            '💜: <@&1235323774505582634>',
-            '💚: <@&1235323775772528766>'
-        ].join('\n'))
-    msg = await roles.send({ embeds: [pronouns] })
-    const nouns = ['🧡', '💛', '💜', '💚',]
-    for (const pronoun of nouns) {
-        msg.react(pronoun)
-    }
-    const continent = new EmbedBuilder()
-        .setTitle('Where you on the earth?')
-        .setDescription([
-            ' 🇪🇺: <@&1235335164436025415>',
-            '🦅: <@&1235335164758855781>',
-            '🌄: <@&1235335165631397909>',
-            '🐼: <@&1235335166772117694>',
-            '🐨: <@&1235335167560912927>',
-            '🦒: <@&1235335168458231951>'
-        ].join('\n'))
-    msg = await roles.send({ embeds: [continent] })
-    const location = [
-        '🇪🇺', '🦅', '🌄', '🐼', '🐨', '🦒'
-    ];
-    for (const continent of location) {
-        try {
-            await msg.react(continent);
-
-        } catch (err) {
-            console.error(`❌ Failed to react with ${emoji}:`, err);
+    if (!messageIDs['consoles']) {
+        const consoles = new EmbedBuilder()
+            .setTitle('What do you play on?')
+            .setDescription(['💻:<@&1235323729936908379>',
+                '📦: <@&1235323730628968530>',
+                '🚉: <@&1235323732273397893>',
+                '🟥: <@&1235323733246476329>',
+                '📱: <@&1235323733795799154>',
+                '🎧: <@&1272280467940573296>'].join('\n'))
+        const roles = await guild.channels.fetch(getrolesid);
+        let msg = await roles.send({ embeds: [consoles] });
+        const consoleemotes = ['💻', '📦', '🚉', '🟥', '📱', '🎧']
+        for (const console of consoleemotes) {
+            msg.react(console)
         }
+        console.log('📝 Saved reaction role message ID:', msg.id);
+        messageIDs['consoles'] = msg.id;
+        saveMessageIDs(messageIDs);
+
+    } else {
+        console.log('ℹ️ Console message already exists:', messageIDs['consoles']);
     }
+    if (!messageIDs['colors']) {
+        const color = new EmbedBuilder()
+            .setTitle('Get Your Colors here!')
+            .setDescription([
+                '🔴: <@&1235323620163846294>',
+                '🟣: <@&1235323621015158827>',
+                '🟢: <@&1235323622546083991>',
+                '🩷: <@&1235323622969835611>',
+                '🟠: <@&1235323624055902289>',
+                '🟡: <@&1235323625037500466>',
+                '🔵: <@&1235323625452601437>'
+            ].join('\n'))
+        const roles = await guild.channels.fetch(getrolesid);
+        let msg = await roles.send({ embeds: [color] })
+        const colors = ['🔴', '🟣', '🟢', '🩷', '🟠', '🟡', '🔵']
+        for (const color of colors) {
+            msg.react(color)
+        }
 
-    const twitch = new EmbedBuilder()
-        .setTitle('Twitch Pings')
-        .setDescription('React here to get notified of when <@857445139416088647> is live!')
-    msg = await roles.send({ embeds: [twitch] })
-    msg.react('▶️')
+        console.log('📝 Saved reaction role message ID:', msg.id);
+        messageIDs['colors'] = msg.id;
+        saveMessageIDs(messageIDs);
+    } else {
+        console.log('ℹ️ Console message already exists:', messageIDs['colors']);
+    }
+    if (!messageIDs['pronouns']) {
+        const pronouns = new EmbedBuilder()
+            .setTitle('Identity?')
+            .setDescription([
+                '🧡: <@&1235323773473783989>',
+                '💛: <@&1235323773973168274>',
+                '💜: <@&1235323774505582634>',
+                '💚: <@&1235323775772528766>'
+            ].join('\n'))
+        const roles = await guild.channels.fetch(getrolesid);
+        let msg = await roles.send({ embeds: [pronouns] })
+        const nouns = ['🧡', '💛', '💜', '💚',]
+        for (const pronoun of nouns) {
+            msg.react(pronoun)
+        }
 
-    const dividers = new EmbedBuilder()
-        .setTitle('Divders')
-        .setDescription(
-            'React here to get the Divider roles for easy viewing'
-        )
-    msg = await roles.send({ embeds: [dividers] })
-    msg.react('🚧')
+        console.log('📝 Saved reaction role message ID:', msg.id);
+        messageIDs['pronouns'] = msg.id;
+        saveMessageIDs(messageIDs);
+    } else {
+        console.log('ℹ️ pronouns message already exists:', messageIDs['pronouns']);
+    }
+    if (!messageIDs['continent']) {
+        const continent = new EmbedBuilder()
+            .setTitle('Where you on the earth?')
+            .setDescription([
+                ' 🇪🇺: <@&1235335164436025415>',
+                '🦅: <@&1235335164758855781>',
+                '🌄: <@&1235335165631397909>',
+                '🐼: <@&1235335166772117694>',
+                '🐨: <@&1235335167560912927>',
+                '🦒: <@&1235335168458231951>'
+            ].join('\n'))
+        const roles = await guild.channels.fetch(getrolesid);
+        let msg = await roles.send({ embeds: [continent] })
+        const location = [
+            '🇪🇺', '🦅', '🌄', '🐼', '🐨', '🦒'
+        ];
+        for (const continent of location) {
+            try {
+                await msg.react(continent);
+
+            } catch (err) {
+                console.error(`❌ Failed to react with ${emoji}:`, err);
+            }
+        }
+
+        console.log('📝 Saved reaction role message ID:', msg.id);
+        messageIDs['continent'] = msg.id;
+        saveMessageIDs(messageIDs);
+    } else {
+        console.log('ℹ️ continent message already exists:', messageIDs['continent']);
+    }
+    if (!messageIDs['stream']) {
+        const twitch = new EmbedBuilder()
+            .setTitle('Twitch Pings')
+            .setDescription('React here to get notified of when <@857445139416088647> is live!')
+        const roles = await guild.channels.fetch(getrolesid);
+        let msg = await roles.send({ embeds: [twitch] })
+        msg.react('▶️')
+
+        console.log('📝 Saved reaction role message ID:', msg.id);
+        messageIDs['stream'] = msg.id;
+        saveMessageIDs(messageIDs);
+    } else {
+        console.log('ℹ️ stream message already exists:', messageIDs['stream']);
+    }
+    if (!messageIDs['dividers']) {
+        const dividers = new EmbedBuilder()
+            .setTitle('Divders')
+            .setDescription(
+                'React here to get the Divider roles for easy viewing'
+            )
+        const roles = await guild.channels.fetch(getrolesid);
+        let msg = await roles.send({ embeds: [dividers] })
+        msg.react('🚧')
+
+        console.log('📝 Saved reaction role message ID:', msg.id);
+        messageIDs['dividers'] = msg.id;
+        saveMessageIDs(messageIDs);
+    } else {
+        console.log('ℹ️ stream message already exists:', messageIDs['dividers']);
+    }
 }

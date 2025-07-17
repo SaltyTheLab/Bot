@@ -11,6 +11,8 @@ import { onMessageCreate } from './BotListeners/messageCreate.js';
 import { messageDelete } from './BotListeners/messageDelete.js';
 import { messageReactionAdd, messageReactionRemove } from './BotListeners/reactionRoles.js';
 import { embedsenders } from './embeds/embeds.js';
+import { getrolesid } from './BotListeners/channelids.js';
+
 
 
 // Setup dotenv
@@ -72,10 +74,6 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-// Log when the bot is ready, uncomment if make updates to embeds
-
-
-
 // Register listeners
 client.on('messageCreate', (message) => onMessageCreate(client, message));
 client.on('messageDelete', messageDelete);
@@ -86,10 +84,36 @@ client.on('messageUpdate', (message) => messageUpdate(client, message));
 client.on('messageReactionAdd', messageReactionAdd);
 client.on('messageReactionRemove', messageReactionRemove);
 
+//cache the already posted embeds
+client.once('ready', async () => {
+    console.log(`✅ Logged in as ${client.user.tag}`);
+
+    const interactiveMessages = [
+        { channelId: getrolesid, messageId: "1395238443444862976" },
+        { channelId: getrolesid, messageId: "1395238444665540673" },
+        { channelId: getrolesid, messageId: "1395238446213234829" },
+        { channelId: getrolesid, messageId: "1395238447181992070" },
+        { channelId: getrolesid, messageId: "1395238495647174797" },
+        { channelId: getrolesid, messageId: "1395238496616190144" }
+    ];
+
+    for (const { channelId, messageId } of interactiveMessages) {
+        try {
+            const channel = await client.channels.fetch(channelId);
+            if (!channel?.isTextBased()) {
+                console.warn(`⚠️ Channel ${channelId} is not text-based, skipping.`);
+                continue;
+            }
+
+            const message = await channel.messages.fetch(messageId);
+            console.log(`✅ Cached message ${message.id} from channel ${channelId}`);
+        } catch (err) {
+            console.error(`❌ Failed to fetch message ${messageId} in channel ${channelId}`, err);
+        }
+    }
+});
 // Start the bot
 client.login(process.env.TOKEN);
+// embedsenders(client);
 
-client.once('ready', () => {
-    console.log(`✅ Logged in as ${client.user.tag}`);
-     embedsenders(client);
-});
+

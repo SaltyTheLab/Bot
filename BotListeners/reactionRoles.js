@@ -1,4 +1,6 @@
-import { rolemessageid } from "../embeds/embeds.js";
+
+import { loadMessageIDs } from "../utilities/messageStorage.js";
+const messageIDs = loadMessageIDs();
 export const emojiRoleMap = {
   '👍': '1395015929062232126',
   '💻': '1235323729936908379',
@@ -33,8 +35,13 @@ export const emojiRoleMap = {
 };
 
 export async function messageReactionAdd(reaction, user) {
-  
   if (user.bot) return;
+
+  console.log('✅ messageReactionAdd triggered');
+
+
+  const validKeys = ['colors', 'pronouns', 'continent', 'stream', 'dividers', 'consoles'];
+  const validRoleMessageIds = validKeys.map(key => messageIDs[key]).filter(Boolean);
 
   if (reaction.partial) {
     try {
@@ -45,27 +52,50 @@ export async function messageReactionAdd(reaction, user) {
     }
   }
 
-  if (reaction.message.id !== rolemessageid) return;
+  if (user.partial) {
+    try {
+      await user.fetch();
+    } catch (err) {
+      console.error('❌ Failed to fetch user:', err);
+      return;
+    }
+  }
+
+
+  if (!validRoleMessageIds.includes(reaction.message.id)) return;
 
   const emoji = reaction.emoji.id || reaction.emoji.name;
   const roleID = emojiRoleMap[emoji];
+
   if (!roleID) {
     console.log(`⚠️ No role mapped to emoji: ${emoji}`);
     return;
   }
 
-  const guild = reaction.message.guild;
-  const member = await guild.members.fetch(user.id).catch(console.error);
+  const guild = reaction.message.guild ?? await reaction.client.guilds.fetch(reaction.message.guildId);
+  const member = await guild.members.fetch(user.id).catch(() => null);
+
   if (!member) {
     console.log('❌ Member not found');
     return;
   }
 
-  member.roles.add(roleID).catch(console.error);
+  try {
+    if (Array.isArray(roleID)) {
+      await member.roles.add(roleID);
+    } else {
+      await member.roles.add([roleID]);
+    }
+  } catch (err) {
+    console.error('❌ Failed to add role(s):', err);
+  }
 }
-export async function messageReactionRemove(reaction, user) {
 
+export async function messageReactionRemove(reaction, user) {
   if (user.bot) return;
+  console.log('✅ messageReactionRemove triggered');
+  const validKeys = ['colors', 'pronouns', 'continent', 'stream', 'dividers', 'consoles'];
+  const validRoleMessageIds = validKeys.map(key => messageIDs[key]).filter(Boolean);
 
   if (reaction.partial) {
     try {
@@ -76,22 +106,31 @@ export async function messageReactionRemove(reaction, user) {
     }
   }
 
-  if (reaction.message.id !== rolemessageid) return;
+  if (!validRoleMessageIds.includes(reaction.message.id)) return;
 
   const emoji = reaction.emoji.id || reaction.emoji.name;
   const roleID = emojiRoleMap[emoji];
+
   if (!roleID) {
     console.log(`⚠️ No role mapped to emoji: ${emoji}`);
     return;
   }
 
-  const guild = reaction.message.guild;
-  const member = await guild.members.fetch(user.id).catch(console.error);
+  const guild = reaction.message.guild ?? await reaction.client.guilds.fetch(reaction.message.guildId);
+  const member = await guild.members.fetch(user.id).catch(() => null);
+
   if (!member) {
     console.log('❌ Member not found');
     return;
   }
-  member.roles.remove(roleID).catch(console.error);
+
+  try {
+    if (Array.isArray(roleID)) {
+      await member.roles.remove(roleID);
+    } else {
+      await member.roles.remove([roleID]);
+    }
+  } catch (err) {
+    console.error('❌ Failed to remove role(s):', err);
+  }
 }
-
-
