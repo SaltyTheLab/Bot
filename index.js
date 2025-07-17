@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'url';
-import { Client, GatewayIntentBits, Collection, ReactionEmoji } from 'discord.js';
+import { Client, GatewayIntentBits, Collection } from 'discord.js';
 import { config } from 'dotenv';
 import { GuildMemberAdd } from './BotListeners/guildMemberAdd.js';
 import { GuildMemberRemove } from './BotListeners/guildMemberRemove.js';
@@ -80,14 +80,12 @@ client.on('messageDelete', messageDelete);
 client.on('guildMemberAdd', (member) => GuildMemberAdd(member, client));
 client.on('guildMemberRemove', GuildMemberRemove);
 client.on('guildMemberUpdate', GuildMemberUpdate);
-client.on('messageUpdate', (message) => messageUpdate(client, message));
+client.on('messageUpdate', messageUpdate);
 client.on('messageReactionAdd', messageReactionAdd);
 client.on('messageReactionRemove', messageReactionRemove);
 
 //cache the already posted embeds
 client.once('ready', async () => {
-    console.log(`✅ Logged in as ${client.user.tag}`);
-
     const interactiveMessages = [
         { channelId: getrolesid, messageId: "1395238443444862976" },
         { channelId: getrolesid, messageId: "1395238444665540673" },
@@ -111,9 +109,10 @@ client.once('ready', async () => {
             console.error(`❌ Failed to fetch message ${messageId} in channel ${channelId}`, err);
         }
     }
+    console.log(`✅ Logged in as ${client.user.tag}`);
 });
 // Start the bot
 client.login(process.env.TOKEN);
-// embedsenders(client);
+embedsenders(client);
 
 
