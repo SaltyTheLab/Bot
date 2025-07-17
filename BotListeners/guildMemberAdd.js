@@ -10,7 +10,6 @@ export async function GuildMemberAdd(member) {
     }
    
     const accountCreationDate = member.user.createdAt;
-    const accountAgeInMs = Date.now() - accountCreationDate.getTime();
     const twoDaysInMs = 2 * 24 * 60 * 60 * 1000;
      //check if account is 2 days old, if so kick
     if (accountAgeInMs < twoDaysInMs) {
