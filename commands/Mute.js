@@ -1,11 +1,13 @@
 import { EmbedBuilder, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import { logRecentCommand } from '../Logging/recentcommands.js';
-import { mutelogChannelid } from '../BotListeners/channelids.js';
-import { getNextPunishment } from '../moderation/punishments.js';
-import { getWarns, addMute } from '../Logging/database.js';
+import { muteUser } from '../utilities/muteUser.js';
+import { getWarns } from '../Logging/database.js';
+import { THRESHOLD } from '../moderation/constants.js'; // Or wherever your THRESHOLD is
 
-const MAX_TIMEOUT_MS = 2419200000;
-const unitMap = { m: 60000, h: 3600000, d: 86400000 };
+
+
+
+const unitMap = { min: 60000, hour: 3600000, day: 86400000 };
 
 export const data = new SlashCommandBuilder()
     .setName('mute')
@@ -25,9 +27,9 @@ export const data = new SlashCommandBuilder()
             .setDescription('Duration unit')
             .setRequired(true)
             .addChoices(
-                { name: 'Minute', value: 'm' },
-                { name: 'Hour', value: 'h' },
-                { name: 'Day', value: 'd' }
+                { name: 'Minute', value: 'min' },
+                { name: 'Hour', value: 'hour' },
+                { name: 'Day', value: 'day' }
             )
     );
 
@@ -36,96 +38,52 @@ export async function execute(interaction) {
     const reason = interaction.options.getString('reason');
     const duration = interaction.options.getInteger('duration');
     const unit = interaction.options.getString('unit');
+    const issuer = interaction.user.id;
+    const guild = interaction.guild;
+    const MAX_TIMEOUT_MS = 2419200000;
+    const durationStr = `${duration} ${unit}`;
+
+    const allWarnings = await getWarns(target.id);
+    const now = Date.now();
+    const activeWarnings = allWarnings.filter(warn => now - warn.timestamp < THRESHOLD);
+
     const multiplier = unitMap[unit];
-
-    console.log('duration:', duration, typeof duration);
-    console.log('unit:', unit);
-    console.log('unitMap[unit]:', unitMap[unit]);
-
     if (!multiplier || duration <= 0) {
-        return interaction.editReply({ content: '❌ Invalid duration or unit.' });
+        return interaction.reply({ content: '❌ Invalid duration or unit.', ephemeral: true });
     }
 
-    let timeMs = duration * multiplier;
-    if (isNaN(timeMs)) {
-        return interaction.editReply({ content: '❌ Failed to calculate mute duration.' });
-    }
-
-    timeMs = Math.min(timeMs, MAX_TIMEOUT_MS);
+    let durationMs = duration * multiplier;
+    durationMs = Math.min(durationMs, MAX_TIMEOUT_MS);
 
     const member = await interaction.guild.members.fetch(target.id).catch(() => null);
     if (!member) {
-        return interaction.editReply({ content: '❌ User not found in the server.' });
+        return interaction.reply({ content: '❌ User not found in the server.', ephemeral: true });
     }
 
     if (member.communicationDisabledUntilTimestamp > Date.now()) {
-        return interaction.editReply({ content: '⚠️ User is already muted.' });
+        return interaction.reply({ content: '⚠️ User is already muted.', ephemeral: true });
     }
-
-    await addMute(target.id, interaction.user.id, reason, timeMs);
-    const updatedWarnings = await getWarns(target.id);
-    const nextPunishment =  getNextPunishment(updatedWarnings.length);
-    
-    // Prepare embeds
-    const durationStr = `${duration}${unit}`;
-    const dmEmbed = new EmbedBuilder()
-        .setColor(0xffa500)
-        .setAuthor({ name: target.tag, iconURL: target.displayAvatarURL({ dynamic: true }) })
-        .setThumbnail(interaction.guild.iconURL())
-        .setDescription(`<@${target.id}>, you have been issued a \`${nextPunishment}\` in Salty's Cave.`)
-        .addFields(
-            { name: 'Reason:', value: `\`${reason}\`` },
-            { name: 'Next Punishment:', value: `\`${durationStr}\``, inline: false },
-            { name: 'Active Warnings:', value: `\`${updatedWarnings.length}\``, inline: false }
-        )
-        .setTimestamp();
-
     const commandEmbed = new EmbedBuilder()
         .setColor(0xffa500)
         .setAuthor({
             name: `${target.tag} was issued a ${durationStr} mute.`,
             iconURL: target.displayAvatarURL({ dynamic: true })
         });
-
-    const logEmbed = new EmbedBuilder()
-        .setColor(0xffa500)
-        .setThumbnail(target.displayAvatarURL())
-        .setAuthor({
-            name: `${interaction.user.tag} muted a member`,
-            iconURL: interaction.user.displayAvatarURL({ dynamic: true })
-        })
-        .addFields(
-            { name: 'Target:', value: `${target}`, inline: true },
-            { name: 'Channel:', value: `<#${interaction.channel.id}>`, inline: true },
-            { name: 'Reason:', value: `\`${reason}\``, inline: false },
-            { name: 'Next Punishment:', value: `\`${nextPunishment}\``, inline: false },
-            { name: 'Active Warnings:', value: `\`${updatedWarnings.length}\``, inline: false }
-        )
-        .setTimestamp();
-
-    // DM the user
-    try {
-        await target.send({ embeds: [dmEmbed] });
-    } catch {
-        logEmbed.setFooter({ text: 'User could not be DMed.' });
-    }
-
-    // Apply the mute
-    try {
-        await member.timeout(timeMs, reason);
-    } catch (err) {
-        console.error('Failed to apply timeout:', err);
-        return interaction.editReply({ content: "❌ I couldn't apply the mute." });
-    }
-
-    // Log to mod channel
-    const logChannel = interaction.guild.channels.cache.get(mutelogChannelid);
-    if (logChannel) {
-        logChannel.send({ embeds: [logEmbed] }).catch(console.warn);
-    }
-
     // Final reply
-    await interaction.editReply({ embeds: [commandEmbed] });
+
 
     logRecentCommand(`mute - ${target.tag} - ${durationStr} - ${reason} - issuer: ${interaction.user.tag}`);
+
+    await muteUser({
+        guild,
+        member,
+        issuer,
+        reason,
+        durationMs,
+        unit,
+        durationInUnits: duration,
+        channel: interaction.channel,
+        activeWarnings
+    })
+    await interaction.reply({ embeds: [commandEmbed] });
 }

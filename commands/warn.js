@@ -1,9 +1,5 @@
 import { PermissionFlagsBits, SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { logRecentCommand } from '../Logging/recentcommands.js';
-import { mutelogChannelid } from '../BotListeners/channelids.js';
-import { getNextPunishment } from '../moderation/punishments.js';
-import { getWarns, addWarn } from '../Logging/database.js';
-import { THRESHOLD } from '../moderation/constants.js';
+import { warnUser } from '../utilities/warnUser.js';
 
 
 
@@ -25,85 +21,22 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
     const target = interaction.options.getUser('target');
     const reason = interaction.options.getString('reason');
-    const moderatorId = interaction.user.id;
+    const issuer = interaction.user;
 
     if (!target) {
         return interaction.reply({ content: '⚠️ Could not find the user.', ephemeral: true });
     }
 
-    let dmStatus = 'User was DMed.';
-    await addWarn(target.id, moderatorId, reason);
-
-    const expiresAt = new Date(Date.now() + THRESHOLD);
-    const formattedExpiry = `<t:${Math.floor(expiresAt.getTime() / 1000)}:F>`;
-
-    const updatedWarnings = await getWarns(target.id);
-    const nextpunishment = getNextPunishment(updatedWarnings.length)
-
-    // Embed sent to the warned user via DM
-    const dmEmbed = new EmbedBuilder()
-        .setColor(0xffff00)
-        .setAuthor({ name: `${target.tag} was issued a warning`, iconURL: target.displayAvatarURL({ dynamic: true }) })
-        .setThumbnail(interaction.guild.iconURL())
-        .setDescription(`<@${target.id}>, you were given a \`warning\` in Salty's Cave.`)
-        .addFields(
-            { name: 'Reason:', value: `\`${reason}\`` },
-            { name: "Next Punishment:", value: `\`${nextpunishment}\``, inline: false },
-            { name: "Active Warnings: ", value: `\`${updatedWarnings.length}\``, inline: false },
-            { name: "Warn expires on: ", value: formattedExpiry, inline: false }
-        )
-        .setTimestamp();
-
-    try {
-        await target.send({ embeds: [dmEmbed] });
-    } catch {
-        dmStatus = '⚠️ Could not DM the user.';
-    }
-
-    // Embed for the user who issued the command
+    await warnUser({
+        guild: interaction.guild,
+        targetUser: target,
+        moderatorUser: issuer,
+        reason,
+        channel: interaction.channel
+    });
     const commandEmbed = new EmbedBuilder()
         .setColor(0xffff00)
         .setAuthor({ name: `${target.tag} was issued a warning`, iconURL: target.displayAvatarURL({ dynamic: true }) });
 
-    // Embed for logging
-    const logEmbed = new EmbedBuilder()
-        .setColor(0xffff00)
-        .setAuthor({ name: `${interaction.user.tag} warned a member`, iconURL: interaction.user.displayAvatarURL({ dynamic: true }) })
-        .setThumbnail(target.displayAvatarURL())
-        .addFields(
-            { name: 'Target:', value: `${target}`, inline: true },
-            { name: 'Channel:', value: `<#${interaction.channel.id}>`, inline: true },
-            { name: 'Reason:', value: `\`${reason}\``, inline: false },
-            { name: "Next Punishment:", value: `\`${nextpunishment}\``, inline: false },
-            { name: "Active Warnings: ", value: `\`${updatedWarnings.length}\``, inline: false }
-        )
-        .setFooter({ text: dmStatus })
-        .setTimestamp();
-
-    // Log to moderation channel
-    const logChannel = interaction.guild.channels.cache.get(mutelogChannelid);
-    if (logChannel) {
-        try {
-            await logChannel.send({ embeds: [logEmbed] });
-        } catch (err) {
-            console.warn('⚠️ Failed to send log message:', err);
-            return interaction.reply({ content: '⚠️ Failed to send to log channel.', ephemeral: true });
-        }
-    } else {
-        console.warn('⚠️ Log channel not found.');
-    }
-
-    // handle both automod and real interactions
-    try {
-        if (typeof interaction.reply === 'function') {
-            await interaction.reply({ embeds: [commandEmbed] });
-        } else if (interaction.channel) {
-            await interaction.channel.send({ embeds: [commandEmbed] });
-        }
-    } catch (err) {
-        console.warn('⚠️ Failed to send reply:', err);
-    }
-
-    // Logging locally
-    logRecentCommand(`warn - ${target.tag} - ${reason} - issuer: ${interaction.user.tag}`);
+    await interaction.reply({ embeds: [commandEmbed] });
 }
