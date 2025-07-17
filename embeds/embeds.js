@@ -294,7 +294,7 @@ export async function embedsenders(client) {
         messageIDs['colors'] = msg.id;
         saveMessageIDs(messageIDs);
     } else {
-        console.log('ℹ️ Console message already exists:', messageIDs['colors']);
+        console.log('ℹ️ colors message already exists:', messageIDs['colors']);
     }
     if (!messageIDs['pronouns']) {
         const pronouns = new EmbedBuilder()
@@ -377,6 +377,6 @@ export async function embedsenders(client) {
         messageIDs['dividers'] = msg.id;
         saveMessageIDs(messageIDs);
     } else {
-        console.log('ℹ️ stream message already exists:', messageIDs['dividers']);
+        console.log('ℹ️ divider message already exists:', messageIDs['dividers']);
     }
 }
