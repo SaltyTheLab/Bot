@@ -1,6 +1,6 @@
 export function getNextPunishment(warningCount) {
     const punishments = [
-        'Warning',
+        '1 Warn',
         '15 min mute',
         '30 min mute',
         '1 hour mute',

@@ -1,6 +1,8 @@
-import { buildFakeInteraction } from './fakeinteraction.js';
+
 import { THRESHOLD, BASE_DURATION, MAX_DURATION } from './constants.js';
 import { addWarn, getWarns } from '../Logging/database.js';
+import { muteUser } from '../utilities/muteUser.js';
+import { warnUser } from '../utilities/warnUser.js';
 
 
 
@@ -21,51 +23,57 @@ export function formatDuration(ms) {
 
     return parts.length > 0 ? parts.join(', ') : 'less than a minute';
 }
-export async function handleAutoMod(message, client, reasonText, warnings, forbbidenWords) {
+export async function handleAutoMod(message, client, reasonText) {
     const now = Date.now();
-    const MAX_TIMEOUT_MS = 2419200000;
     if (reasonText === 'AutoMod: Discord invite detected' || reasonText === 'AutoMod: Mass ping') {
         await addWarn(message.author.id, client.user.tag, reasonText);
         await addWarn(message.author.id, client.user.tag, reasonText);
     }
 
+    const warnCommand = client.commands.get('warn');
     const allWarnings = await getWarns(message.author.id);
     const activeWarnings = allWarnings.filter(w => now - w.timestamp < THRESHOLD);
-
     let currentPunishment = Math.min(
         BASE_DURATION * 2 ** Math.max(activeWarnings.length, 0),
         MAX_DURATION);
-    let unit = 'm'; // default to minutes
+    let unit = 'min'; // default to minutes
     if (currentPunishment >= 86400000) {
-        unit = 'd';
+        unit = 'day';
     } else if (currentPunishment >= 3600000) {
-        unit = 'h';
+        unit = 'hour';
     }
-    const convertedpunishment = formatDuration(currentPunishment);
-    const durationInUnits = Math.floor(currentPunishment / (unit === 'd' ? 86400000 : unit === 'h' ? 3600000 : 60000));
+    const durationInUnits = Math.ceil(currentPunishment / (unit === 'day' ? 86400000 : unit === 'hour' ? 3600000 : 60000));
 
 
-    const warnCommand = client.commands.get('warn');
-    const muteCommand = client.commands.get('mute');
-
-
-    const fakeInteraction = buildFakeInteraction(
-        client,
-        message,
+    console.log(
         reasonText,
+        currentPunishment,
         durationInUnits,
         activeWarnings.length,
         unit,
-        durationInUnits
-    );
-
-
-    console.log(durationInUnits, activeWarnings.length, unit, convertedpunishment);
+    )
 
     if (activeWarnings.length >= 1) {
-        await muteCommand.execute(fakeInteraction);
+        await muteUser({
+            guild: message.guild,
+            targetUser: message.author.id,
+            moderatorUser: client.user, // AutoMod is issuing the punishment
+            reason: reasonText,
+            duration: durationInUnits,
+            unit,
+            channel: message.channel,
+            isAutomated: true,
+            activeWarnings
+        });
     } else if (warnCommand) {
-        await warnCommand.execute(fakeInteraction);
+        await warnUser({
+            guild: message.guild,
+            targetUser: message.author.id,
+            moderatorUser: client.user,
+            reason: reasonText,
+            channel: message.channel
+        });
+
     } else {
         console.warn('⚠️ Warn command not found.');
     }
