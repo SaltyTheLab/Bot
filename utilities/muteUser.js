@@ -23,28 +23,25 @@ export async function muteUser({
     const multiplier = unitMap[unit];
     const MAX_TIMEOUT_MS = 2419200000;
 
-    let warnings = await getActiveWarns(targetUser);
-    if (isAutomated && activewarnings.length < 7) {
-        addWarn(target.id, issuer.id, logreason)
+    let warnings = await getActiveWarns(targetUser.id);
+    if (isAutomated) {
+        await addWarn(target.id, issuer.id, logreason)
         warnings = await getActiveWarns(targetUser.id);
     }
 
     if (!multiplier || duration <= 0) {
-        return channel.send({ content: 'content: ❌ Invalid duration or unit.' });
+        return '❌ Invalid duration or unit.';
     }
 
-    let timeMs = duration * multiplier;
-    if (isNaN(timeMs)) {
-        return '❌ Failed to calculate mute duration.';
-    }
 
-    timeMs = Math.min(timeMs, MAX_TIMEOUT_MS);
-    const durationMs = Math.min(duration * unitMap[unit], 2419200000);
+
+
+    const durationMs = Math.min(duration * multiplier, MAX_TIMEOUT_MS);
     await addMute(target.id, issuer.id, logreason, durationMs);
 
 
     const nextPunishment = getNextPunishment(warnings.length);
-    const updatedWarnings = warnings;
+
     const warnCount = await getActiveWarns(targetUser.id);
 
     const durationStr = `${duration} ${unit}`;
@@ -55,7 +52,7 @@ export async function muteUser({
         .setDescription(` ${target}, you have been issued a \`${durationStr} mute\` in Salty's Cave.`)
         .addFields(
             { name: 'Reason:', value: `\`${reason}\`` },
-            { name: "Punishments: ", value: `\`${updatedWarnings.length} warn, ${durationStr}\`` },
+            { name: "Punishments: ", value: `\`${warnings.length} warn, ${durationStr}\`` },
             { name: 'Next Punishment:', value: `\`${nextPunishment}\``, inline: false },
             { name: 'Active Warnings:', value: `\`${warnCount.length}\``, inline: false }
         )
@@ -83,10 +80,12 @@ export async function muteUser({
     } catch {
         logEmbed.setFooter({ text: 'User could not be DMed.' });
     }
+    try {
+        await target.timeout(durationMs, reason);
+    } catch (err) {
+        return '❌ User was not muted. Reason: ' + (err.message ?? err);
+    }
 
-    await target.timeout(durationMs, reason).catch(err => {
-        return 'User was not muted.';
-    });
     const commandEmbed = new EmbedBuilder()
         .setColor(0xffa500)
         .setAuthor({
@@ -96,5 +95,10 @@ export async function muteUser({
 
     const logChannel = guild.channels.cache.get(mutelogChannelid);
     if (logChannel) await logChannel.send({ embeds: [logEmbed] });
-    return commandEmbed;
+    if (isAutomated) {
+        await channel.send({ embeds: [commandEmbed] });
+        return;
+    }
+    else
+        return commandEmbed;
 }
