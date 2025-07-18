@@ -1,8 +1,7 @@
-import { EmbedBuilder, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
+import { PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import { logRecentCommand } from '../Logging/recentcommands.js';
 import { muteUser } from '../utilities/muteUser.js';
-import { getWarns } from '../Logging/database.js';
-import { THRESHOLD } from '../moderation/constants.js'; // Or wherever your THRESHOLD is
+
 
 
 
@@ -40,14 +39,11 @@ export async function execute(interaction) {
     const unit = interaction.options.getString('unit');
     const issuer = interaction.user;
     const guild = interaction.guild;
-
+    const channel = interaction.channel;
 
     const MAX_TIMEOUT_MS = 2419200000;
     const durationStr = `${duration} ${unit}`;
 
-    const allWarnings = await getWarns(target.id);
-    const now = Date.now();
-    const activeWarnings = allWarnings.filter(warn => now - warn.timestamp < THRESHOLD);
 
     const multiplier = unitMap[unit];
     if (!multiplier || duration <= 0) {
@@ -57,34 +53,31 @@ export async function execute(interaction) {
     let durationMs = duration * multiplier;
     durationMs = Math.min(durationMs, MAX_TIMEOUT_MS);
 
-    const member = await interaction.guild.members.fetch(target.id).catch(() => null);
+    const member = interaction.options.getMember('target');
     if (!member) {
         return interaction.reply({ content: '❌ User not found in the server.', ephemeral: true });
     }
 
-    if (member.communicationDisabledUntilTimestamp > Date.now()) {
+    if (member.communicationDisabledUntilTimestamp && member.communicationDisabledUntilTimestamp > Date.now()) {
         return interaction.reply({ content: '⚠️ User is already muted.', ephemeral: true });
     }
 
-    logRecentCommand(`mute - ${target.tag} - ${durationStr} - ${reason} - issuer: ${interaction.user.tag}`);
-    //run through relevent helper command function
+    logRecentCommand(`mute - ${target.tag} - ${durationStr} - ${reason} - issuer: ${issuer.tag}`);
+
     const output = await muteUser({
         guild,
         targetUser: member.id,
         moderatorUser: issuer,
         reason,
-        duration: duration,
+        duration,
         unit,
-        channel: interaction.channel,
+        channel,
         isAutomated: false
     });
 
-    if (typeof output == String) {
-        return interaction.reply({ content: output});
+    if (typeof output === 'string') {
+        return interaction.reply({ content: output, ephemeral: true });
     }
 
     return interaction.reply({ embeds: [output] });
-
-
-
 }
