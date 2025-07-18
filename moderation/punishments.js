@@ -8,5 +8,5 @@ export function getNextPunishment(warningCount) {
         '4 hour mute',
         '6 hour mute',
     ]
-    return punishments[warningCount];
+      return punishments[Math.min(warningCount, punishments.length - 1)];
 }
