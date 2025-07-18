@@ -1,0 +1,31 @@
+import { getActiveWarns } from '../Logging/databasefunctions.js';
+import { violationWeights } from '../moderation/violationTypes.js'; // Adjust path as needed
+
+/**
+ * Calculate current and future weighted warnings for a user.
+ *
+ * @param {string} userId - The target user's ID.
+ * @param {string|null} newViolationType - Type of the new violation to simulate (optional).
+ * @returns {Promise<{ activeWarnings, weightedWarns, futureWeightedWarns, currentWarnWeight }>}
+ */
+export async function getWarnStats(userId, newViolationType = null) {
+    const activeWarnings = await getActiveWarns(userId);
+
+    const weightedWarns = activeWarnings.reduce((acc, warn) => {
+        const weight = violationWeights[warn.type] || 1;
+        return acc + weight;
+    }, 0);
+
+    const currentWarnWeight = newViolationType
+        ? (violationWeights[newViolationType] || 1)
+        : 0;
+
+    const futureWeightedWarns = weightedWarns + currentWarnWeight;
+
+    return {
+        activeWarnings,
+        weightedWarns,
+        futureWeightedWarns,
+        currentWarnWeight
+    };
+}

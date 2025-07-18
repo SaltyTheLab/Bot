@@ -1,7 +1,7 @@
 // commands/clearwarns.js
 
 import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
-import { clearActiveWarns } from '../Logging/database.js';
+import { clearActiveWarns } from '../Logging/databasefunctions.js';
 
 export const data = new SlashCommandBuilder()
     .setName('clearactivewarns')

@@ -1,6 +1,6 @@
 // commands/resetlevel.js
 import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
-import { updateUser } from '../Logging/database.js';
+import { updateUser } from '../Logging/databasefunctions.js';
 
 export const data = new SlashCommandBuilder()
     .setName('resetlevel')

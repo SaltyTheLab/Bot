@@ -7,7 +7,7 @@ import {
     PermissionsBitField
 } from 'discord.js';
 
-import { getWarns, getMutes, deleteMute, deleteWarn } from '../Logging/database.js';
+import { getWarns, getMutes, deleteMute, deleteWarn } from '../Logging/databasefunctions.js';
 
 export const data = new SlashCommandBuilder()
     .setName('modlogs')

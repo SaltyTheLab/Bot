@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EmbedBuilder } from '@discordjs/builders';
-import { saveUserAsync, getUserAsync } from '../Logging/database.js';
+import { saveUserAsync, getUserAsync } from '../Logging/databasefunctions.js';
 import { evaluateViolations } from '../moderation/evaluateViolations.js';
 
 

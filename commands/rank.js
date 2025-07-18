@@ -1,6 +1,6 @@
 // commands/rank.js
 import { SlashCommandBuilder, AttachmentBuilder } from 'discord.js';
-import { getUserAsync } from '../Logging/database.js';
+import { getUserAsync } from '../Logging/databasefunctions.js';
 import Canvas from 'canvas';
 
 
