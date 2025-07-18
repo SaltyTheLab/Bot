@@ -81,13 +81,13 @@ export async function onMessageCreate(client, message) {
 
   await AutoMod(message, client, reasonText, {
     isNewUser: joinedDuration < TWO_DAYS_MS,
-    violationType
+    violationType: primaryType
   });
 }
 
 // --- Helpers ---
 
-function checkSpam(userId, content, now, isGeneralSpam) {
+function checkSpam(userId, content, now) {
   const history = messageHistory.get(userId) ?? [];
 
   // Keep only messages within SPAM_WINDOW

@@ -2,6 +2,7 @@ import { EmbedBuilder } from 'discord.js';
 import { getNextPunishment } from '../moderation/punishments.js';
 import { getActiveWarns, addMute, addWarn } from '../Logging/database.js';
 import { mutelogChannelid } from '../BotListeners/channelids.js';
+import { violationWeights } from '../moderation/violationTypes.js';
 
 const unitMap = { min: 60000, hour: 3600000, day: 86400000 };
 
@@ -13,20 +14,21 @@ export async function muteUser({
     duration,
     unit,
     channel,
-    isAutomated = false
+    isAutomated = false,
+    violationType = null,
 }) {
-
     const target = await guild.members.fetch(targetUser).catch(() => null);
     const issuer = await guild.members.fetch(moderatorUser).catch(() => null);
-    const issuerembed = moderatorUser?.user ?? moderatorUser;
     const logreason = reason;
     const multiplier = unitMap[unit];
+    const violationWeight = violationWeights[violationType] || 1;
     const MAX_TIMEOUT_MS = 2419200000;
 
-    let warnings = await getActiveWarns(targetUser.id);
+    console.log(targetUser);
+    let warnings = await getActiveWarns(targetUser);
     if (isAutomated) {
-        await addWarn(target.id, issuer.id, logreason)
-        warnings = await getActiveWarns(targetUser.id);
+        await addWarn(targetUser, issuer.id, logreason)
+        warnings = await getActiveWarns(targetUser);
     }
 
     if (!multiplier || duration <= 0) {
@@ -35,16 +37,21 @@ export async function muteUser({
 
 
 
+    const durationMs = Math.min(duration * multiplier * violationWeight, MAX_TIMEOUT_MS);
 
-    const durationMs = Math.min(duration * multiplier, MAX_TIMEOUT_MS);
-    await addMute(target.id, issuer.id, logreason, durationMs);
+    await addMute(targetUser, issuer.id, logreason, durationMs);
 
 
     const nextPunishment = getNextPunishment(warnings.length);
 
-    const warnCount = await getActiveWarns(targetUser.id);
+    const activeWarnings = await getActiveWarns(targetUser);
+    const weightedWarns = activeWarnings.reduce((acc, warn) => {
+        const weight = violationWeights[warn.type] || 1;
+        return acc + weight;
+    }, 0);
 
-    const durationStr = `${duration} ${unit}`;
+
+    const durationStr = `${Math.ceil(duration * violationWeight)} ${unit}${violationWeight > 1 ? '(scaled)' : ''}`;
     const dmEmbed = new EmbedBuilder()
         .setColor(0xffa500)
         .setAuthor({ name: target.user.tag, iconURL: target.displayAvatarURL({ dynamic: true }) })
@@ -52,9 +59,9 @@ export async function muteUser({
         .setDescription(` ${target}, you have been issued a \`${durationStr} mute\` in Salty's Cave.`)
         .addFields(
             { name: 'Reason:', value: `\`${reason}\`` },
-            { name: "Punishments: ", value: `\`${warnings.length} warn, ${durationStr}\`` },
+            { name: "Punishments: ", value: `\`${weightedWarns} warn, ${durationStr}\`` },
             { name: 'Next Punishment:', value: `\`${nextPunishment}\``, inline: false },
-            { name: 'Active Warnings:', value: `\`${warnCount.length}\``, inline: false }
+            { name: 'Active Warnings:', value: `\`${activeWarnings.length}\``, inline: false }
         )
         .setTimestamp();
 
@@ -62,15 +69,16 @@ export async function muteUser({
         .setColor(0xffa500)
         .setThumbnail(target.displayAvatarURL())
         .setAuthor({
-            name: `${issuerembed.tag} muted a member`,
-            iconURL: issuerembed.displayAvatarURL({ dynamic: true })
+            name: `${issuer.tag} muted a member`,
+            iconURL: issuer.displayAvatarURL({ dynamic: true })
         })
         .addFields(
             { name: 'Target:', value: `${target}`, inline: true },
             { name: 'Channel:', value: `${channel}`, inline: true },
+            { name: 'Punishment', value: `${weightedWarns}  warn, ${durationStr}` },
             { name: 'Reason:', value: `\`${reason}\``, inline: false },
             { name: 'Next Punishment:', value: `\`${nextPunishment}\``, inline: false },
-            { name: 'Active Warnings:', value: `\`${warnCount.length}\``, inline: false }
+            { name: 'Active Warnings:', value: `\`${activeWarnings.length}\``, inline: false }
         )
         .setTimestamp();
 
@@ -83,7 +91,7 @@ export async function muteUser({
     try {
         await target.timeout(durationMs, reason);
     } catch (err) {
-        return '❌ User was not muted. Reason: ' + (err.message ?? err);
+        return '❌ User was not muted.';
     }
 
     const commandEmbed = new EmbedBuilder()
@@ -91,7 +99,8 @@ export async function muteUser({
         .setAuthor({
             name: `${target.user.tag} was issued a ${durationStr} mute.`,
             iconURL: target.displayAvatarURL({ dynamic: true })
-        });
+        })
+
 
     const logChannel = guild.channels.cache.get(mutelogChannelid);
     if (logChannel) await logChannel.send({ embeds: [logEmbed] });

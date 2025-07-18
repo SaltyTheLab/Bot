@@ -82,12 +82,13 @@ export async function AutoMod(message, client, reasonText, options = {}) {
     await muteUser({
       guild,
       targetUser: userId,
-      moderatorUser: client.user,
+      moderatorUser: client.user.id,
       reason: reasonText,
       duration: durationInUnits,
       unit,
       channel: message.channel,
-      isAutomated: true
+      isAutomated: true,
+      violationType
     });
   } else {
     const warnCommand = client.commands.get('warn');
@@ -97,7 +98,8 @@ export async function AutoMod(message, client, reasonText, options = {}) {
         targetUser: userId,
         moderatorUser: client.user,
         reason: reasonText,
-        channel: message.channel
+        channel: message.channel,
+        violationType
       });
     } else {
       console.warn('⚠️ Warn command not found.');
