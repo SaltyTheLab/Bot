@@ -1,6 +1,7 @@
-
 import { loadMessageIDs } from "../utilities/messageStorage.js";
+
 const messageIDs = loadMessageIDs();
+
 export const emojiRoleMap = {
   '👍': '1395015929062232126',
   '💻': '1235323729936908379',
@@ -27,40 +28,33 @@ export const emojiRoleMap = {
   '🐨': '1235335167560912927',
   '🦒': '1235335168458231951',
   '▶️': '1331028469794209913',
-  '🚧': ['1235337327732068353',
+  '🚧': [
+    '1235337327732068353',
     '1235337203572543561',
     '1235336646749327392',
     '1235337070504050735'
   ]
 };
 
-export async function messageReactionAdd(reaction, user) {
+// Common role message IDs to react to
+const validKeys = ['colors', 'pronouns', 'continent', 'stream', 'dividers', 'consoles'];
+const validRoleMessageIds = validKeys.map(key => messageIDs[key]).filter(Boolean);
+
+/**
+ * Handle reaction-based role assignment or removal
+ */
+async function handleReactionChange(reaction, user, action = 'add') {
   if (user.bot) return;
 
-  console.log('✅ messageReactionAdd triggered');
+  console.log(`✅ messageReaction${action === 'add' ? 'Add' : 'Remove'} triggered`);
 
-
-  const validKeys = ['colors', 'pronouns', 'continent', 'stream', 'dividers', 'consoles'];
-  const validRoleMessageIds = validKeys.map(key => messageIDs[key]).filter(Boolean);
-
-  if (reaction.partial) {
-    try {
-      await reaction.fetch();
-    } catch (err) {
-      console.error('❌ Failed to fetch reaction (add):', err);
-      return;
-    }
+  try {
+    if (reaction.partial) await reaction.fetch();
+    if (user.partial) await user.fetch();
+  } catch (err) {
+    console.error(`❌ Failed to fetch reaction or user (${action}):`, err);
+    return;
   }
-
-  if (user.partial) {
-    try {
-      await user.fetch();
-    } catch (err) {
-      console.error('❌ Failed to fetch user:', err);
-      return;
-    }
-  }
-
 
   if (!validRoleMessageIds.includes(reaction.message.id)) return;
 
@@ -81,56 +75,23 @@ export async function messageReactionAdd(reaction, user) {
   }
 
   try {
-    if (Array.isArray(roleID)) {
-      await member.roles.add(roleID);
-    } else {
-      await member.roles.add([roleID]);
-    }
+    const rolesToModify = Array.isArray(roleID) ? roleID : [roleID];
+    await member.roles[action](rolesToModify);
   } catch (err) {
-    console.error('❌ Failed to add role(s):', err);
+    console.error(`❌ Failed to ${action} role(s):`, err);
   }
 }
 
+/**
+ * Reaction add handler
+ */
+export async function messageReactionAdd(reaction, user) {
+  await handleReactionChange(reaction, user, 'add');
+}
+
+/**
+ * Reaction remove handler
+ */
 export async function messageReactionRemove(reaction, user) {
-  if (user.bot) return;
-  console.log('✅ messageReactionRemove triggered');
-  const validKeys = ['colors', 'pronouns', 'continent', 'stream', 'dividers', 'consoles'];
-  const validRoleMessageIds = validKeys.map(key => messageIDs[key]).filter(Boolean);
-
-  if (reaction.partial) {
-    try {
-      await reaction.fetch();
-    } catch (err) {
-      console.error('❌ Failed to fetch reaction (remove):', err);
-      return;
-    }
-  }
-
-  if (!validRoleMessageIds.includes(reaction.message.id)) return;
-
-  const emoji = reaction.emoji.id || reaction.emoji.name;
-  const roleID = emojiRoleMap[emoji];
-
-  if (!roleID) {
-    console.log(`⚠️ No role mapped to emoji: ${emoji}`);
-    return;
-  }
-
-  const guild = reaction.message.guild ?? await reaction.client.guilds.fetch(reaction.message.guildId);
-  const member = await guild.members.fetch(user.id).catch(() => null);
-
-  if (!member) {
-    console.log('❌ Member not found');
-    return;
-  }
-
-  try {
-    if (Array.isArray(roleID)) {
-      await member.roles.remove(roleID);
-    } else {
-      await member.roles.remove([roleID]);
-    }
-  } catch (err) {
-    console.error('❌ Failed to remove role(s):', err);
-  }
+  await handleReactionChange(reaction, user, 'remove');
 }
