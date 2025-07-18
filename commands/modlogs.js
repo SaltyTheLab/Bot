@@ -21,29 +21,22 @@ export async function execute(interaction) {
     const member = await interaction.guild.members.fetch(interaction.user.id);
     const isAdmin = member.permissions.has(PermissionsBitField.Flags.Administrator);
 
-    const [warns, mutes] = await Promise.all([
-        getWarns(user.id),
-        getMutes(user.id)
-    ]);
-
+    const [warns, mutes] = await Promise.all([getWarns(user.id), getMutes(user.id)]);
     let allLogs = [
         ...warns.map(log => ({ ...log, type: 'Warn' })),
         ...mutes.map(log => ({ ...log, type: 'Mute' }))
     ].sort((a, b) => b.timestamp - a.timestamp);
 
-    const nologs = new EmbedBuilder()
-        .setColor(0xFFFF00)
-        .setAuthor({
-            name: '⚠️ No modlogs found for that user.'
-        }
-        )
     if (!allLogs.length) {
         return interaction.reply({
-            embeds: [nologs]
+            embeds: [new EmbedBuilder()
+                .setColor(0xFFFF00)
+                .setAuthor({ name: '⚠️ No modlogs found for that user.' })
+            ]
         });
     }
 
-    // Attach warn count at each point
+    // Add warn count at each step
     let warnCount = 0;
     allLogs.forEach(log => {
         if (log.type === 'Warn') warnCount++;
@@ -52,29 +45,48 @@ export async function execute(interaction) {
 
     let currentIndex = 0;
 
-    const formatTimestamp = ms => `<t:${Math.floor(ms / 1000)}:F>`;
-
-    const buildEmbed = index => {
+    async function buildEmbed(index) {
         const log = allLogs[index];
-        return new EmbedBuilder()
+        const formattedDate = new Date(log.timestamp).toLocaleString('en-US', {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+            timeZone: 'CST'
+        });
+
+        let modUser;
+        try {
+            modUser = await interaction.guild.members.fetch(log.moderatorId);
+        } catch (e) {
+            console.error(`Could not fetch moderator ${log.moderatorId}:`, e);
+            modUser = null;
+        }
+
+        const moderatorTag = modUser?.user?.tag ?? 'Unknown';
+        const moderatorNick = modUser?.nickname ?? moderatorTag;
+        const moderatorAvatar = modUser?.displayAvatarURL({ dynamic: true }) ?? null;
+
+        const embed = new EmbedBuilder()
             .setColor(log.type === 'Warn' ? 0xffcc00 : 0xff4444)
             .setThumbnail(user.displayAvatarURL())
             .addFields(
                 { name: 'Member:', value: `<@${user.id}>`, inline: false },
                 { name: 'Type', value: `\`${log.type}\``, inline: true },
                 { name: 'Reason', value: `\`${log.reason || 'No reason provided'}\``, inline: false },
-                { name: 'Moderator ID', value: `<@${log.moderatorId}>`, inline: false },
                 { name: 'Warns at warn:', value: `\`${log.warnCountAtThisTime}\``, inline: false },
                 ...(log.type === 'Mute'
                     ? [{ name: 'Duration:', value: `\`${Math.round(log.duration / 60000)} minutes\``, inline: true }]
                     : []),
                 { name: 'Warn Status:', value: log.active ? '✅ Active' : '❌ Inactive/cleared', inline: true },
-                { name: 'Timestamp:', value: formatTimestamp(log.timestamp), inline: false }
             )
-            .setFooter({ text: `Log ${index + 1} of ${allLogs.length}` });
-    };
+            .setFooter({
+                text: `Staff: ${moderatorNick} | Log ${index + 1} of ${allLogs.length} | ${formattedDate}`,
+                iconURL: moderatorAvatar
+            });
 
-    const buildButtons = index => {
+        return embed;
+    }
+
+    function buildButtons(index) {
         const buttons = [
             new ButtonBuilder()
                 .setCustomId('prev_log')
@@ -98,17 +110,18 @@ export async function execute(interaction) {
         }
 
         return new ActionRowBuilder().addComponents(buttons);
-    };
+    }
 
-    const message = await interaction.reply({
-        embeds: [buildEmbed(currentIndex)],
-        components: [buildButtons(currentIndex)],
-        fetchReply: true
+    // Initial reply
+    await interaction.reply({
+        embeds: [await buildEmbed(currentIndex)],
+        components: [buildButtons(currentIndex)]
     });
 
+    const message = await interaction.fetchReply();
+
     const collector = message.createMessageComponentCollector({
-        filter: i =>
-            i.user.id === interaction.user.id || (isAdmin && i.user.id !== interaction.user.id),
+        filter: i => i.user.id === interaction.user.id || (isAdmin && i.user.id !== interaction.user.id),
         time: 60_000
     });
 
@@ -121,11 +134,9 @@ export async function execute(interaction) {
             case 'next_log':
                 currentIndex++;
                 break;
-
             case 'prev_log':
                 currentIndex--;
                 break;
-
             case 'dellog':
                 if (!isAdmin) {
                     return i.followUp({
@@ -156,7 +167,7 @@ export async function execute(interaction) {
         }
 
         await interaction.editReply({
-            embeds: [buildEmbed(currentIndex)],
+            embeds: [await buildEmbed(currentIndex)],
             components: [buildButtons(currentIndex)]
         });
     });
