@@ -1,6 +1,7 @@
-import { PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
+import { EmbedBuilder, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import { logRecentCommand } from '../Logging/recentcommands.js';
 import { muteUser } from '../utilities/muteUser.js';
+
 
 
 
@@ -53,12 +54,11 @@ export async function execute(interaction) {
     let durationMs = duration * multiplier;
     durationMs = Math.min(durationMs, MAX_TIMEOUT_MS);
 
-    const member = interaction.options.getMember('target');
-    if (!member) {
+    if (!target) {
         return interaction.reply({ content: '❌ User not found in the server.', ephemeral: true });
     }
 
-    if (member.communicationDisabledUntilTimestamp && member.communicationDisabledUntilTimestamp > Date.now()) {
+    if (target.communicationDisabledUntilTimestamp && target.communicationDisabledUntilTimestamp > Date.now()) {
         return interaction.reply({ content: '⚠️ User is already muted.', ephemeral: true });
     }
 
@@ -66,7 +66,7 @@ export async function execute(interaction) {
 
     const output = await muteUser({
         guild,
-        targetUser: member.id,
+        targetUser: target.id,
         moderatorUser: issuer,
         reason,
         duration,
@@ -76,8 +76,12 @@ export async function execute(interaction) {
     });
 
     if (typeof output === 'string') {
-        return interaction.reply({ content: output, ephemeral: true });
+        return interaction.reply({ content: output});
+    } else if (output instanceof EmbedBuilder) {
+        return interaction.reply({
+            embeds: [output]
+        });
+    } else {
+        return interaction.reply({ content: '❌ Unknown response format.', ephemeral: true });
     }
-
-    return interaction.reply({ embeds: [output] });
 }

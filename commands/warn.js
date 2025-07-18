@@ -47,7 +47,7 @@ export async function execute(interaction) {
 
     if (typeof output === 'string') {
         return interaction.reply({ content: output });
-    }
-    return interaction.reply({ embeds: [output] });
+    } else
+        return interaction.reply({ embeds: [output] });
 
 }
