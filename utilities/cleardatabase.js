@@ -19,7 +19,9 @@ export async function resetModerationTables() {
       moderatorId TEXT NOT NULL,
       reason TEXT NOT NULL,
       timestamp INTEGER NOT NULL,
-      active INTEGER DEFAULT 1
+      active INTEGER DEFAULT 1,
+      weight INTEGER DEFAULT 1,
+      type TEXT
     );
     CREATE TABLE IF NOT EXISTS mutes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -28,7 +30,9 @@ export async function resetModerationTables() {
       reason TEXT NOT NULL,
       duration INTEGER NOT NULL,
       timestamp INTEGER NOT NULL,
-      active DEFAULT 1
+      active DEFAULT 1,
+      weight INTEGER DEFAULT 1,
+      type TEXT
     );
 
     `)

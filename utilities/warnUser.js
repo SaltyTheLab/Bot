@@ -1,9 +1,10 @@
 import { EmbedBuilder } from 'discord.js';
-import { addWarn, getActiveWarns } from '../Logging/database.js';
+import { addWarn, getActiveWarns } from '../Logging/databasefunctions.js';
 import { mutelogChannelid } from '../BotListeners/channelids.js'; // Add this if you have a warn log channel
 import { THRESHOLD } from '../moderation/constants.js';
 import { getNextPunishment } from '../moderation/punishments.js';
-import { violationWeights } from '../moderation/violationTypes.js';
+import { getWarnStats } from './simulatedwarn.js';
+
 
 
 export async function warnUser({
@@ -12,7 +13,8 @@ export async function warnUser({
     moderatorUser,
     reason,
     channel,
-    isautomated = false
+    isautomated = false,
+    violationType
 }) {
     const target = await guild.members.fetch(targetUser.id || targetUser).catch(() => null);
     const issuer = await guild.members.fetch(moderatorUser.id || moderatorUser).catch(() => null);
@@ -21,17 +23,17 @@ export async function warnUser({
     const expiresAt = new Date(Date.now() + THRESHOLD);
     const formattedExpiry = `<t:${Math.floor(expiresAt.getTime() / 1000)}:F>`;
     let updatedWarnings = await getActiveWarns(target.id);
-    const weightedWarns = updatedWarnings.reduce((acc, warn) => {
-        const weight = violationWeights[warn.type] || 1;
-        return acc + weight;
-    }, 0);
+
+    const { activeWarnings, futureWeightedWarns, currentWarnWeight } = await getWarnStats(target.id, violationType);
+
 
     if (updatedWarnings.length < 6) {
-        await addWarn(target.id, issuer.id, reason);
-        updatedWarnings = await getActiveWarns(target.id);
+        await addWarn(target.id, issuer.id, reason, currentWarnWeight, violationType);
+         ({ activeWarnings, futureWeightedWarns, currentWarnWeight } = await getWarnStats(target.id, violationType));
     }
 
-    const nextPunishment = getNextPunishment(updatedWarnings.length);
+
+    const nextPunishment = getNextPunishment(futureWeightedWarns);
 
     const dmEmbed = new EmbedBuilder()
         .setColor(0xffff00)
@@ -41,7 +43,7 @@ export async function warnUser({
         .addFields(
             { name: 'Reason:', value: `\`${reason}\`` },
             { name: "Next Punishment:", value: `\`${nextPunishment}\``, inline: false },
-            { name: "Active Warnings: ", value: `\`${weightedWarns}\``, inline: false },
+            { name: "Active Warnings: ", value: `\`${activeWarnings.length}\``, inline: false },
             { name: "Warn expires on: ", value: formattedExpiry, inline: false }
         )
         .setTimestamp();
@@ -60,7 +62,7 @@ export async function warnUser({
             { name: 'Channel:', value: `${channel}`, inline: true },
             { name: 'Reason:', value: `\`${reason}\``, inline: false },
             { name: "Next Punishment:", value: `\`${nextPunishment}\``, inline: false },
-            { name: "Active Warnings: ", value: `\`${weightedWarns}\``, inline: false }
+            { name: "Active Warnings: ", value: `\`${activeWarnings.length}\``, inline: false }
         )
         .setTimestamp();
 
