@@ -22,18 +22,19 @@ export async function warnUser({
 
     const expiresAt = new Date(Date.now() + THRESHOLD);
     const formattedExpiry = `<t:${Math.floor(expiresAt.getTime() / 1000)}:F>`;
-    let updatedWarnings = await getActiveWarns(target.id);
 
-    const { activeWarnings, futureWeightedWarns, currentWarnWeight } = await getWarnStats(target.id, violationType);
-
-
-    if (updatedWarnings.length < 6) {
-        await addWarn(target.id, issuer.id, reason, currentWarnWeight, violationType);
-         ({ activeWarnings, futureWeightedWarns, currentWarnWeight } = await getWarnStats(target.id, violationType));
-    }
+    let warnStats = await getWarnStats(target.id, violationType);
+    let { activeWarnings, futureWeightedWarns, currentWarnWeight } = warnStats;
 
 
-    const nextPunishment = getNextPunishment(futureWeightedWarns);
+
+    await addWarn(target.id, issuer.id, reason, currentWarnWeight, violationType);
+    //refresh stats
+    ({ activeWarnings, futureWeightedWarns, currentWarnWeight } = await getWarnStats(target.id, violationType));
+
+    const cappedWeightedWarns = Math.min(futureWeightedWarns, 6);
+
+    const nextPunishment = getNextPunishment(cappedWeightedWarns);
 
     const dmEmbed = new EmbedBuilder()
         .setColor(0xffff00)

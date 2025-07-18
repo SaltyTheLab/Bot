@@ -26,19 +26,21 @@ export async function muteUser({
 
     const multiplier = unitMap[unit];
     if (!multiplier || duration <= 0) return '❌ Invalid duration or unit.';
-    const { activeWarnings, weightedWarns, currentWarnWeight } = await getWarnStats(target.id, violationType);
+    let currentWarnWeight = violationWeights[violationType] || 1;
     // If automated, add a warn and refresh warnings
     if (isAutomated) {
         await addWarn(targetUser, issuer.id, reason, currentWarnWeight, violationType);
-        ({ activeWarnings, weightedWarns, currentWarnWeight } = await getWarnStats(target.id, violationType));
     }
+
+    let { activeWarnings, weightedWarns, futureWeightedWarns } = await getWarnStats(target.id, violationType);
 
     // Calculate duration in ms with violation weight scaling and cap
     const violationWeight = violationWeights[violationType] || 1;
     const durationMs = Math.min(duration * multiplier * violationWeight, MAX_TIMEOUT_MS);
 
     // Calculate the next punishment string
-    const nextPunishment = getNextPunishment(weightedWarns);
+    const cappedWeightedWarns = Math.min(futureWeightedWarns, 6);
+    const nextPunishment = getNextPunishment(cappedWeightedWarns);
 
     // Prepare duration display string (minutes, hours, days)
     let unitDisplay = 'minute';
@@ -101,7 +103,7 @@ export async function muteUser({
         logEmbed.setFooter({ text: 'User could not be DMed.' });
     }
 
-    await addMute(targetUser, issuer.id, reason, durationMs, CurrentWarnWeight, violationType);
+    await addMute(targetUser, issuer.id, reason, durationMs, currentWarnWeight, violationType);
 
     // Command confirmation embed
     const commandEmbed = new EmbedBuilder()
