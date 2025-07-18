@@ -32,12 +32,15 @@ export async function execute(interaction) {
         targetUser: target,
         moderatorUser: issuer,
         reason,
-        channel: interaction.channel
+        channel: interaction.channel,
+        isautomated: false
     });
 
-    if (typeof output == string) {
+    if (typeof output == String) {
         return interaction.reply({
-            embed: [output]
+            embeds: [output]
         })
     }
+
+    return interaction.reply({ embeds: [output] });
 }

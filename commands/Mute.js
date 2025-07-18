@@ -38,8 +38,10 @@ export async function execute(interaction) {
     const reason = interaction.options.getString('reason');
     const duration = interaction.options.getInteger('duration');
     const unit = interaction.options.getString('unit');
-    const issuer = interaction.user.id;
+    const issuer = interaction.user;
     const guild = interaction.guild;
+
+
     const MAX_TIMEOUT_MS = 2419200000;
     const durationStr = `${duration} ${unit}`;
 
@@ -63,13 +65,6 @@ export async function execute(interaction) {
     if (member.communicationDisabledUntilTimestamp > Date.now()) {
         return interaction.reply({ content: '⚠️ User is already muted.', ephemeral: true });
     }
-    const commandEmbed = new EmbedBuilder()
-        .setColor(0xffa500)
-        .setAuthor({
-            name: `${target.tag} was issued a ${durationStr} mute.`,
-            iconURL: target.displayAvatarURL({ dynamic: true })
-        });
-
 
     logRecentCommand(`mute - ${target.tag} - ${durationStr} - ${reason} - issuer: ${interaction.user.tag}`);
     //run through relevent helper command function
@@ -80,14 +75,15 @@ export async function execute(interaction) {
         reason,
         duration: duration,
         unit,
-        channel: interaction.channel
+        channel: interaction.channel,
+        isAutomated: false
     });
 
-    if (typeof output === 'string') {
-        return interaction.reply({ content: embed});
+    if (typeof output == String) {
+        return interaction.reply({ content: output});
     }
 
-    return interaction.reply({ embeds: [embed] });
+    return interaction.reply({ embeds: [output] });
 
 
 
