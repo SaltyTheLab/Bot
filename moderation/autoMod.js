@@ -1,8 +1,9 @@
 import { THRESHOLD, BASE_DURATION, MAX_DURATION } from './constants.js';
-import { addWarn, getActiveWarns } from '../Logging/database.js';
+import { getActiveWarns } from '../Logging/databasefunctions.js';
 import { muteUser } from '../utilities/muteUser.js';
 import { warnUser } from '../utilities/warnUser.js';
 import { banUser } from '../utilities/banUser.js';
+import { getWarnStats } from '../utilities/simulatedwarn.js';
 
 export function formatDuration(ms) {
   if (!ms || typeof ms !== 'number' || ms <= 0) return 'N/A';
@@ -18,16 +19,17 @@ export function formatDuration(ms) {
 
   return parts.length > 0 ? parts.join(', ') : 'less than a minute';
 }
-
 export async function AutoMod(message, client, reasonText, options = {}) {
-  const now = Date.now();
   const { isNewUser = false, violationType = '' } = options;
   const userId = message.author.id;
   const guild = message.guild;
 
   // Get active warnings (within threshold)
-  const allWarnings = await getActiveWarns(userId);
-  const activeWarnings = allWarnings.filter(w => now - w.timestamp < THRESHOLD);
+  const {
+    activeWarnings,
+    futureWeightedWarns
+  } = await getWarnStats(userId, violationType);
+
 
   // New user with serious violations: auto-ban
   const isBanWorthy = isNewUser && ['everyonePing'].includes(violationType);
@@ -70,15 +72,10 @@ export async function AutoMod(message, client, reasonText, options = {}) {
     unit = 'min';
   }
 
-  // Double warn for certain violations
-  const doubleWarnTypes = ['invite', 'everyonePing'];
-  if (doubleWarnTypes.includes(violationType)) {
-    await addWarn(userId, client.user.tag, reasonText);
-    await addWarn(userId, client.user.tag, reasonText);
-  }
+  const shouldMute = futureWeightedWarns > 1;
 
   // Escalate if there are prior active warnings
-  if (activeWarnings.length >= 1) {
+  if (shouldMute) {
     await muteUser({
       guild,
       targetUser: userId,
