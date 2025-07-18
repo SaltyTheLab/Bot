@@ -1,6 +1,6 @@
 
 import { THRESHOLD, BASE_DURATION, MAX_DURATION } from './constants.js';
-import { addWarn, getWarns } from '../Logging/database.js';
+import { addWarn, getActiveWarns } from '../Logging/database.js';
 import { muteUser } from '../utilities/muteUser.js';
 import { warnUser } from '../utilities/warnUser.js';
 
@@ -31,7 +31,7 @@ export async function handleAutoMod(message, client, reasonText) {
     }
 
     const warnCommand = client.commands.get('warn');
-    const allWarnings = await getWarns(message.author.id);
+    const allWarnings = await getActiveWarns(message.author.id);
     const activeWarnings = allWarnings.filter(w => now - w.timestamp < THRESHOLD);
     let currentPunishment = Math.min(
         BASE_DURATION * 2 ** Math.max(activeWarnings.length, 0),
@@ -62,8 +62,7 @@ export async function handleAutoMod(message, client, reasonText) {
             duration: durationInUnits,
             unit,
             channel: message.channel,
-            isAutomated: true,
-            activeWarnings
+            isAutomated: true
         });
     } else if (warnCommand) {
         await warnUser({
