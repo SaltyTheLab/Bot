@@ -1,5 +1,4 @@
-import { THRESHOLD, BASE_DURATION, MAX_DURATION } from './constants.js';
-import { getActiveWarns } from '../Logging/databasefunctions.js';
+import { BASE_DURATION, MAX_DURATION } from './constants.js';
 import { muteUser } from '../utilities/muteUser.js';
 import { warnUser } from '../utilities/warnUser.js';
 import { banUser } from '../utilities/banUser.js';
