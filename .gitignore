@@ -5,7 +5,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
-*.sqlite
+
+# Local database and logs
+Logging/database.sqlite
+Logging/recentcommandslog.json
 
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
