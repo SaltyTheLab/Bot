@@ -1,10 +1,12 @@
 import { updateTracker } from '../moderation/trackers.js';
-import { handleAutoMod } from '../moderation/autoMod.js';
+import { AutoMod } from '../moderation/autoMod.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EmbedBuilder } from '@discordjs/builders';
-import { saveUserAsync, getUserAsync, updateUser } from '../Logging/database.js';
+import { saveUserAsync, getUserAsync } from '../Logging/database.js';
+import { evaluateViolations } from '../moderation/evaluateViolations.js';
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,19 +17,111 @@ const forbiddenWords = JSON.parse(
 
 const SPAM_WINDOW = 15_000;
 const SPAM_THRESHOLD = 4;
+const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
+
 const messageHistory = new Map();
 const inviteRegex = /(https?:\/\/)?(www\.)?(discord\.gg|discord(app)?\.com\/invite)\/[a-zA-Z0-9-]+/i;
 
-export async function onMessageCreate(client, message) {
-  if (message.author.bot || !message.guild) return;
+const keywords = {
+  cute: "You're Cute",
+  adorable: "You're Adorable",
+  ping: 'pong!'
+};
 
-  const { id: userId } = message.author;
-  const { id: guildId } = message.guild;
-  const content = message.content.toLowerCase();
+const recentSpamPunishments = new Map();
+const SPAM_PUNISHMENT_COOLDOWN = 10 * 1000; // 10 seconds
+
+
+export async function onMessageCreate(client, message) {
+  if (message.author.bot || !message.guild || !message.member) return;
+
+  const { author, guild, content } = message;
+  const userId = author.id;
+  const guildId = guild.id;
+  const lowerContent = content.toLowerCase();
   const now = Date.now();
-  
-    //add user xp
-  let user = await getUserAsync(userId, guildId);
+
+  const lastPunished = recentSpamPunishments.get(userId);
+  const user = await applyUserXP(userId, guildId, message);
+  await saveUserAsync(user);
+
+  if (keywords[lowerContent]) return message.reply(keywords[lowerContent]);
+  const hasMediaContent = hasMedia(message);
+  const { isMediaViolation, isGeneralSpam } = updateTracker(userId, hasMediaContent)
+  const isSpamming = checkSpam(userId, lowerContent, now, isGeneralSpam);
+  const matchedWord = forbiddenWords.find(word => lowerContent.includes(word.toLowerCase()));
+  const hasInvite = inviteRegex.test(lowerContent);
+  const everyonePing = message.mentions.everyone;
+
+  // Allow message if no violations
+  if (!matchedWord && !hasInvite && !isMediaViolation && !isSpamming && !everyonePing) return;
+
+  const joinedDuration = now - message.member.joinedTimestamp;
+
+  const violationResult = evaluateViolations({
+    hasInvite,
+    matchedWord,
+    everyonePing,
+    isSpamming,
+    isMediaViolation
+  });
+
+  if (!violationResult) return;
+
+  const { allReasons, primaryType } = violationResult;
+  const reasonText = `AutoMod: ${allReasons.join(', ')}`;
+
+  // Spam cooldown check (optional)
+  if (primaryType === 'spam' && lastPunished && now - lastPunished < SPAM_PUNISHMENT_COOLDOWN) {
+    return;
+  }
+  if (primaryType === 'spam') {
+    recentSpamPunishments.set(userId, now);
+  }
+
+  await AutoMod(message, client, reasonText, {
+    isNewUser: joinedDuration < TWO_DAYS_MS,
+    violationType
+  });
+}
+
+// --- Helpers ---
+
+function checkSpam(userId, content, now, isGeneralSpam) {
+  const history = messageHistory.get(userId) ?? [];
+
+  // Keep only messages within SPAM_WINDOW
+  const recentHistory = history.filter(m => now - m.timestamp < SPAM_WINDOW);
+  recentHistory.push({ content, timestamp: now });
+  messageHistory.set(userId, recentHistory);
+
+  // Same content spam detection
+  const sameContentMessages = recentHistory.filter(m => m.content === content);
+  const isDuplicateSpam = sameContentMessages.length >= SPAM_THRESHOLD;
+
+  // General spam detection (burst messaging)
+  const { isGeneralSpam } = updateTracker(userId, false); // false = not media here
+
+  // Clear history if duplicate spam
+  if (isDuplicateSpam) messageHistory.set(userId, []);
+
+  // Return true if either spam condition is met
+  return isDuplicateSpam || isGeneralSpam;
+}
+
+function hasMedia(message) {
+  return (
+    message.attachments.size > 0 ||
+    message.embeds.some(embed => {
+      const urls = [embed.image?.url, embed.video?.url, embed.thumbnail?.url].filter(Boolean);
+      return urls.some(url => /\.(gif|jpe?g|png|mp4|webm)$/i.test(url));
+    })
+  );
+}
+
+
+async function applyUserXP(userId, guildId, message) {
+  const user = await getUserAsync(userId, guildId);
   user.xp += 20;
 
   const xpNeeded = Math.floor((user.level - 1) ** 2 * 50);
@@ -44,71 +138,17 @@ export async function onMessageCreate(client, message) {
       .setFooter({ text: 'keep on yapping!' });
 
     await message.channel.send({ embeds: [levelUpEmbed] });
-  }
 
-  // Auto-role on level 3
-  if (user.level === 3) {
-    const verifiedRole = message.guild.roles.cache.find(r => r.name.toLowerCase() === 'verified');
-    if (verifiedRole) {
-      const member = await message.guild.members.fetch(userId);
-      if (!member.roles.cache.has(verifiedRole.id)) {
-        await member.roles.add(verifiedRole);
+    // Auto-role on level 3
+    if (user.level === 3) {
+      const verifiedRole = message.guild.roles.cache.find(r => r.name.toLowerCase() === 'verified');
+      if (verifiedRole) {
+        const member = await message.guild.members.fetch(userId);
+        if (!member.roles.cache.has(verifiedRole.id)) {
+          await member.roles.add(verifiedRole);
+        }
       }
     }
   }
-
-  await saveUserAsync(user);
-
-  const history = messageHistory.get(userId) ?? [];
-  const recentHistory = history.filter(m => now - m.timestamp < SPAM_WINDOW);
-  recentHistory.push({ content, timestamp: now });
-  messageHistory.set(userId, recentHistory);
-
-  const spamMatches = recentHistory.filter(m => m.content === content);
-  const isSpamming = spamMatches.length >= SPAM_THRESHOLD;
-
-  if (isSpamming) messageHistory.set(userId, []); // reset history if spam detected
-
-
-  const hasMedia = message.attachments.size > 0 || message.embeds.some(embed => {
-    const urls = [embed.image?.url, embed.video?.url, embed.thumbnail?.url].filter(Boolean);
-    return urls.some(url => /\.(gif|jpe?g|png|mp4|webm)$/i.test(url));
-  });
-
-  const isMediaViolation = updateTracker(userId, hasMedia, message);
-
- 
-  const keywords = {
-    cute: "You're Cute",
-    adorable: "You're Adorable",
-    ping: "pong!"
-  };
-
-  if (keywords[content]) {
-    return message.reply(keywords[content]);
-  }
-
- 
-  const matchedWord = forbiddenWords.find(word => content.includes(word.toLowerCase()));
-  const hasInvite = inviteRegex.test(content);
-  const everyonePing = message.mentions.everyone;
-
-  // ✅ Allow message if no violations
-  if (!matchedWord && !hasInvite && !isMediaViolation && !isSpamming && !everyonePing) return;
-
-
-  let reasonText = '';
-  if (hasInvite) {
-    reasonText = 'AutoMod: Discord invite detected';
-  } else if (matchedWord) {
-    reasonText = `AutoMod: Forbidden word "${matchedWord}"`;
-  } else if (isMediaViolation) {
-    reasonText = 'AutoMod: Posting too much media (1 per 20 messages allowed)';
-  } else if (isSpamming) {
-    reasonText = 'AutoMod: Spamming the same message';
-  } else if (everyonePing) {
-    reasonText = 'AutoMod: Mass ping';
-  }
-
-  await handleAutoMod(message, client, reasonText, forbiddenWords);
+  return user;
 }
