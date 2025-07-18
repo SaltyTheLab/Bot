@@ -30,13 +30,13 @@ export async function GuildMemberAdd(member) {
         .setColor(0x00FF99)
         .setDescription(`${member} joined the Server!`)
         .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
-        .addFields({ name: 'Discord Join Date:', value: `\`${member.joinedAt.toISOString()}\``, inline: true });
+        .addFields({ name: 'Discord Join Date:', value: `\`${accountCreationDate}\``, inline: true });
 
     const genembed = new EmbedBuilder()
         .setColor(0x00FF99)
         .setDescription(`Welcome ${member} to the Cave!`)
         .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
-        .addFields({ name: 'Discord Join Date:', value: `\`${member.joinedAt.toISOString()}\``, inline: true });
+        .addFields({ name: 'Discord Join Date:', value: `\`${accountCreationDate}\``, inline: true });
     await welcomeChannel.send({ embeds: [embed] });
     await generalChannel.send({ embeds: [genembed] })
 };
