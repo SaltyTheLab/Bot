@@ -78,9 +78,14 @@ export async function addWarn(userId, moderatorId, reason) {
     );
 }
 
-export async function getWarns(userId) {
+export async function getWarns(userId){
     const db = await dbPromise;
-    return db.all(`SELECT * FROM warns WHERE userId = ? ORDER BY timestamp DESC`, userId);
+    return db.all(`SELECT * FROM warns WHERE userId = ? ORDER BY timestamp DESC`, userId)
+}
+
+export async function getActiveWarns(userId) {
+    const db = await dbPromise;
+    return db.all(`SELECT * FROM warns WHERE userId = ? AND active = 1 ORDER BY timestamp DESC`, userId);
 }
 
 export async function addMute(userId, moderatorId, reason, durationMs) {
