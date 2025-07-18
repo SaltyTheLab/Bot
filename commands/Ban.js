@@ -39,7 +39,7 @@ export async function execute(interaction) {
         .setThumbnail(interaction.guild.iconURL())
         .setDescription(
             `<@${target.id}>, you have been **banned** from **Salty's Cave**.\n\n` +
-            `To appeal, please [click here](https://dyno.gg/form/9dd2f880).`
+            `Please [click here](https://dyno.gg/form/9dd2f880) to appeal.`
         )
         .addFields({ name: 'Reason:', value: `\`${reason}\`` })
         .setFooter({ text: interaction.guild.name })

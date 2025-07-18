@@ -26,17 +26,18 @@ export async function execute(interaction) {
     if (!target) {
         return interaction.reply({ content: '⚠️ Could not find the user.', ephemeral: true });
     }
-
-    await warnUser({
+    //run through relevent helper command function
+    const output = await warnUser({
         guild: interaction.guild,
         targetUser: target,
         moderatorUser: issuer,
         reason,
         channel: interaction.channel
     });
-    const commandEmbed = new EmbedBuilder()
-        .setColor(0xffff00)
-        .setAuthor({ name: `${target.tag} was issued a warning`, iconURL: target.displayAvatarURL({ dynamic: true }) });
 
-    await interaction.reply({ embeds: [commandEmbed] });
+    if (typeof output == string) {
+        return interaction.reply({
+            embed: [output]
+        })
+    }
 }

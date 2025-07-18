@@ -69,21 +69,26 @@ export async function execute(interaction) {
             name: `${target.tag} was issued a ${durationStr} mute.`,
             iconURL: target.displayAvatarURL({ dynamic: true })
         });
-    // Final reply
 
 
     logRecentCommand(`mute - ${target.tag} - ${durationStr} - ${reason} - issuer: ${interaction.user.tag}`);
-
-    await muteUser({
+    //run through relevent helper command function
+    const output = await muteUser({
         guild,
-        member,
-        issuer,
+        targetUser: member.id,
+        moderatorUser: issuer,
         reason,
-        durationMs,
+        duration: duration,
         unit,
-        durationInUnits: duration,
-        channel: interaction.channel,
-        activeWarnings
-    })
-    await interaction.reply({ embeds: [commandEmbed] });
+        channel: interaction.channel
+    });
+
+    if (typeof output === 'string') {
+        return interaction.reply({ content: embed});
+    }
+
+    return interaction.reply({ embeds: [embed] });
+
+
+
 }
