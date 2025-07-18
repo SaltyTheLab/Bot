@@ -10,7 +10,8 @@ export async function warnUser({
     targetUser,
     moderatorUser,
     reason,
-    channel
+    channel,
+    isautomated
 }) {
 
     const target = await guild.members.fetch(targetUser).catch(() => null);
@@ -22,7 +23,7 @@ export async function warnUser({
 
 
     // Log to database
-    if (updatedWarnings.length < 7)
+    if (updatedWarnings.length < 6)
         await addWarn(target.id, issuer.id, reason);
 
 
@@ -69,7 +70,7 @@ export async function warnUser({
 
     const commandEmbed = new EmbedBuilder()
         .setColor(0xffff00)
-        .setAuthor({ name: `${target.tag} was issued a warning`, iconURL: target.displayAvatarURL({ dynamic: true }) });
+        .setAuthor({ name: `${target.user.tag} was issued a warning`, iconURL: target.displayAvatarURL({ dynamic: true }) });
 
     return commandEmbed;
 }

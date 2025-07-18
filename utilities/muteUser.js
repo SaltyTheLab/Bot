@@ -19,7 +19,6 @@ export async function muteUser({
     const target = await guild.members.fetch(targetUser).catch(() => null);
     const issuer = await guild.members.fetch(moderatorUser).catch(() => null);
     const issuerembed = moderatorUser?.user ?? moderatorUser;
-    const messagechannel = guild.channels.cache.get(channel.id);
     const logreason = reason;
     const multiplier = unitMap[unit];
     const MAX_TIMEOUT_MS = 2419200000;
@@ -46,7 +45,7 @@ export async function muteUser({
 
     const nextPunishment = getNextPunishment(warnings.length);
     const updatedWarnings = warnings;
-    const warnCount = getActiveWarns(targetUser.id);
+    const warnCount = await getActiveWarns(targetUser.id);
 
     const durationStr = `${duration} ${unit}`;
     const dmEmbed = new EmbedBuilder()
@@ -58,7 +57,7 @@ export async function muteUser({
             { name: 'Reason:', value: `\`${reason}\`` },
             { name: "Punishments: ", value: `\`${updatedWarnings.length} warn, ${durationStr}\`` },
             { name: 'Next Punishment:', value: `\`${nextPunishment}\``, inline: false },
-            { name: 'Active Warnings:', value: `\`${warnCount}\``, inline: false }
+            { name: 'Active Warnings:', value: `\`${warnCount.length}\``, inline: false }
         )
         .setTimestamp();
 
@@ -74,7 +73,7 @@ export async function muteUser({
             { name: 'Channel:', value: `${channel}`, inline: true },
             { name: 'Reason:', value: `\`${reason}\``, inline: false },
             { name: 'Next Punishment:', value: `\`${nextPunishment}\``, inline: false },
-            { name: 'Active Warnings:', value: `\`${warnCount}\``, inline: false }
+            { name: 'Active Warnings:', value: `\`${warnCount.length}\``, inline: false }
         )
         .setTimestamp();
 
