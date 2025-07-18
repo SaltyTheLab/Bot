@@ -1,28 +1,38 @@
+import sqlite3 from 'sqlite3'
+import { open } from 'sqlite'
 export async function resetModerationTables() {
-    const db = await dbPromise;
+  const dbPromise = open({
+    filename: './Logging/database.sqlite',
+    driver: sqlite3.Database
+  });
 
-    await db.exec(`
-        DROP TABLE IF EXISTS warns;
+  dbPromise.then(async db => {
+
+    db.exec(`   
+      DROP TABLE IF EXISTS warns;
         DROP TABLE IF EXISTS mutes;
+  
 
       CREATE TABLE IF NOT EXISTS warns (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        userId TEXT NOT NULL,
-        moderatorId TEXT NOT NULL,
-        reason TEXT NOT NULL,
-        timestamp INTEGER NOT NULL,
-        active INTEGER DEFAULT 1
-      )
-      CREATE TABLE IF NOT EXISTS mutes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        userId TEXT NOT NULL,
-        moderatorId TEXT NOT NULL,
-        reason TEXT NOT NULL,
-        duration INTEGER NOT NULL,
-        timestamp INTEGER NOT NULL
-    )
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId TEXT NOT NULL,
+      moderatorId TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      timestamp INTEGER NOT NULL,
+      active INTEGER DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS mutes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId TEXT NOT NULL,
+      moderatorId TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      duration INTEGER NOT NULL,
+      timestamp INTEGER NOT NULL,
+      active DEFAULT 1
+    );
 
-    `);
+    `)
+  });
 
-    console.log('✅ Moderation tables reset.');
+  console.log('✅ Moderation tables reset.');
 }
