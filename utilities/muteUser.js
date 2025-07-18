@@ -1,6 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import { getNextPunishment } from '../moderation/punishments.js';
-import { getWarns, addMute, addWarn } from '../Logging/database.js';
+import { getActiveWarns, addMute, addWarn } from '../Logging/database.js';
 import { mutelogChannelid } from '../BotListeners/channelids.js';
 
 const unitMap = { min: 60000, hour: 3600000, day: 86400000 };
@@ -13,8 +13,7 @@ export async function muteUser({
     duration,
     unit,
     channel,
-    isAutomated = false,
-    activewarnings = []
+    isAutomated = false
 }) {
 
     const target = await guild.members.fetch(targetUser).catch(() => null);
@@ -25,9 +24,10 @@ export async function muteUser({
     const multiplier = unitMap[unit];
     const MAX_TIMEOUT_MS = 2419200000;
 
-    const warnings = await getWarns(targetUser.id);
+    let warnings = await getActiveWarns(targetUser);
     if (isAutomated && activewarnings.length < 7) {
         addWarn(target.id, issuer.id, logreason)
+        warnings = await getActiveWarns(targetUser.id);
     }
 
     if (!multiplier || duration <= 0) {
@@ -36,7 +36,7 @@ export async function muteUser({
 
     let timeMs = duration * multiplier;
     if (isNaN(timeMs)) {
-        return channel.send({ content: '❌ Failed to calculate mute duration.' });
+        return '❌ Failed to calculate mute duration.';
     }
 
     timeMs = Math.min(timeMs, MAX_TIMEOUT_MS);
@@ -44,9 +44,9 @@ export async function muteUser({
     await addMute(target.id, issuer.id, logreason, durationMs);
 
 
-    const nextPunishment = getNextPunishment(activewarnings.length);
+    const nextPunishment = getNextPunishment(warnings.length);
     const updatedWarnings = warnings;
-    const warnCount = activewarnings.length;
+    const warnCount = getActiveWarns(targetUser.id);
 
     const durationStr = `${duration} ${unit}`;
     const dmEmbed = new EmbedBuilder()
@@ -95,7 +95,7 @@ export async function muteUser({
             iconURL: target.displayAvatarURL({ dynamic: true })
         });
 
-    messagechannel.send({ embeds: [commandEmbed] })
     const logChannel = guild.channels.cache.get(mutelogChannelid);
     if (logChannel) await logChannel.send({ embeds: [logEmbed] });
+    return commandEmbed;
 }
