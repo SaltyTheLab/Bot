@@ -1,8 +1,8 @@
-import { BASE_DURATION, MAX_DURATION } from './constants.js';
 import { muteUser } from '../utilities/muteUser.js';
 import { warnUser } from '../utilities/warnUser.js';
 import { banUser } from '../utilities/banUser.js';
 import { getWarnStats } from '../utilities/simulatedwarn.js';
+import { getNextPunishment } from './punishments.js';
 
 export function formatDuration(ms) {
   if (!ms || typeof ms !== 'number' || ms <= 0) return 'N/A';
@@ -19,13 +19,13 @@ export function formatDuration(ms) {
   return parts.length > 0 ? parts.join(', ') : 'less than a minute';
 }
 export async function AutoMod(message, client, reasonText, options = {}) {
+
   const { isNewUser = false, violationType = '' } = options;
   const userId = message.author.id;
   const guild = message.guild;
 
   // Get active warnings (within threshold)
-  const {
-    activeWarnings,
+  const { weightedWarns,
     futureWeightedWarns
   } = await getWarnStats(userId, violationType);
 
@@ -56,20 +56,8 @@ export async function AutoMod(message, client, reasonText, options = {}) {
     }
   }
 
-  // Determine punishment duration
-  let durationMs = Math.min(BASE_DURATION * 2 ** activeWarnings.length, MAX_DURATION);
-  let unit = 'min';
+  const { duration, unit } = getNextPunishment(weightedWarns, { next: true, context: 'automod' });
 
-  if (durationMs >= 86400000) unit = 'day';
-  else if (durationMs >= 3600000) unit = 'hour';
-
-  let durationInUnits = Math.ceil(durationMs / (unit === 'day' ? 86400000 : unit === 'hour' ? 3600000 : 60000));
-
-  // Adjust for specific infractions
-  if (isNewUser) {
-    durationInUnits = 30;
-    unit = 'min';
-  }
 
   const shouldMute = futureWeightedWarns > 1;
 
@@ -80,7 +68,7 @@ export async function AutoMod(message, client, reasonText, options = {}) {
       targetUser: userId,
       moderatorUser: client.user.id,
       reason: reasonText,
-      duration: durationInUnits,
+      duration: duration,
       unit,
       channel: message.channel,
       isAutomated: true,
