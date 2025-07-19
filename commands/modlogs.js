@@ -147,8 +147,10 @@ export async function execute(interaction) {
 
                 if (log.type === 'Warn') {
                     await deleteWarn(log.id);
+                     logRecentCommand(`warn log deleted from ${user.tag} Admin: ${interaction.user.tag}`);
                 } else if (log.type === 'Mute') {
                     await deleteMute(log.id);
+                    logRecentCommand(`mute log deleted from ${user.tag} Admin: ${interaction.user.tag}`);
                 }
 
                 allLogs.splice(currentIndex, 1);
@@ -179,5 +181,6 @@ export async function execute(interaction) {
         await interaction.editReply({
             components: [disabledRow]
         });
+        logRecentCommand(`${interaction.user.tag} viewed modlogs for ${user.tag}`);
     });
 }

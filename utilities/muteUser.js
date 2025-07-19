@@ -114,7 +114,8 @@ export async function muteUser({
     // Send to mute log channel
     const logChannel = guild.channels.cache.get(mutelogChannelid);
     if (logChannel) await logChannel.send({ embeds: [logEmbed] });
-
+    logRecentCommand(`warn - ${target.tag} - ${reason} - issuer: ${issuer.tag}`);
+    
     // Send confirmation if automated
     if (isAutomated) {
         await channel.send({ embeds: [commandEmbed] });

@@ -24,4 +24,5 @@ export async function execute(interaction) {
         content: `🔄 Reset **${targetUser.username}**'s XP to 0 and level to 1.`,
         ephemeral: true
     });
+    logRecentCommand(`${targetUser.tag} level reset by Admin: ${interaction.user.tag}`);
 }

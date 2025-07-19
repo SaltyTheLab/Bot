@@ -31,7 +31,7 @@ export async function warnUser({
 
 
     //refresh stats
-    const { activeWarnings, weightedWarns} = await getWarnStats(target.id, violationType);
+    const { activeWarnings, weightedWarns } = await getWarnStats(target.id, violationType);
 
 
     // Calculate next punishment based on future warn state 
@@ -79,7 +79,8 @@ export async function warnUser({
     }
     const logChannel = guild.channels.cache.get(mutelogChannelid);
     if (logChannel) await logChannel.send({ embeds: [logEmbed] });
-
+    logRecentCommand(`warn - ${target.tag} - ${reason} - issuer: ${issuer.tag}`);
+    
     if (isautomated) {
         await channel.send({ embeds: [commandEmbed] });
         return;

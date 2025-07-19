@@ -7,18 +7,20 @@ export const data = new SlashCommandBuilder()
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addUserOption(opt => 
         opt.setName('target').setDescription(' Target User to clear modlogs')
+        .setRequired(true)
     )
 
 export async function execute(interaction) {
     const user = interaction.options.getUser('target')
     const reset = new EmbedBuilder()
         .setDescription(
-           `moderation tables for <@${user}> have been cleared`
+           `moderation tables for ${user.id} have been cleared`
         )
         .setColor(0xff0000)
-    clearmodlogs(user);
+    clearmodlogs(user.id);
 
     interaction.reply({
         embeds: [reset]
     })
+     logRecentCommand(`clearmodlogs- ${user.tag}  Admin: ${interaction.user.tag}`);
 }
