@@ -22,5 +22,5 @@ export async function execute(interaction) {
     interaction.reply({
         embeds: [reset]
     })
-     logRecentCommand(`clearmodlogs- ${user.tag}  Admin: ${interaction.user.tag}`);
+     logRecentCommand(`clearmodlogs - ${user.tag}  Admin: ${interaction.user.tag}`);
 }
