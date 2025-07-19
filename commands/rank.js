@@ -35,7 +35,7 @@ function roundRect(ctx, x, y, width, height, radius) {
     ctx.closePath();
 }
 // Generate rank image
-export async function generateRankCard(userData, targetUser, xpNeeded) {
+export async function generateRankCard(userData, targetUser, xpNeeded, rank) {
     const canvas = Canvas.createCanvas(500, 100);
     const ctx = canvas.getContext('2d');
 
@@ -80,7 +80,7 @@ export async function generateRankCard(userData, targetUser, xpNeeded) {
     ctx.fillText(`LEVEL ${userData.level}`, 110, 30);
 
     ctx.textAlign = 'right';
-    ctx.fillText(`RANK ${userData.level}`, canvas.width - 20, 30);
+    ctx.fillText(`RANK ${rank}`, canvas.width - 20, 30);
 
     ctx.textAlign = 'left';
     ctx.font = '16px sans-serif';
@@ -120,14 +120,20 @@ export async function execute(interaction) {
         const guildId = interaction.guild.id;
         const userId = targetUser.id;
 
-        const userData = await getUserAsync(userId, guildId);
-        const xpNeeded = Math.floor((userData.level - 1) ** 2 * 50);
+        const { userData, allUsers } = await getUserAsync(userId, guildId);
+
+
 
         if (!userData) {
             return interaction.reply({ content: 'User data not found.', ephemeral: true });
         }
 
-        const rankCard = await generateRankCard(userData, targetUser, xpNeeded);
+
+
+        const xpNeeded = Math.floor((userData.level - 1) ** 2 * 50);
+        const rank = allUsers.findIndex(u => u.userId === userId) + 1;
+
+        const rankCard = await generateRankCard(userData, targetUser, xpNeeded, rank);
 
         interaction.reply({
             files: [rankCard]
