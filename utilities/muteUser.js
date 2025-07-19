@@ -19,7 +19,8 @@ export async function muteUser({
     isAutomated = false,
     violationType = null,
 }) {
-    // Fetch members safely
+    console.log(duration, unit);
+    // Fetch members safly
     const target = await guild.members.fetch(targetUser).catch(() => null);
     const issuer = await guild.members.fetch(moderatorUser).catch(() => null);
     if (!target || !issuer) return '❌ Could not find target or issuer.';
@@ -28,19 +29,18 @@ export async function muteUser({
     if (!multiplier || duration <= 0) return '❌ Invalid duration or unit.';
     let currentWarnWeight = violationWeights[violationType] || 1;
     // If automated, add a warn and refresh warnings
-    if (isAutomated) {
+    if (!isAutomated) {
         await addWarn(targetUser, issuer.id, reason, currentWarnWeight, violationType);
     }
 
-    let { activeWarnings, weightedWarns, futureWeightedWarns } = await getWarnStats(target.id, violationType);
+    let { activeWarnings, weightedWarns } = await getWarnStats(target.id, violationType);
 
     // Calculate duration in ms with violation weight scaling and cap
     const violationWeight = violationWeights[violationType] || 1;
     const durationMs = Math.min(duration * multiplier * violationWeight, MAX_TIMEOUT_MS);
 
     // Calculate the next punishment string
-    const cappedWeightedWarns = Math.min(futureWeightedWarns, 6);
-    const nextPunishment = getNextPunishment(cappedWeightedWarns);
+    const label = getNextPunishment(weightedWarns, { context: 'muteUser' });
 
     // Prepare duration display string (minutes, hours, days)
     let unitDisplay = 'minute';
@@ -64,7 +64,7 @@ export async function muteUser({
         .addFields(
             { name: 'Reason:', value: `\`${reason}\`` },
             { name: 'Punishments:', value: `\`${weightedWarns} warn, ${durationStr}\`` },
-            { name: 'Next Punishment:', value: `\`${nextPunishment}\``, inline: false },
+            { name: 'Next Punishment:', value: `\`${label.asString}\``, inline: false },
             { name: 'Active Warnings:', value: `\`${activeWarnings.length}\``, inline: false }
         )
         .setTimestamp();
@@ -82,17 +82,15 @@ export async function muteUser({
             { name: 'Channel:', value: `${channel}`, inline: true },
             { name: 'Punishment', value: `${weightedWarns} warn, ${durationStr}` },
             { name: 'Reason:', value: `\`${reason}\``, inline: false },
-            { name: 'Next Punishment:', value: `\`${nextPunishment}\``, inline: false },
+            { name: 'Next Punishment:', value: `\`${label.asString}\``, inline: false },
             { name: 'Active Warnings:', value: `\`${activeWarnings.length}\``, inline: false }
         )
         .setTimestamp();
-    console.log(weightedWarns, durationStr,
-        ' Next Punishment:' + nextPunishment,
-        'Active Warnings:' + activeWarnings.length);
 
     try {
         await target.timeout(durationMs, reason);
     } catch (err) {
+        console.log('you\`be muted but unfortunantly you are owner')
         return '❌ User was not muted.';
     }
 
