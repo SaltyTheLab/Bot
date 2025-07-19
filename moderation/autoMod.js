@@ -3,34 +3,17 @@ import { warnUser } from '../utilities/warnUser.js';
 import { banUser } from '../utilities/banUser.js';
 import { getWarnStats } from '../utilities/simulatedwarn.js';
 import { getNextPunishment } from './punishments.js';
+import { addWarn } from '../Logging/databasefunctions.js';
+import { violationWeights } from '../moderation/violationTypes.js';
 
-export function formatDuration(ms) {
-  if (!ms || typeof ms !== 'number' || ms <= 0) return 'N/A';
-
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-
-  const parts = [];
-  if (hours > 0) parts.push(`${hours} hour${hours !== 1 ? 's' : ''}`);
-  if (remainingMinutes > 0) parts.push(`${remainingMinutes} minute${remainingMinutes !== 1 ? 's' : ''}`);
-
-  return parts.length > 0 ? parts.join(', ') : 'less than a minute';
-}
 export async function AutoMod(message, client, reasonText, options = {}) {
-
   const { isNewUser = false, violationType = '' } = options;
   const userId = message.author.id;
   const guild = message.guild;
 
-  // Get active warnings (within threshold)
-  const { weightedWarns,
-    futureWeightedWarns
-  } = await getWarnStats(userId, violationType);
+  const weight = violationWeights[violationType] || 1;
 
-
-  // New user with serious violations: auto-ban
+  // Check if this user is a new one and has a ban-worthy violation
   const isBanWorthy = isNewUser && ['everyonePing'].includes(violationType);
 
   if (isBanWorthy) {
@@ -56,41 +39,39 @@ export async function AutoMod(message, client, reasonText, options = {}) {
     }
   }
 
-  const { duration, unit } = getNextPunishment(weightedWarns, { next: true, context: 'automod' });
+  // Add the warning first so we can get updated stats
+  await addWarn(userId, client.user.id, reasonText, weight, violationType);
 
+  // Now get up-to-date warning stats
+  const { weightedWarns } = await getWarnStats(userId);
 
-  const shouldMute = futureWeightedWarns > 1;
-
-  // Escalate if there are prior active warnings
+  const shouldMute = weightedWarns > 1;
+  const { duration, unit } = getNextPunishment(weightedWarns);
+  console.log(weightedWarns)
   if (shouldMute) {
     await muteUser({
       guild,
       targetUser: userId,
       moderatorUser: client.user.id,
       reason: reasonText,
-      duration: duration,
+      duration,
       unit,
       channel: message.channel,
       isAutomated: true,
       violationType
     });
   } else {
-    const warnCommand = client.commands.get('warn');
-    if (warnCommand) {
-      await warnUser({
-        guild,
-        targetUser: userId,
-        moderatorUser: client.user,
-        reason: reasonText,
-        channel: message.channel,
-        violationType
-      });
-    } else {
-      console.warn('⚠️ Warn command not found.');
-    }
+    await warnUser({
+      guild,
+      targetUser: userId,
+      moderatorUser: client.user,
+      reason: reasonText,
+      channel: message.channel,
+      isautomated: true,
+      violationType
+    });
   }
 
-  // Delete offending message
   try {
     await message.delete();
   } catch (error) {
