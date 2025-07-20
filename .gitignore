@@ -6,9 +6,7 @@ yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 
-# Local database and logs
-Logging/database.sqlite
-Logging/recentcommandslog.json
+
 
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
@@ -142,3 +140,5 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+Logging/recentCommandslog.json
+Logging/recentCommandslog.json
