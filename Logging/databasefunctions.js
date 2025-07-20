@@ -52,11 +52,19 @@ const getDb = async () => await dbPromise;
 
 export async function getUserAsync(userId, guildId) {
   const db = await getDb();
-  const row = await db.get(`SELECT * FROM users WHERE userId = ? AND guildId = ?`, [userId, guildId]);
+  const row = await db.get(`SELECT * FROM users 
+    WHERE userId = ? AND guildId = ? 
+    ORDER BY xp DESC`, [userId, guildId]);
 
-  if (row) return row;
+  const allUsers = await db.all(`
+            SELECT userId FROM users 
+            WHERE guildId = ?
+            ORDER BY level DESC, xp DESC
+        `, [guildId]);
 
-  await db.run(`INSERT INTO users (userId, guildId, xp, level) VALUES (?, ?, 0, 0)`, [userId, guildId]);
+  if (row) return { userData: row, allUsers }
+
+  await db.run(`INSERT INTO users (userId, guildId, xp, level) VALUES (?, ?, 0, 1)`, [userId, guildId]);
   return { userId, guildId, xp: 0, level: 0 };
 }
 
