@@ -57,21 +57,26 @@ export async function onMessageCreate(client, message) {
   if (!matchedWord && !hasInvite && !isMediaViolation && !isSpamming && !everyonePing) return;
 
   const joinedDuration = now - message.member.joinedTimestamp;
-
+  const isNewUser = joinedDuration < TWO_DAYS_MS
   const violationResult = evaluateViolations({
     hasInvite,
     matchedWord,
     everyonePing,
     isSpamming,
-    isMediaViolation
+    isMediaViolation,
+    isNewUser
   });
 
   if (!violationResult) return;
 
-  const { allReasons, primaryType } = violationResult;
-  const reasonText = `AutoMod: ${allReasons.join(', ')}`;
+  const { allReasons, primaryType, violations } = violationResult;
+  let reasonText = `AutoMod: ${allReasons.join(', ')}`;
+  if (isNewUser && reasonText.endsWith('while new to the server.')) {
+    reasonText = reasonText.replace(/,([^,]*)$/, ' $1');
+  } else
+    reasonText = reasonText.replace(/,([^,]*)$/, ' and$1');
 
-  // Spam cooldown check (optional)
+  // Spam cooldown check (optional)l
   if (primaryType === 'spam' && lastPunished && now - lastPunished < SPAM_PUNISHMENT_COOLDOWN) {
     return;
   }
@@ -79,10 +84,8 @@ export async function onMessageCreate(client, message) {
     recentSpamPunishments.set(userId, now);
   }
 
-  await AutoMod(message, client, reasonText, {
-    isNewUser: joinedDuration < TWO_DAYS_MS,
-    violationType: primaryType
-  });
+  await AutoMod(message, client, reasonText, primaryType ,violations
+  );
 }
 
 // --- Helpers ---

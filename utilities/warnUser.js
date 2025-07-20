@@ -4,6 +4,7 @@ import { mutelogChannelid } from '../BotListeners/channelids.js'; // Add this if
 import { THRESHOLD } from '../moderation/constants.js';
 import { getWarnStats } from './simulatedwarn.js';
 import { getNextPunishment } from '../moderation/punishments.js';
+import { logRecentCommand } from '../Logging/recentcommands.js';
 
 export async function warnUser({
     guild,
@@ -11,8 +12,8 @@ export async function warnUser({
     moderatorUser,
     reason,
     channel,
-    isautomated = false,
-    violationType
+    isautomated = true,
+    violationType = 'warn'
 }) {
     const target = await guild.members.fetch(targetUser.id || targetUser).catch(() => null);
     const issuer = await guild.members.fetch(moderatorUser.id || moderatorUser).catch(() => null);
@@ -21,23 +22,15 @@ export async function warnUser({
     const expiresAt = new Date(Date.now() + THRESHOLD);
     const formattedExpiry = `<t:${Math.floor(expiresAt.getTime() / 1000)}:F>`;
 
-
+    const { activeWarnings, currentWarnWeight } = await getWarnStats(target.id, violationType);
     // Add the warn
-
-    if (!isautomated) {
-        const { currentWarnWeight } = await getWarnStats(target.id, violationType);
+    if (!isautomated)
         await addWarn(target.id, issuer.id, reason, currentWarnWeight, violationType);
-    }
+    //update warning data
+    const {futureWeightedWarns } = await getWarnStats(target.id);
 
+    const { label } = getNextPunishment(futureWeightedWarns)
 
-    //refresh stats
-    const { activeWarnings, weightedWarns } = await getWarnStats(target.id, violationType);
-
-
-    // Calculate next punishment based on future warn state 
-    const { label } = getNextPunishment(weightedWarns, { context: 'muteUser' });
-
-    console.log(weightedWarns + ' Next Punishment:' + label + 'Active Warnings:' + activeWarnings.length);
 
 
     const dmEmbed = new EmbedBuilder()
@@ -47,8 +40,9 @@ export async function warnUser({
         .setDescription(`<@${target.id}>, you were given a \`warning\` in Salty's Cave.`)
         .addFields(
             { name: 'Reason:', value: `\`${reason}\`` },
+            { name: 'Punishments:', value: `\`${currentWarnWeight} warn\``, inline: false },
             { name: "Next Punishment:", value: `\`${label}\``, inline: false },
-            { name: "Active Warnings: ", value: `\`${activeWarnings.length}\``, inline: false },
+            { name: "Active Warnings: ", value: `\`${Array.isArray(activeWarnings) ? activeWarnings.length : 0}\``, inline: false },
             { name: "Warn expires on: ", value: formattedExpiry, inline: false }
         )
         .setTimestamp();
@@ -66,8 +60,9 @@ export async function warnUser({
             { name: 'Target:', value: `${target}`, inline: true },
             { name: 'Channel:', value: `${channel}`, inline: true },
             { name: 'Reason:', value: `\`${reason}\``, inline: false },
+            { name: 'Punishments:', value: `\`${currentWarnWeight}\` warn`, inline: false },
             { name: "Next Punishment:", value: `\`${label}\``, inline: false },
-            { name: "Active Warnings: ", value: `\`${activeWarnings.length}\``, inline: false }
+            { name: "Active Warnings: ", value: `\`${Array.isArray(activeWarnings) ? activeWarnings.length : 0}\``, inline: false }
         )
         .setTimestamp();
 

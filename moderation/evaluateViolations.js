@@ -1,6 +1,6 @@
 import { violationWeights } from './violationTypes.js';
 
-export function evaluateViolations({ hasInvite, matchedWord, everyonePing, isSpamming, isMediaViolation }) {
+export function evaluateViolations({ hasInvite, matchedWord, everyonePing, isSpamming, isMediaViolation, isNewUser }) {
   const violations = [];
 
   if (hasInvite) {
@@ -18,6 +18,9 @@ export function evaluateViolations({ hasInvite, matchedWord, everyonePing, isSpa
   if (isMediaViolation) {
     violations.push({ type: 'mediaViolation', reason: 'Media violation' });
   }
+  if(isNewUser){
+    violations.push({type: 'isNewUser', reason: 'while new to the server.'})
+  }
 
   if (violations.length === 0) return null;
 
@@ -25,9 +28,9 @@ export function evaluateViolations({ hasInvite, matchedWord, everyonePing, isSpa
   const sorted = violations.sort(
     (a, b) => (violationWeights[b.type] || 0) - (violationWeights[a.type] || 0)
   );
-
   return {
     allReasons: violations.map(v => v.reason),
-    primaryType: sorted[0].type
+    primaryType: sorted[0].type,
+    violations
   };
 }

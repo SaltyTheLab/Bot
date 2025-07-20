@@ -10,27 +10,19 @@ const dbPromise = open({
 // Initialize tables
 dbPromise.then(async db => {
   const tableSchemas = [
-    `CREATE TABLE IF NOT EXISTS warns (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      userId TEXT NOT NULL,
-      moderatorId TEXT NOT NULL,
-      reason TEXT NOT NULL,
-      timestamp INTEGER NOT NULL,
-      active INTEGER DEFAULT 1,
-      weight INTEGER DEFAULT 1,
-      type TEXT
-    )`,
-    `CREATE TABLE IF NOT EXISTS mutes (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      userId TEXT NOT NULL,
-      moderatorId TEXT NOT NULL,
-      reason TEXT NOT NULL,
-      duration INTEGER NOT NULL,
-      timestamp INTEGER NOT NULL,
-      active DEFAULT 1,
-      weight INTEGER DEFAULT 1,
-      type TEXT
-    )`,
+
+    `CREATE TABLE IF NOT EXISTS punishments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    userId TEXT NOT NULL,
+    moderatorId TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    type TEXT NOT NULL,
+    timestamp INTEGER NOT NULL,
+    duration INTEGER,
+    active INTEGER DEFAULT 1,
+    weight INTEGER DEFAULT 1)`,
+    
+
     `CREATE TABLE IF NOT EXISTS users (
       userId TEXT,
       guildId TEXT,
@@ -89,33 +81,34 @@ export async function saveUserAsync({ userId, guildId, xp, level }) {
 export async function addWarn(userId, moderatorId, reason, weight = 1, type = null) {
   const db = await getDb();
   return db.run(`
-    INSERT INTO warns (userId, moderatorId, reason, timestamp, active, weight, type)
+    INSERT INTO punishments (userId, moderatorId, reason, timestamp, active, weight, type)
     VALUES (?, ?, ?, ?, 1, ?, ?)
   `, [userId, moderatorId, reason, Date.now(), weight, type]);
 }
 
 export async function getWarns(userId) {
   const db = await getDb();
-  return db.all(`SELECT * FROM warns WHERE userId = ? ORDER BY timestamp DESC`, [userId]);
+  const rows = db.all(`SELECT * FROM punishments WHERE userId = ? AND type = 'warn' ORDER BY timestamp DESC`, [userId]);
+  return Array.isArray(rows) ? rows : [];
 }
 
 export async function getActiveWarns(userId) {
   const db = await getDb();
   return db.all(`SELECT userId, moderatorId, reason, timestamp, weight, type 
-    FROM warns
+    FROM punishments
     WHERE userId = ? AND active = 1 
     ORDER BY timestamp DESC`, [userId]);
 }
 
 export async function clearActiveWarns(userId) {
   const db = await getDb();
-  const result = await db.run(`UPDATE warns SET active = 0 WHERE userId = ? AND active = 1`, [userId]);
+  const result = await db.run(`UPDATE punishments SET active = 0 WHERE userId = ? AND active = 1`, [userId]);
   return result.changes > 0;
 }
 
 export async function deleteWarn(id) {
   const db = await getDb();
-  await db.run(`DELETE FROM warns WHERE id = ?`, [id]);
+  await db.run(`DELETE FROM punishments WHERE id = ?`, [id]);
 }
 
 // ───── MUTES ─────
@@ -123,17 +116,17 @@ export async function deleteWarn(id) {
 export async function addMute(userId, moderatorId, reason, durationMs, weight = 1, type = null) {
   const db = await getDb();
   return db.run(`
-    INSERT INTO mutes (userId, moderatorId, reason, duration, timestamp, active, weight, type)
+    INSERT INTO punishments (userId, moderatorId, reason, duration, timestamp, active, weight, v.type)
     VALUES (?, ?, ?, ?, ?, 1, ?, ?)
   `, [userId, moderatorId, reason, durationMs, Date.now(), weight, type]);
 }
 
 export async function getMutes(userId) {
   const db = await getDb();
-  return db.all(`SELECT * FROM mutes WHERE userId = ? ORDER BY timestamp DESC`, [userId]);
+  return db.all(`SELECT * FROM punishments WHERE userId = ? AND type = 'mute' ORDER BY timestamp DESC`, [userId]);
 }
 
 export async function deleteMute(id) {
   const db = await getDb();
-  await db.run(`DELETE FROM mutes WHERE id = ?`, [id]);
+  await db.run(`DELETE FROM punishments WHERE id = ? AND type = 'mute'`, [id]);
 }
