@@ -1,26 +1,27 @@
 import { EmbedBuilder, SlashCommandBuilder, PermissionFlagsBits } from "discord.js";
 import { clearmodlogs } from "../utilities/cleardatabase.js";
+import { logRecentCommand } from "../Logging/recentcommands.js";
 
 export const data = new SlashCommandBuilder()
     .setName('clearmoderationforuser')
     .setDescription('clears the modlog database for a user (admin only)')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-    .addUserOption(opt => 
+    .addUserOption(opt =>
         opt.setName('target').setDescription(' Target User to clear modlogs')
-        .setRequired(true)
+            .setRequired(true)
     )
 
 export async function execute(interaction) {
     const user = interaction.options.getUser('target')
+
+    await clearmodlogs(user.id);
     const reset = new EmbedBuilder()
         .setDescription(
-           `moderation tables for ${user.id} have been cleared`
+            `moderation tables for ${user} have been cleared`
         )
         .setColor(0xff0000)
-    clearmodlogs(user.id);
-
     interaction.reply({
         embeds: [reset]
     })
-     logRecentCommand(`clearmodlogs - ${user.tag}  Admin: ${interaction.user.tag}`);
+    logRecentCommand(`clearmodlogs - ${user.tag}  Admin: ${interaction.user.tag}`);
 }
