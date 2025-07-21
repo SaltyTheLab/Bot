@@ -23,7 +23,7 @@ export async function AutoMod(message, client, reasonText, violations = []) {
 async function handleWarningOrMute(message, client, reasonText, userId, warns, violations = []) {
   const guild = message.guild;
   const { duration, unit } = getNextPunishment(warns);
-  if (warns >= 2 && duration > 0) {
+  if (warns >= 1 && duration > 0) {
     await muteUser({
       guild,
       targetUser: userId,
