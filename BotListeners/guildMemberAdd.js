@@ -1,9 +1,11 @@
 import { EmbedBuilder } from "discord.js";
 import { welcomeChannelId } from "./channelids.js";
 import { generalChannelid } from "./channelids.js";
+import { mutelogChannelid } from "./channelids.js";
 export async function GuildMemberAdd(member) {
     const welcomeChannel = member.guild.channels.cache.get(welcomeChannelId);
-    const generalChannel = member.guild.channels.cache.get(generalChannelid)
+    const generalChannel = member.guild.channels.cache.get(generalChannelid);
+    const mutechannel = member.guild.channels.cache.get(mutelogChannelid);
     if (!welcomeChannel) {
         console.warn('⚠️ Welcome channel not found.');
         return;
@@ -28,7 +30,7 @@ export async function GuildMemberAdd(member) {
                 { name: '**Reason**:', value: `\`Account under the age of 2d\``, inline: false },
                 { name: '**Account created:', value: `<t:${accountCreationDate}:R>` }
             )
-        await welcomeChannel.send({ embeds: [kickmessage] });
+        await mutechannel.send({ embeds: [kickmessage] });
     }
 
     const embed = new EmbedBuilder()
