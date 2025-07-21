@@ -33,7 +33,6 @@ export async function muteUser({
     const multiplier = unitMap[unit];
     if (!multiplier || duration <= 0) return '❌ Invalid duration or unit.';
 
-
     let warnStats = await getWarnStats(target.id, violations);
     let { currentWarnWeight } = warnStats
     await addMute(target.id, issuer.id, reason, duration, currentWarnWeight, violationType);
