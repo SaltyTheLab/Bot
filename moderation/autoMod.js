@@ -21,7 +21,6 @@ const inviteRegex = /(https?:\/\/)?(www\.)?(discord\.gg|discord(app)?\.com\/invi
 export async function AutoMod(message, client) {
   const now = Date.now();
   const userId = message.author.id;
-  console.log('[AutoMod] New automod invocation');
 
   // check message and apply flags
   const { isMediaViolation, isGeneralSpam } = updateTracker(userId, message)
