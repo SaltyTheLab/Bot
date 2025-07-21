@@ -7,20 +7,22 @@ export const userMessageTrackers = new LRUCache({
 });
 
 const GENERAL_SPAM_WINDOW = 10 * 1000; // 10 seconds
-const GENERAL_SPAM_THRESHOLD = 6;
+const GENERAL_SPAM_THRESHOLD = 4;
+const DUPLICATE_SPAM_THRESHOLD = 3;
 
-export function updateTracker(userId, hasMedia) {
+export function updateTracker(userId, message) {
   const now = Date.now();
 
   const tracker = userMessageTrackers.get(userId) || {
     total: 0,
     mediaCount: 0,
-    timestamps: []
+    timestamps: [],
+    recentMessages: []
   };
 
   // Track total/media counts
   tracker.total += 1;
-  if (hasMedia) {
+  if (hasMedia(message)) {
     tracker.mediaCount += 1;
   }
 
@@ -28,19 +30,43 @@ export function updateTracker(userId, hasMedia) {
   tracker.timestamps.push(now);
   tracker.timestamps = tracker.timestamps.filter(ts => now - ts <= GENERAL_SPAM_WINDOW);
 
-  // Check for media violation
-  const isMediaViolation = hasMedia && tracker.mediaCount > 1 && tracker.total <= 20;
+  // Track for duplicate messages
+  tracker.recentMessages.push({ content: message.content, timestamp: now });
+  tracker.recentMessages = tracker.recentMessages.filter(msg => now - msg.timestamp <= GENERAL_SPAM_THRESHOLD);
 
-  // Check for general spam
+  // === Boolean flag logic ===
+  const duplicateCount = tracker.recentMessages.filter(msg => msg.content === message.content).length;
+  const isDuplicateSpam = duplicateCount >= DUPLICATE_SPAM_THRESHOLD;
+
+  const isMediaViolation = tracker.mediaCount > 1 && tracker.total <= 20;
+
   const isGeneralSpam = tracker.timestamps.length >= GENERAL_SPAM_THRESHOLD;
 
-  // Reset counts every 20 messages to avoid stale tracking
+  // Reset counts every 20 messages
   if (tracker.total >= 20) {
     tracker.total = 0;
     tracker.mediaCount = 0;
     tracker.timestamps = [];
   }
 
+  if (tracker.recentMessages.length > GENERAL_SPAM_THRESHOLD && isDuplicateSpam)
+    tracker.recentMessages = [];
+
+  if (tracker.mediaCount > 1 && tracker.total <= 20)
+    tracker.mediaCount = 0;
+
   userMessageTrackers.set(userId, tracker);
-  return { isMediaViolation, isGeneralSpam };
+  return { isMediaViolation, isGeneralSpam, isDuplicateSpam };
+}
+
+function hasMedia(message) {
+  if (!message.attachments || !message.embeds) return false;
+
+  return (
+    message.attachments.size > 0 ||
+    message.embeds.some(embed => {
+      const urls = [embed.image?.url, embed.video?.url, embed.thumbnail?.url].filter(Boolean);
+      return urls.some(url => /\.(gif|jpe?g|png|mp4|webm)$/i.test(url));
+    })
+  );
 }
