@@ -2,7 +2,7 @@ import { EmbedBuilder } from 'discord.js';
 import { getNextPunishment } from '../moderation/punishments.js';
 import { addMute, addWarn } from '../Logging/databasefunctions.js';
 import { mutelogChannelid } from '../BotListeners/channelids.js';
-import { getWarnStats } from './simulatedwarn.js';
+import { getWarnStats } from '../moderation/simulatedwarn.js';
 import { logRecentCommand } from '../Logging/recentcommands.js';
 import { THRESHOLD } from '../moderation/constants.js';
 
@@ -19,7 +19,7 @@ export async function muteUser({
     channel,
     isAutomated = true,
     violations = [],
-    violationType ='Mute'
+    violationType = 'Mute'
 }) {
     console.log(`[muteUser] called for userId=${targetUser}, duration=${duration} ${unit}`);
     console.log(duration, unit);
@@ -33,19 +33,18 @@ export async function muteUser({
     const multiplier = unitMap[unit];
     if (!multiplier || duration <= 0) return '❌ Invalid duration or unit.';
 
+
     let warnStats = await getWarnStats(target.id, violations);
-    let { currentWarnWeight, weightedWarns, activeWarnings, futureWeightedWarns } = warnStats;
-
-
+    let { currentWarnWeight } = warnStats
     await addMute(target.id, issuer.id, reason, duration, currentWarnWeight, violationType);
-    warnStats = await getWarnStats(target.id, violations);
-    ({ currentWarnWeight, weightedWarns, activeWarnings, futureWeightedWarns } = warnStats);
+
+    let { activeWarnings} = warnStats;
 
 
 
-    const { label } = getNextPunishment(futureWeightedWarns)
+    const { label } = getNextPunishment(activeWarnings.length,{next: true})
     // Calculate duration in ms with violation weight scaling and cap
-    const durationMs = Math.min(duration * multiplier * weightedWarns, MAX_TIMEOUT_MS);
+    const durationMs = Math.min(duration * multiplier, MAX_TIMEOUT_MS);
 
 
     function getDurationDisplay(durationMs) {
@@ -71,7 +70,7 @@ export async function muteUser({
         .setDescription(`${target}, you have been issued a \`${durationStr} mute\` in Salty's Cave.`)
         .addFields(
             { name: 'Reason:', value: `\`${reason}\`` },
-            { name: 'Punishments:', value: `\`${weightedWarns} warn, ${durationStr}\`` },
+            { name: 'Punishments:', value: `\`${currentWarnWeight} warn, ${durationStr}\`` },
             { name: "Next Punishment:", value: `\`${label}\``, inline: false },
             { name: "Active Warnings: ", value: `\`${Array.isArray(activeWarnings) ? activeWarnings.length : 0}\``, inline: false },
             { name: "Mute expires on: ", value: formattedExpiry, inline: false }
@@ -89,7 +88,7 @@ export async function muteUser({
         .addFields(
             { name: 'Target:', value: `${target}`, inline: true },
             { name: 'Channel:', value: `${channel}`, inline: true },
-            { name: 'Punishments:', value: `\`${weightedWarns} warn, ${durationStr}\`` },
+            { name: 'Punishments:', value: `\`${currentWarnWeight} warn, ${durationStr}\`` },
             { name: 'Reason:', value: `\`${reason}\``, inline: false },
             { name: "Next Punishment:", value: `\`${label}\``, inline: false },
             { name: "Active Warnings: ", value: `\`${Array.isArray(activeWarnings) ? activeWarnings.length : 0}\``, inline: false }

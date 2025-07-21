@@ -2,7 +2,7 @@ import { EmbedBuilder } from 'discord.js';
 import { addWarn } from '../Logging/databasefunctions.js';
 import { mutelogChannelid } from '../BotListeners/channelids.js'; // Add this if you have a warn log channel
 import { THRESHOLD } from '../moderation/constants.js';
-import { getWarnStats } from './simulatedwarn.js';
+import { getWarnStats } from '../moderation/simulatedwarn.js';
 import { getNextPunishment } from '../moderation/punishments.js';
 import { logRecentCommand } from '../Logging/recentcommands.js';
 
@@ -23,12 +23,12 @@ export async function warnUser({
     const expiresAt = new Date(Date.now() + THRESHOLD);
     const formattedExpiry = `<t:${Math.floor(expiresAt.getTime() / 1000)}:F>`;
 
-    const { activeWarnings, currentWarnWeight } = await getWarnStats(target.id, violations);
+    const { currentWarnWeight } = await getWarnStats(target.id, violations);
     await addWarn(target.id, issuer.id, reason, currentWarnWeight, violationType);
-    //update warning data
-    const { futureWeightedWarns } = await getWarnStats(target.id);
-
-    const { label } = getNextPunishment(futureWeightedWarns)
+    
+    //fetch previous and label for next warn
+    const { activeWarnings} = await getWarnStats(target.id);
+    const { label } = getNextPunishment(activeWarnings.length)
 
 
 
@@ -73,7 +73,7 @@ export async function warnUser({
     }
     const logChannel = guild.channels.cache.get(mutelogChannelid);
     if (logChannel) await logChannel.send({ embeds: [logEmbed] });
-    logRecentCommand(`warn - ${target.tag} - ${reason} - issuer: ${issuer.tag}`);
+    logRecentCommand(`warn - ${target.user.tag} - ${reason} - issuer: ${issuer.user.tag}`);
 
     if (isAutomated) {
         await channel.send({ embeds: [commandEmbed] });
