@@ -88,7 +88,7 @@ export async function addWarn(userId, moderatorId, reason, weight = 1, type = nu
 
 export async function getWarns(userId) {
   const db = await getDb();
-  const rows = db.all(`SELECT * FROM punishments WHERE userId = ? AND type = 'warn' ORDER BY timestamp DESC`, [userId]);
+  const rows = db.all(`SELECT * FROM punishments WHERE userId = ? AND type = 'Warn' ORDER BY timestamp DESC`, [userId]);
   return Array.isArray(rows) ? rows : [];
 }
 
@@ -116,14 +116,14 @@ export async function deleteWarn(id) {
 export async function addMute(userId, moderatorId, reason, durationMs, weight = 1, type = null) {
   const db = await getDb();
   return db.run(`
-    INSERT INTO punishments (userId, moderatorId, reason, duration, timestamp, active, weight, v.type)
+    INSERT INTO punishments (userId, moderatorId, reason, duration, timestamp, active, weight, type)
     VALUES (?, ?, ?, ?, ?, 1, ?, ?)
   `, [userId, moderatorId, reason, durationMs, Date.now(), weight, type]);
 }
 
 export async function getMutes(userId) {
   const db = await getDb();
-  return db.all(`SELECT * FROM punishments WHERE userId = ? AND type = 'mute' ORDER BY timestamp DESC`, [userId]);
+  return db.all(`SELECT * FROM punishments WHERE userId = ? AND type = 'Mute' ORDER BY timestamp DESC`, [userId]);
 }
 
 export async function deleteMute(id) {
