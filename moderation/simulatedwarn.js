@@ -1,5 +1,5 @@
 import { getActiveWarns } from '../Logging/databasefunctions.js';
-import { violationWeights } from '../moderation/violationWeights.js'; // Adjust path as needed
+import { violationWeights } from './violationWeights.js'; // Adjust path as needed
 
 /**
  * Calculate current and future weighted warnings for a user.
@@ -16,8 +16,7 @@ export async function getWarnStats(userId, newViolationType = []) {
         const weight = violationWeights[warn.type] || 1;
         return acc + weight;
     }, 0);
-
-
+    
     const currentWarnWeight = Array.isArray(newViolationType)
         ? newViolationType.reduce((acc, v) => {
             const type = typeof v === 'string' ? v : v?.type;
