@@ -18,7 +18,8 @@ export async function muteUser({
     unit,
     channel,
     isAutomated = true,
-    violationType = 'mute'
+    violations = [],
+    violationType ='Mute'
 }) {
     console.log(`[muteUser] called for userId=${targetUser}, duration=${duration} ${unit}`);
     console.log(duration, unit);
@@ -32,14 +33,14 @@ export async function muteUser({
     const multiplier = unitMap[unit];
     if (!multiplier || duration <= 0) return '❌ Invalid duration or unit.';
 
-    let warnStats = await getWarnStats(target.id, violationType);
+    let warnStats = await getWarnStats(target.id, violations);
     let { currentWarnWeight, weightedWarns, activeWarnings, futureWeightedWarns } = warnStats;
 
-    if (!isAutomated) {
-        await addMute(target.id, issuer.id, reason, currentWarnWeight, violationType);
-        warnStats = await getWarnStats(target.id, violationType);
-        ({ currentWarnWeight, weightedWarns, activeWarnings, futureWeightedWarns } = warnStats);
-    }
+
+    await addMute(target.id, issuer.id, reason, duration, currentWarnWeight, violationType);
+    warnStats = await getWarnStats(target.id, violations);
+    ({ currentWarnWeight, weightedWarns, activeWarnings, futureWeightedWarns } = warnStats);
+
 
 
     const { label } = getNextPunishment(futureWeightedWarns)

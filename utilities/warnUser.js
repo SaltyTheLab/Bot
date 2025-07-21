@@ -13,7 +13,8 @@ export async function warnUser({
     reason,
     channel,
     isAutomated = true,
-    violationType = 'warn'
+    violations = [],
+    violationType = 'Warn'
 }) {
     const target = await guild.members.fetch(targetUser.id || targetUser).catch(() => null);
     const issuer = await guild.members.fetch(moderatorUser.id || moderatorUser).catch(() => null);
@@ -22,11 +23,10 @@ export async function warnUser({
     const expiresAt = new Date(Date.now() + THRESHOLD);
     const formattedExpiry = `<t:${Math.floor(expiresAt.getTime() / 1000)}:F>`;
 
-    const { activeWarnings, currentWarnWeight } = await getWarnStats(target.id, violationType);
-    if (!isAutomated)
-        await addWarn(target.id, issuer.id, reason, currentWarnWeight, violationType);
+    const { activeWarnings, currentWarnWeight } = await getWarnStats(target.id, violations);
+    await addWarn(target.id, issuer.id, reason, currentWarnWeight, violationType);
     //update warning data
-    const {futureWeightedWarns } = await getWarnStats(target.id);
+    const { futureWeightedWarns } = await getWarnStats(target.id);
 
     const { label } = getNextPunishment(futureWeightedWarns)
 
