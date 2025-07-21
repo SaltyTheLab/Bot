@@ -45,7 +45,7 @@ export async function muteUser({
 
     const { label } = getNextPunishment(futureWeightedWarns)
     // Calculate duration in ms with violation weight scaling and cap
-    const durationMs = Math.min(duration * multiplier, MAX_TIMEOUT_MS);
+    const durationMs = Math.min(duration * multiplier * weightedWarns, MAX_TIMEOUT_MS);
 
 
     function getDurationDisplay(durationMs) {
