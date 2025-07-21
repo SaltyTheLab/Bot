@@ -7,7 +7,7 @@ import { logRecentCommand } from '../Logging/recentcommands.js';
 import { THRESHOLD } from '../moderation/constants.js';
 
 const unitMap = { min: 60000, hour: 3600000, day: 86400000 };
-const MAX_TIMEOUT_MS = 21600000; // 28 days max timeout
+const MAX_TIMEOUT_MS = 21600000; // 6 hour max timeout for automod
 
 export async function muteUser({
     guild,
@@ -17,9 +17,10 @@ export async function muteUser({
     duration,
     unit,
     channel,
-    isautomated = true,
+    isAutomated = true,
     violationType = 'mute'
 }) {
+    console.log(`[muteUser] called for userId=${targetUser}, duration=${duration} ${unit}`);
     console.log(duration, unit);
     // Fetch members safly
     const target = await guild.members.fetch(targetUser).catch(() => null);
@@ -31,15 +32,14 @@ export async function muteUser({
     const multiplier = unitMap[unit];
     if (!multiplier || duration <= 0) return '❌ Invalid duration or unit.';
 
-    let { currentWarnWeight } = await getWarnStats(target.id);
+    let warnStats = await getWarnStats(target.id, violationType);
+    let { currentWarnWeight, weightedWarns, activeWarnings, futureWeightedWarns } = warnStats;
 
-    // If not automated, add a warn and refresh warnings
-    if (!isautomated)
-        await addWarn(target.id, issuer.id, reason, currentWarnWeight, violationType);
-
-    //update warning data
-    const { weightedWarns, activeWarnings, futureWeightedWarns, } = await getWarnStats(target.id, violationType);
-    currentWarnWeight = await getWarnStats(target.id, violationType);
+    if (!isAutomated) {
+        await addMute(target.id, issuer.id, reason, currentWarnWeight, violationType);
+        warnStats = await getWarnStats(target.id, violationType);
+        ({ currentWarnWeight, weightedWarns, activeWarnings, futureWeightedWarns } = warnStats);
+    }
 
 
     const { label } = getNextPunishment(futureWeightedWarns)
@@ -48,7 +48,7 @@ export async function muteUser({
 
 
     function getDurationDisplay(durationMs) {
-          if (durationMs >= 86400000) {
+        if (durationMs >= 86400000) {
             const days = Math.ceil(durationMs / 86400000);
             return `${days} day${days !== 1 ? 's' : ''}`;
         }
@@ -88,7 +88,7 @@ export async function muteUser({
         .addFields(
             { name: 'Target:', value: `${target}`, inline: true },
             { name: 'Channel:', value: `${channel}`, inline: true },
-            { name: 'Punishments:', value: `\`${weightedWarns}\` warn, ${durationStr}` },
+            { name: 'Punishments:', value: `\`${weightedWarns} warn, ${durationStr}\`` },
             { name: 'Reason:', value: `\`${reason}\``, inline: false },
             { name: "Next Punishment:", value: `\`${label}\``, inline: false },
             { name: "Active Warnings: ", value: `\`${Array.isArray(activeWarnings) ? activeWarnings.length : 0}\``, inline: false }
@@ -125,7 +125,7 @@ export async function muteUser({
     logRecentCommand(`warn - ${target.tag} - ${reason} - issuer: ${issuer.tag}`);
 
     // Send confirmation if automated
-    if (isautomated) {
+    if (isAutomated) {
         await channel.send({ embeds: [commandEmbed] });
         return;
     } else {

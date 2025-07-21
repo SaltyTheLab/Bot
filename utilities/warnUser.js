@@ -12,7 +12,7 @@ export async function warnUser({
     moderatorUser,
     reason,
     channel,
-    isautomated = true,
+    isAutomated = true,
     violationType = 'warn'
 }) {
     const target = await guild.members.fetch(targetUser.id || targetUser).catch(() => null);
@@ -23,8 +23,7 @@ export async function warnUser({
     const formattedExpiry = `<t:${Math.floor(expiresAt.getTime() / 1000)}:F>`;
 
     const { activeWarnings, currentWarnWeight } = await getWarnStats(target.id, violationType);
-    // Add the warn
-    if (!isautomated)
+    if (!isAutomated)
         await addWarn(target.id, issuer.id, reason, currentWarnWeight, violationType);
     //update warning data
     const {futureWeightedWarns } = await getWarnStats(target.id);
@@ -75,8 +74,8 @@ export async function warnUser({
     const logChannel = guild.channels.cache.get(mutelogChannelid);
     if (logChannel) await logChannel.send({ embeds: [logEmbed] });
     logRecentCommand(`warn - ${target.tag} - ${reason} - issuer: ${issuer.tag}`);
-    
-    if (isautomated) {
+
+    if (isAutomated) {
         await channel.send({ embeds: [commandEmbed] });
         return;
     } else {

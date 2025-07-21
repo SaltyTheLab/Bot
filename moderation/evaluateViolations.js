@@ -1,4 +1,4 @@
-import { violationWeights } from './violationTypes.js';
+import { violationWeights } from './violationWeights.js';
 
 export function evaluateViolations({ hasInvite, matchedWord, everyonePing, isSpamming, isMediaViolation, isNewUser }) {
   const violations = [];

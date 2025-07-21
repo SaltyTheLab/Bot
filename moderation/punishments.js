@@ -1,5 +1,5 @@
 export function getNextPunishment(weightedWarns, { next = false } = {}) {
-    console.log(weightedWarns);
+
     const punishmentStages = [
         { label: '1 Warn', minutes: 0 },
         { label: '15 min mute', minutes: 0 },
@@ -18,10 +18,9 @@ export function getNextPunishment(weightedWarns, { next = false } = {}) {
 
     if (index < 0) index = 0;
     if (index >= punishmentStages.length) {
-        index = punishmentStages.length - 1 ;
+        index = punishmentStages.length - 1;
     }
     let stage = punishmentStages[index];
-
     const { label, minutes } = stage;
     const unit = minutes >= 60 ? 'hour' : 'min';
     const duration = unit === 'hour' ? Math.ceil(minutes / 60) : minutes;

@@ -15,7 +15,7 @@ const forbiddenWords = JSON.parse(
   fs.readFileSync(path.join(__dirname, '../moderation/forbiddenwords.json'), 'utf8')
 ).forbiddenWords;
 
-const SPAM_WINDOW = 15_000;
+const SPAM_WINDOW = 10_000;
 const SPAM_THRESHOLD = 4;
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
 
@@ -28,10 +28,6 @@ const keywords = {
   ping: 'pong!'
 };
 
-const recentSpamPunishments = new Map();
-const SPAM_PUNISHMENT_COOLDOWN = 10 * 1000; // 10 seconds
-
-
 export async function onMessageCreate(client, message) {
   if (message.author.bot || !message.guild || !message.member) return;
 
@@ -41,7 +37,6 @@ export async function onMessageCreate(client, message) {
   const lowerContent = content.toLowerCase();
   const now = Date.now();
 
-  const lastPunished = recentSpamPunishments.get(userId);
   const user = await applyUserXP(userId, guildId, message);
   await saveUserAsync(user);
 
@@ -76,16 +71,8 @@ export async function onMessageCreate(client, message) {
   } else
     reasonText = reasonText.replace(/,([^,]*)$/, ' and$1');
 
-  // Spam cooldown check (optional)l
-  if (primaryType === 'spam' && lastPunished && now - lastPunished < SPAM_PUNISHMENT_COOLDOWN) {
-    return;
-  }
-  if (primaryType === 'spam') {
-    recentSpamPunishments.set(userId, now);
-  }
 
-  await AutoMod(message, client, reasonText, primaryType ,violations
-  );
+  await AutoMod(message, client, reasonText, violations);
 }
 
 // --- Helpers ---

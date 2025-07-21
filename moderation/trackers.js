@@ -2,7 +2,7 @@ import { LRUCache } from 'lru-cache';
 
 export const userMessageTrackers = new LRUCache({
   max: 500,
-  ttl: 5 * 60 * 1000, // 5 minutes
+  ttl: 2 * 60 * 1000, // 5 minutes
   updateAgeOnGet: true,
 });
 
