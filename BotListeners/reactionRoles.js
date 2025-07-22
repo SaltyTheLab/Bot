@@ -46,8 +46,6 @@ const validRoleMessageIds = validKeys.map(key => messageIDs[key]).filter(Boolean
 async function handleReactionChange(reaction, user, action = 'add') {
   if (user.bot) return;
 
-  console.log(`✅ messageReaction${action === 'add' ? 'Add' : 'Remove'} triggered`);
-
   try {
     if (reaction.partial) await reaction.fetch();
     if (user.partial) await user.fetch();

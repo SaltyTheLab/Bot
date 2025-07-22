@@ -1,5 +1,6 @@
 import { PermissionFlagsBits, SlashCommandBuilder, EmbedBuilder } from "discord.js";
 import { logRecentCommand } from "../Logging/recentcommands.js";
+import { banUser } from "../utilities/banUser.js";
 
 
 export const data = new SlashCommandBuilder()
@@ -27,9 +28,12 @@ export async function execute(interaction) {
         return interaction.reply({ content: '⚠️ User not found.', ephemeral: true });
     }
 
+    if (target.bot)
+        return interaction.reply({ content: 'You cannot ban a bot.', ephemeral: true });
+
     const result = await banUser({
         guild: interaction.guild,
-        targetUser: target,
+        targetUserId: target.id,
         moderatorUser: interaction.user,
         reason,
         channel: interaction.channel,
@@ -39,7 +43,7 @@ export async function execute(interaction) {
     logRecentCommand(`ban - ${target.tag} - ${reason} - issuer: ${interaction.user.tag}`);
     if (typeof result === 'string') {
         // If banUser returns a string, assume it's a message for user
-        return interaction.reply({ content: result});
+        return interaction.reply({ content: result });
     }
 
     // fallback reply in case banUser returns undefined or null

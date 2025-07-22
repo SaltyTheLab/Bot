@@ -1,6 +1,6 @@
 // commands/rank.js
 import { SlashCommandBuilder, AttachmentBuilder } from 'discord.js';
-import { getUserAsync } from '../Logging/databasefunctions.js';
+import { getUser } from '../Database/databasefunctions.js';
 import Canvas from 'canvas';
 
 
@@ -120,7 +120,7 @@ export async function execute(interaction) {
         const guildId = interaction.guild.id;
         const userId = targetUser.id;
 
-        const { userData, allUsers } = await getUserAsync(userId, guildId);
+        const { userData, allUsers } = getUser(userId, guildId);
 
 
 
@@ -129,8 +129,8 @@ export async function execute(interaction) {
         }
 
 
-
-        const xpNeeded = Math.floor((userData.level - 1) ** 2 * 50);
+        allUsers.sort((a, b) => b.xp - a.xp); // example sorting by xp descending
+        const xpNeeded = Math.floor(((userData.level - 1) ** 2) * 50);
         const rank = allUsers.findIndex(u => u.userId === userId) + 1;
 
         const rankCard = await generateRankCard(userData, targetUser, xpNeeded, rank);
@@ -140,6 +140,6 @@ export async function execute(interaction) {
         });
     } catch (error) {
         console.error('Error in rank command:', error);
-        await interaction.reply({ content: '⚠️ An error occurred while generating the rank card.', ephemeral: true });
+         interaction.reply({ content: '⚠️ An error occurred while generating the rank card.', ephemeral: true });
     }
 }

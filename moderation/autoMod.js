@@ -1,51 +1,118 @@
+// AutoMod.js
+
 import { muteUser } from '../utilities/muteUser.js';
 import { warnUser } from '../utilities/warnUser.js';
 import { getNextPunishment } from './punishments.js';
-import { getWarnStats } from '../utilities/simulatedwarn.js';
+import { getWarnStats } from './simulatedwarn.js';
+import { updateTracker } from './trackers.js';
+import { evaluateViolations } from './evaluateViolations.js';
+import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
+import path from 'node:path';
 
-export async function AutoMod(message, client, reasonText, violations = []) {
-  console.log('[AutoMod] New automod invocation');
-  const userId = message.author.id;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-  const { weightedWarns} = await getWarnStats(userId, violations);
+const forbiddenWordsPath = path.join(__dirname, '../moderation/forbiddenwords.json');
+const forbiddenWords = new Set(
+  JSON.parse(fs.readFileSync(forbiddenWordsPath, 'utf8')).forbiddenWords.map(w => w.toLowerCase())
+);
 
-  // Step 2: Decide punishment
-  await handleWarningOrMute(message, client, reasonText, userId, weightedWarns, violations);
+const inviteRegex = /(https?:\/\/)?(www\.)?(discord\.gg|discord(app)?\.com\/invite)\/[a-zA-Z0-9-]+/i;
+const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
 
-  // 🧹 Step 4: Cleanup
+// --- New: cooldown + execution flags ---
+const cooldowns = new Map();
+const processing = new Set();
+
+export async function AutoMod(message, client) {
+  const { author, content, member, guild, channel } = message;
+  const userId = author.id;
+  const lowerContent = content.toLowerCase();
+
+  console.log(`[AutoMod] Message from ${author.tag}: ${content}`);
+
+  // --- Cooldown (2s per user) ---
+  const now = Date.now();
+  if (cooldowns.has(userId) && now - cooldowns.get(userId) < 2000) return;
+  cooldowns.set(userId, now);
+
+  // --- Prevent overlapping logic for same user ---
+  if (processing.has(userId)) return;
+  processing.add(userId);
+
   try {
-    await message.delete();
-  } catch (error) {
-    console.error('Failed to delete message:', error);
-  }
-}
+    // Run dynamic violation checks
+    const violationFlags = updateTracker(userId, message);
 
-async function handleWarningOrMute(message, client, reasonText, userId, warns, violations = []) {
-  const guild = message.guild;
-  const { duration, unit } = getNextPunishment(warns);
-  if (warns >= 2 && duration > 0) {
-    await muteUser({
-      guild,
-      targetUser: userId,
-      moderatorUser: client.user.id,
-      reason: reasonText,
-      duration,
-      unit,
-      channel: message.channel,
-      isAutomated: true,
-      violations
+    const matchedWord = [...forbiddenWords].find(word => lowerContent.includes(word));
+    const hasInvite = inviteRegex.test(content);
+    const everyonePing = message.mentions.everyone;
+    const isNewUser = Date.now() - member.joinedTimestamp < TWO_DAYS_MS;
+
+    const hasViolation = matchedWord || hasInvite || everyonePing || violationFlags.isMediaViolation || violationFlags.isGeneralSpam || violationFlags.isDuplicateSpam;
+    if (!hasViolation) return;
+
+    if (violationFlags.isGeneralSpam && violationFlags.isDuplicateSpam) {
+      violationFlags.isDuplicateSpam = false;
+    }
+
+    const { allReasons, violations } = await evaluateViolations({
+      matchedWord,
+      hasInvite,
+      everyonePing,
+      ...violationFlags,
+      isNewUser
     });
-   
-  } else {
-    await warnUser({
-      guild,
-      targetUser: userId,
-      moderatorUser: client.user,
-      reason: reasonText,
-      channel: message.channel,
-      isAutomated: true,
-      violations,
-      warns
-    });
+
+    if (!violations.length) return;
+
+    console.log('[AutoMod] Violations:', violations);
+
+    let reasonText = `AutoMod: ${allReasons.join(', ')}`;
+    if (isNewUser && reasonText.endsWith('while new to the server.')) {
+      reasonText = reasonText.replace(/,([^,]*)$/, ' $1');
+    } else {
+      reasonText = reasonText.replace(/,([^,]*)$/, ' and$1');
+    }
+
+    try {
+      await message.delete();
+    } catch (err) {
+      console.warn(`[AutoMod] Failed to delete message from ${author.tag}:`, err.message);
+    }
+
+    const { weightedWarns } = await getWarnStats(userId, violations);
+    const { duration, unit } = getNextPunishment(weightedWarns);
+    console.log(`[AutoMod] Weighted warns: ${weightedWarns} => ${duration} ${unit}`);
+
+    if (weightedWarns >= 1 && duration > 0) {
+      await muteUser({
+        guild,
+        targetUser: userId,
+        moderatorUser: client.user.id,
+        reason: reasonText,
+        duration,
+        unit,
+        channel,
+        isAutomated: true,
+        violations
+      });
+    } else {
+      await warnUser({
+        guild,
+        targetUser: userId,
+        moderatorUser: client.user,
+        reason: reasonText,
+        channel,
+        isAutomated: true,
+        violations
+      });
+    }
+
+  } catch (err) {
+    console.error(`[AutoMod] Error while processing ${userId}:`, err);
+  } finally {
+    processing.delete(userId);
   }
 }

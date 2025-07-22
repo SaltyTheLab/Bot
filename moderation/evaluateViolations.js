@@ -1,6 +1,6 @@
 import { violationWeights } from './violationWeights.js';
 
-export function evaluateViolations({ hasInvite, matchedWord, everyonePing, isSpamming, isMediaViolation, isNewUser }) {
+export async function   evaluateViolations({ hasInvite, matchedWord, everyonePing, isGeneralSpam,isDuplicateSpam, isMediaViolation, isNewUser }) {
   const violations = [];
 
   if (hasInvite) {
@@ -12,8 +12,11 @@ export function evaluateViolations({ hasInvite, matchedWord, everyonePing, isSpa
   if (everyonePing) {
     violations.push({ type: 'everyonePing', reason: 'Mass ping' });
   }
-  if (isSpamming) {
-    violations.push({ type: 'spam', reason: 'Spam detected' });
+  if (isGeneralSpam) {
+    violations.push({ type: 'spam', reason: 'Spamming' });
+  }
+  if(isDuplicateSpam){
+    violations.push({type: 'spam', reason: 'Spamming the same message'})
   }
   if (isMediaViolation) {
     violations.push({ type: 'mediaViolation', reason: 'Media violation' });

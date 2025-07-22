@@ -14,10 +14,6 @@ export async function banUser({
     const target = await guild.members.fetch(targetUserId).catch(() => null);
     if (!target) return '❌ User not found in the server.';
 
-    const joinedDuration = Date.now() - target.joinedTimestamp;
-    if (joinedDuration > TWO_DAYS_MS) {
-        return `⚠️ User has been in the server longer than 2 days.`;
-    }
 
     const issuer = await guild.members.fetch(moderatorUser.id).catch(() => null);
     const issuerEmbed = moderatorUser.user ?? moderatorUser;
@@ -39,7 +35,7 @@ export async function banUser({
     const logEmbed = new EmbedBuilder()
         .setColor(0xff0000)
         .setAuthor({ name: `${moderatorUser.tag} banned a member`, iconURL: moderatorUser.displayAvatarURL() })
-        .setThumbnail(target.displayAvatarURL())
+        .setThumbnail(target.displayAvatarURL(({dynamic : true})))
         .addFields(
             { name: 'Target:', value: `${target}`, inline: true },
             { name: 'Channel:', value: `<#${channel.id}>`, inline: true },
@@ -47,10 +43,10 @@ export async function banUser({
         )
         .setTimestamp();
     try {
-        logEmbed.setFooter('User was dmed.')
+        logEmbed.setFooter({text: 'User was dmed.'})
         await target.send({ embeds: [dmEmbed] });
     } catch {
-        logEmbed.setFooter('User was not dmed.')
+        logEmbed.setFooter({text:'User was not dmed.'})
     }
 
     // Try to ban the user
