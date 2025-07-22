@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 
 // Open database
-export const db = new Database('./Logging/database.sqlite', {
+export const db = new Database('./Database/database.sqlite', {
   fileMustExist: true,
 });
 

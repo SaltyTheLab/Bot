@@ -95,3 +95,11 @@ export function deleteMute(id) {
     DELETE FROM punishments WHERE id = ? AND type = 'Mute'
   `).run(id);
 }
+
+//───── Misc ─────
+
+export function clearmodlogs(userId) {
+  db.prepare(`DELETE FROM punishments WHERE userId = ?`).run(userId);
+  console.log(`✅ Cleared moderation tables for user: ${userId}`);
+}
+

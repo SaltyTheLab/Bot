@@ -7,7 +7,7 @@ import {
     PermissionsBitField
 } from 'discord.js';
 
-import { getWarns, getMutes, deleteMute, deleteWarn } from '../Logging/databasefunctions.js';
+import { getWarns, getMutes, deleteMute, deleteWarn } from '../Database/databasefunctions.js';
 import { logRecentCommand } from '../Logging/recentcommands.js';
 
 export const data = new SlashCommandBuilder()
