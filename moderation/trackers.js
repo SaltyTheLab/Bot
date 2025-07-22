@@ -2,13 +2,13 @@ import { LRUCache } from 'lru-cache';
 
 export const userMessageTrackers = new LRUCache({
   max: 500,
-  ttl: 2 * 60 * 1000, // 5 minutes
+  ttl: 5 * 60 * 1000, // 5 minutes
   updateAgeOnGet: true,
 });
 
-const GENERAL_SPAM_WINDOW = 10 * 1000; // 10 seconds
-const GENERAL_SPAM_THRESHOLD = 4;
-const DUPLICATE_SPAM_THRESHOLD = 3;
+const GENERAL_SPAM_WINDOW = 8 * 1000; // 10 seconds
+const GENERAL_SPAM_THRESHOLD = 3;
+const DUPLICATE_SPAM_THRESHOLD = 2;
 
 export function updateTracker(userId, message) {
   const now = Date.now();

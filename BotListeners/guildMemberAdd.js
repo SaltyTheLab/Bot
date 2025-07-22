@@ -17,7 +17,7 @@ export async function GuildMemberAdd(member) {
 
     const date = Math.floor(member.user.createdTimestamp / 1000);
 
-    const accountAgeInMs = date.getTime();
+    const accountAgeInMs = date;
     console.log(accountAgeInMs);
     if (accountAgeInMs < twoDaysInMs) {
 
