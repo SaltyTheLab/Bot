@@ -18,7 +18,7 @@ export async function execute(interaction) {
     const userId = targetUser.id;
 
     // Reset XP and level to 0
-    await updateUser(userId, guildId, 0, 1);
+     updateUser(userId, guildId, 0, 1);
 
     await interaction.reply({
         content: `🔄 Reset **${targetUser.username}**'s XP to 0 and level to 1.`,
