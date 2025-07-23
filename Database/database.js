@@ -28,7 +28,14 @@ const tableSchemas = [
     xp INTEGER DEFAULT 0,
     level INTEGER DEFAULT 1,
     PRIMARY KEY (userId, guildId)
-  )`
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS notes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  userId TEXT NOT NULL,
+  moderatorId TEXT NOT NULL,
+  note TEXT NOT NULL,
+  timestamp INTEGER NOT NULL)`
 ];
 
 // Create tables
