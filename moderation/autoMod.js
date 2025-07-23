@@ -86,7 +86,7 @@ export async function AutoMod(message, client) {
     const { duration, unit } = getNextPunishment(weightedWarns);
     console.log(`[AutoMod] Weighted warns: ${weightedWarns} => ${duration} ${unit}`);
 
-    if (weightedWarns >= 1 && duration > 0) {
+    if (weightedWarns >= 2 && duration > 0) {
       await muteUser({
         guild,
         targetUser: userId,
