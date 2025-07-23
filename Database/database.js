@@ -19,7 +19,8 @@ const tableSchemas = [
     timestamp INTEGER NOT NULL,
     duration INTEGER,
     active INTEGER DEFAULT 1,
-    weight INTEGER DEFAULT 1
+    weight INTEGER DEFAULT 1,
+    channel TEXT NOT NULL
   )`,
 
   `CREATE TABLE IF NOT EXISTS users (
