@@ -9,7 +9,7 @@ import { violationWeights } from './violationWeights.js'; // Adjust path as need
  * @returns {Promise<{ activeWarnings, weightedWarns, futureWeightedWarns, currentWarnWeight }>}
  */
 export async function getWarnStats(userId, newViolationType = []) {
-    const activeWarnings = getActiveWarns(userId);
+    const activeWarnings = await getActiveWarns(userId);
 
     // Sum weights of existing active warnings
     const weightedWarns = activeWarnings.reduce((acc, warn) => {
