@@ -28,7 +28,6 @@ export async function muteUser({
   // Validate duration and unit
   const multiplier = unitMap[unit];
   if (!multiplier || duration <= 0) return '❌ Invalid duration or unit.';
-  console.log(duration);
   // Get warn stats for target user
   const warnStats = await getWarnStats(target.id, violations);
   const { currentWarnWeight, activeWarnings, weightedWarns } = warnStats;
@@ -38,25 +37,19 @@ export async function muteUser({
   const expiresAt = new Date(Date.now() + durationMs);
   const formattedExpiry = `<t:${Math.floor(expiresAt.getTime() / 1000)}:F>`;
 
-  // Determine next punishment label for display
-  const { label } = getNextPunishment(activeWarnings.length, { next: true });
-
   // Save mute to database once
   addMute(target.id, issuer.id, reason, durationMs, currentWarnWeight, violationType);
 
-  // Helper for human-friendly duration display
-  function getDurationDisplay(ms) {
-    if (ms >= unitMap.day) {
-      const days = Math.ceil(ms / unitMap.day);
-      return `${days} day${days !== 1 ? 's' : ''}`;
-    }
-    if (ms >= unitMap.hour) {
-      const hours = Math.ceil(ms / unitMap.hour);
-      return `${hours} hour${hours !== 1 ? 's' : ''}`;
-    }
-    const minutes = Math.ceil(ms / unitMap.min);
-    return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
-  }
+  const updatedWarnStats = await getWarnStats(target.id, violations);
+  const { activeWarnings: updatedActiveWarnings } = updatedWarnStats;
+
+  const { label } = getNextPunishment(updatedActiveWarnings.length + currentWarnWeight);
+
+  const getDurationDisplay = ms => {
+    if (ms >= unitMap.day) return `${Math.ceil(ms / unitMap.day)} day(s)`;
+    if (ms >= unitMap.hour) return `${Math.ceil(ms / unitMap.hour)} hour(s)`;
+    return `${Math.ceil(ms / unitMap.min)} minute(s)`;
+  };
   const durationStr = getDurationDisplay(durationMs);
 
   // DM embed to user
