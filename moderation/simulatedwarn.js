@@ -14,14 +14,14 @@ export async function getWarnStats(userId, newViolationType = []) {
     // Sum weights of existing active warnings
     const weightedWarns = activeWarnings.reduce((acc, warn) => {
         const weight = violationWeights[warn.type] || 1;
-        return Math.floor(acc + weight);
+        return Math.ceil(acc + weight);
     }, 0);
     
     const currentWarnWeight = Array.isArray(newViolationType)
         ? newViolationType.reduce((acc, v) => {
             const type = typeof v === 'string' ? v : v?.type;
             const weight = violationWeights[type] || 1;
-            return Math.floor(acc + weight);
+            return Math.ceil(acc + weight);
         }, 0)
         : 0;
 

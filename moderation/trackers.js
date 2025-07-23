@@ -1,4 +1,5 @@
 import { LRUCache } from 'lru-cache';
+import { hobbiescatagorey, mediacatagorey } from '../BotListeners/channelids.js';
 
 export const userMessageTrackers = new LRUCache({
   max: 500,
@@ -12,7 +13,10 @@ const DUPLICATE_SPAM_THRESHOLD = 2;
 
 export function updateTracker(userId, message) {
   const now = Date.now();
-
+  const exclusions = [
+    hobbiescatagorey,
+    mediacatagorey
+  ]
   const tracker = userMessageTrackers.get(userId) || {
     total: 0,
     mediaCount: 0,
@@ -22,7 +26,7 @@ export function updateTracker(userId, message) {
 
   // Track total/media counts
   tracker.total += 1;
-  if (hasMedia(message)) {
+  if (hasMedia(message) && !exclusions.includes(message.channel.parentId)) {
     tracker.mediaCount += 1;
   }
 
