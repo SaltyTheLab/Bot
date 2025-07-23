@@ -65,10 +65,10 @@ export async function AutoMod(message, client) {
 
       await message.delete();
 
-    const { currentWarnWeight, weightedWarns, activeWarnings } = await getWarnStats(userId, violations);
+    const { currentWarnWeight, activeWarnings } = await getWarnStats(userId, violations);
     const { duration, unit } = getNextPunishment(activeWarnings.length + currentWarnWeight);
 
-    if (weightedWarns > 0 && duration > 0) {
+    if (activeWarnings.length > 0 && duration > 0) {
       await muteUser({
         guild,
         targetUser: userId,
@@ -76,7 +76,7 @@ export async function AutoMod(message, client) {
         reason: reasonText,
         duration,
         unit,
-        channel,
+        channelid: channel.id,
         isAutomated: true,
         violations
       });
@@ -86,7 +86,7 @@ export async function AutoMod(message, client) {
         targetUser: userId,
         moderatorUser: client.user,
         reason: reasonText,
-        channel,
+        channelid: channel.id,
         isAutomated: true,
         violations
       });

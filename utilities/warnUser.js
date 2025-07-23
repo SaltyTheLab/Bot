@@ -11,14 +11,14 @@ export async function warnUser({
   targetUser,
   moderatorUser,
   reason,
-  channel,
+  channelid,
   isAutomated = true,
-  violations = [],
-  violationType = 'Warn'
+  violations = []
 }) {
   // Fetch members safely, accept either ID or User object
   const target = await guild.members.fetch(targetUser.id || targetUser).catch(() => null);
   const issuer = await guild.members.fetch(moderatorUser.id || moderatorUser).catch(() => null);
+  const channel = await guild.channels.fetch(channelid);
   if (!target || !issuer) return '❌ Could not find the user(s) in this guild.';
 
   // Calculate warn expiry time (for display)
@@ -29,7 +29,8 @@ export async function warnUser({
   const { currentWarnWeight } = await getWarnStats(target.id, violations);
 
   // Add the new warning to the DB
-   addWarn(target.id, issuer.id, reason, currentWarnWeight, violationType);
+  console.log(channel);
+   addWarn(target.id, issuer.id, reason, currentWarnWeight, channelid);
 
   // Fetch updated active warnings for the user
   const { activeWarnings } = await getWarnStats(target.id);
@@ -73,7 +74,7 @@ export async function warnUser({
     .setThumbnail(target.displayAvatarURL())
     .addFields(
       { name: 'Target:', value: `${target}`, inline: true },
-      { name: 'Channel:', value: `${channel}`, inline: true },
+      { name: 'Channel:', value: `<#${channelid}>`, inline: true },
       { name: 'Reason:', value: `\`${reason}\``, inline: false },
       { name: 'Punishments:', value: `\`${currentWarnWeight} warn\``, inline: false },
       { name: 'Next Punishment:', value: `\`${label}\``, inline: false },
