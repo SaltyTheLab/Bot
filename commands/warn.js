@@ -22,6 +22,7 @@ export async function execute(interaction) {
     const target = interaction.options.getUser('target');
     const reason = interaction.options.getString('reason');
     const issuer = interaction.user;
+    const channel = interaction.channel;
 
     if (!target) {
         return interaction.reply({ content: '⚠️ Could not find the user.', ephemeral: true });
@@ -41,7 +42,7 @@ export async function execute(interaction) {
         targetUser: target,
         moderatorUser: issuer,
         reason,
-        channel: interaction.channel,
+        channel: channel.id,
         isautomated: false
     });
 

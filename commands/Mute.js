@@ -40,7 +40,7 @@ export async function execute(interaction) {
     const unit = interaction.options.getString('unit');
     const issuer = interaction.user;
     const guild = interaction.guild;
-    const channel = interaction.channel;
+    const channelid = interaction.channel.id;
 
     const MAX_TIMEOUT_MS = 2419200000;
     const durationStr = `${duration} ${unit}`;
@@ -71,7 +71,7 @@ export async function execute(interaction) {
         reason,
         duration,
         unit,
-        channel,
+        channelid: channelid,
         isAutomated: false
     });
 
