@@ -10,23 +10,22 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
     const user = interaction.options.getUser('target');
     const member = await interaction.guild.members.fetch(user.id);
+    const embed = new EmbedBuilder()
+        .setColor(0xb50000)
+        .setDescription(`${user} is not muted.`)
 
     if (member.communicationDisabledUntil) {
         await member.timeout(null)
+        embed.setColor(0x00a900)
+        embed.setDescription(
+            `${user.tag} was unmuted.`
+        )
         return interaction.reply({
-            embed: [new EmbedBuilder()
-                .setColor(0x00a900)
-                .setDescription(
-                    `${user.tag} was unmuted.`
-                )]
+            embeds: [embed]
         })
     } else {
         return interaction.reply({
-            embed: [new EmbedBuilder()
-                .setColor(0xFF5a00)
-                .setDescription(
-                    `${user.tag} is not muted.`
-                )]
+            embeds: [embed]
         })
     }
 }
