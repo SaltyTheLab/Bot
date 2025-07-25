@@ -13,16 +13,18 @@ export async function muteUser({
   targetUser,
   moderatorUser,
   reason,
-  duration,
-  unit,
   channelid,
   isAutomated = true,
-  violations = []
+  violations = [],
+  duration,
+  unit,
 }) {
   // Fetch guild members safely
-  const target = await guild.members.fetch(targetUser).catch(() => null);
-  const issuer = await guild.members.fetch(moderatorUser).catch(() => null);
-  const channel = await guild.channels.fetch(channelid);
+  const [target, issuer, channel] = await Promise.all([
+    guild.members.fetch(targetUser).catch(() => null),
+    guild.members.fetch(moderatorUser).catch(() => null),
+    guild.channels.fetch(channelid),
+  ]);
   if (!target || !issuer) return '❌ Could not find target or issuer.';
 
   // Validate duration and unit
@@ -30,18 +32,19 @@ export async function muteUser({
   if (!multiplier || duration <= 0) return '❌ Invalid duration or unit.';
   // Get warn stats for target user
   const warnStats = await getWarnStats(target.id, violations);
-  let { currentWarnWeight, activeWarnings, weightedWarns } = warnStats;
+  let { currentWarnWeight, activeWarnings } = warnStats;
 
   // Calculate mute duration in ms capped at max timeout
-  const durationMs = Math.min(duration * multiplier * weightedWarns, MAX_TIMEOUT_MS);
+  const durationMs = Math.min(duration * multiplier, MAX_TIMEOUT_MS);
   const expiresAt = new Date(Date.now() + durationMs);
   const formattedExpiry = `<t:${Math.floor(expiresAt.getTime() / 1000)}:F>`;
 
   // Save mute to database once
-  addMute(target.id, issuer.id, reason, durationMs, currentWarnWeight, channel.id);
+  if (isAutomated)
+    addMute(target.id, issuer.id, reason, durationMs, currentWarnWeight, channel.id);
 
-  const updatedWarnStats = await getWarnStats(target.id, violations);
-  ({ activeWarnings } = updatedWarnStats);
+  ({ activeWarnings } = await getWarnStats(target.id, violations));
+
 
   const { label } = getNextPunishment(activeWarnings.length + currentWarnWeight);
 
@@ -51,7 +54,13 @@ export async function muteUser({
     return `${Math.ceil(ms / unitMap.min)} minute(s)`;
   };
   const durationStr = getDurationDisplay(durationMs);
-
+  function buildcommon(reason, currentWarnWeight, durationStr, activeWarnings = []) {
+    return [
+      { name: 'Reason:', value: `\`${reason}\`` },
+      { name: 'Punishments:', value: `\`${currentWarnWeight} warn, ${durationStr}\`` },
+      { name: 'Active Warnings:', value: `\`${activeWarnings.length}\``, inline: false },
+    ]
+  }
   // DM embed to user
   const dmEmbed = new EmbedBuilder()
     .setColor(0xffa500)
@@ -59,9 +68,7 @@ export async function muteUser({
     .setThumbnail(guild.iconURL())
     .setDescription(`${target}, you have been issued a \`${durationStr} mute\` in Salty's Cave.`)
     .addFields(
-      { name: 'Reason:', value: `\`${reason}\`` },
-      { name: 'Punishments:', value: `\`${currentWarnWeight} warn, ${durationStr}\`` },
-      { name: 'Active Warnings:', value: `\`${activeWarnings.length}\``, inline: false },
+      ...buildcommon(reason, currentWarnWeight, durationStr, activeWarnings),
       { name: 'Mute expires on:', value: formattedExpiry, inline: false },
     )
     .setTimestamp();
@@ -77,10 +84,8 @@ export async function muteUser({
     .addFields(
       { name: 'Target:', value: `${target}`, inline: true },
       { name: 'Channel:', value: `${channel}`, inline: true },
-      { name: 'Punishments:', value: `\`${currentWarnWeight} warn, ${durationStr}\`` },
-      { name: 'Reason:', value: `\`${reason}\``, inline: false },
+      ...buildcommon(reason, currentWarnWeight, durationStr, activeWarnings),
       { name: 'Next Punishment:', value: `\`${label}\``, inline: false },
-      { name: 'Active Warnings:', value: `\`${activeWarnings.length}\``, inline: false },
     )
     .setTimestamp();
 
