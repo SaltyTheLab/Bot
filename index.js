@@ -97,20 +97,22 @@ function registerListeners() {
 }
 
 async function cacheInteractiveMessages() {
-  for (const { channelId, messageId } of interactiveMessages) {
-    try {
-      const channel = await client.channels.fetch(channelId);
-      if (!channel?.isTextBased()) {
-        console.warn(`⚠️ Channel ${channelId} is not text-based, skipping.`);
-        continue;
-      }
+  await Promise.all(
+    interactiveMessages.map(async ({ channelId, messageId }) => {
+      try {
+        const channel = await client.channels.fetch(channelId);
+        if (!channel?.isTextBased()) {
+          console.warn(`⚠️ Channel ${channelId} is not text-based, skipping.`);
+          return;
+        }
 
-      const message = await channel.messages.fetch(messageId);
-      console.log(`✅ Cached message ${message.id} from channel ${channelId}`);
-    } catch (err) {
-      console.error(`❌ Failed to fetch message ${messageId} in channel ${channelId}`, err);
-    }
-  }
+        const message = await channel.messages.fetch(messageId);
+        console.log(`✅ Cached message ${message.id} from channel ${channelId}`);
+      } catch (err) {
+        console.error(`❌ Failed to fetch message ${messageId} in channel ${channelId}`, err);
+      }
+    })
+  );
 }
 
 // Main async entrypoint

@@ -1,36 +1,32 @@
 import { getActiveWarns } from '../Database/databasefunctions.js';
-import { violationWeights } from './violationWeights.js'; // Adjust path as needed
+import { violationWeights } from './violationWeights.js';
 
 /**
  * Calculate current and future weighted warnings for a user.
- *
  * @param {string} userId - The target user's ID.
- * @param {string|null} newViolationType - Type of the new violation to simulate (optional).
- * @returns {Promise<{ activeWarnings, weightedWarns, futureWeightedWarns, currentWarnWeight }>}
+ * @param {Array<string|{type: string}>} newViolationType - Violations to simulate.
+ * @returns {Promise<{ activeWarnings, currentWarnWeight }>}
  */
 export async function getWarnStats(userId, newViolationType = []) {
-    const activeWarnings = await getActiveWarns(userId);
+  const activeWarningsPromise = getActiveWarns(userId);
 
-    // Sum weights of existing active warnings
-    const weightedWarns = activeWarnings.reduce((acc, warn) => {
-        const weight = violationWeights[warn.type] || 1;
-        return Math.ceil(acc + weight);
-    }, 0);
-    
-    const currentWarnWeight = Array.isArray(newViolationType)
-        ? newViolationType.reduce((acc, v) => {
-            const type = typeof v === 'string' ? v : v?.type;
-            const weight = violationWeights[type] || 1;
-            return Math.ceil(acc + weight);
+  const currentWarnWeightPromise = Promise.resolve(
+    Array.isArray(newViolationType)
+      ? newViolationType.reduce((acc, v) => {
+          const type = typeof v === 'string' ? v : v?.type;
+          const weight = violationWeights[type] || 1;
+          return Math.ceil(acc + weight);
         }, 0)
-        : 0;
+      : 0
+  );
 
-    const futureWeightedWarns = weightedWarns + currentWarnWeight;
+  const [activeWarnings, currentWarnWeight] = await Promise.all([
+    activeWarningsPromise,
+    currentWarnWeightPromise
+  ]);
 
-    return {
-        activeWarnings,
-        weightedWarns,
-        futureWeightedWarns,
-        currentWarnWeight
-    };
+  return {
+    activeWarnings,
+    currentWarnWeight
+  };
 }
