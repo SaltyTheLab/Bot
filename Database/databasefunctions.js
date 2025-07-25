@@ -56,21 +56,21 @@ export function deleteNote(id ) {
 
 // ───── WARNS ─────
 
-export function addWarn(userId, moderatorId, reason, weight = 1, type = 'Warn') {
+export function addWarn(userId, moderatorId, reason, weight, channel) {
   return db.prepare(`
-    INSERT INTO punishments (userId, moderatorId, reason, timestamp, active, weight, type)
-    VALUES (?, ?, ?, ?, 1, ?, ?)
-  `).run(userId, moderatorId, reason, Date.now(), weight, type);
+    INSERT INTO punishments (userId, moderatorId, reason, timestamp, active, weight, type, channel)
+    VALUES (?, ?, ?, ?, 1, ?, ?, ?)
+  `).run(userId, moderatorId, reason, Date.now(), weight, 'Warn', channel);
 }
 
-export function getWarns(userId) {
+export async function  getPunishments(userId) {
   const rows = db.prepare(`
-    SELECT * FROM punishments WHERE userId = ? AND type = 'Warn' ORDER BY timestamp DESC
+    SELECT * FROM punishments WHERE userId = ? ORDER BY timestamp DESC
   `).all(userId);
   return Array.isArray(rows) ? rows : [];
 }
 
-export function getActiveWarns(userId) {
+export async function getActiveWarns(userId) {
   const rows = db.prepare(`
     SELECT * FROM punishments WHERE userId = ? AND active = 1 ORDER BY timestamp DESC
   `).all(userId);
@@ -79,17 +79,11 @@ export function getActiveWarns(userId) {
 
 // ───── MUTES ─────
 
-export function addMute(userId, moderatorId, reason, durationMs, weight = 1, type = 'Mute') {
+export function addMute(userId, moderatorId, reason, durationMs, weight, channel) {
   return db.prepare(`
-    INSERT INTO punishments (userId, moderatorId, reason, duration, timestamp, active, weight, type)
-    VALUES (?, ?, ?, ?, ?, 1, ?, ?)
-  `).run(userId, moderatorId, reason, durationMs, Date.now(), weight, type);
-}
-
-export function getMutes(userId) {
-  return db.prepare(`
-    SELECT * FROM punishments WHERE userId = ? AND type = 'Mute' ORDER BY timestamp DESC
-  `).all(userId);
+    INSERT INTO punishments (userId, moderatorId, reason, duration, timestamp, active, weight, type, channel)
+    VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)
+  `).run(userId, moderatorId, reason, durationMs, Date.now(), weight, 'Mute', channel);
 }
 
 //───── Admin ─────

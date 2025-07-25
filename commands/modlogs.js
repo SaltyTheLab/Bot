@@ -7,7 +7,7 @@ import {
     PermissionsBitField
 } from 'discord.js';
 
-import { getWarns, getMutes, deleteMute, deleteWarn } from '../Database/databasefunctions.js';
+import { deleteMute, deleteWarn, getActiveWarns, getPunishments } from '../Database/databasefunctions.js';
 import { logRecentCommand } from '../Logging/recentcommands.js';
 
 export const data = new SlashCommandBuilder()
@@ -22,32 +22,15 @@ export async function execute(interaction) {
     const modUser = interaction.user;
     const member = await interaction.guild.members.fetch(modUser.id)
     const isAdmin = await member.permissions.has(PermissionsBitField.Flags.Administrator);
+    const activeWarnings = await getActiveWarns(user.id)
+    const logs = await getPunishments(user.id);
+    let allLogs = logs.sort((a, b) => b.timestamp - a.timestamp);
+    const logColors = {
+        Warn: 0xffcc00,
+        Mute: 0xff4444
+    };
 
-    const [warns, mutes] = await Promise.all([getWarns(user.id), getMutes(user.id)]);
-    let allLogs = [
-        ...warns.map(log => ({ ...log, type: 'Warn' })),
-        ...mutes.map(log => ({ ...log, type: 'Mute' }))
-    ].sort((a, b) => b.timestamp - a.timestamp);
-
-    if (!allLogs.length) {
-        return interaction.reply({
-            embeds: [
-                new EmbedBuilder()
-                    .setColor(0xFFFF00)
-                    .setAuthor({ name: '⚠️ No modlogs found for that user.' })
-            ]
-        });
-    }
-
-    // Track warn count per log
-    let warnCount = 0;
-    allLogs = allLogs.map(log => {
-        if (log.type === 'Warn') warnCount++;
-        return { ...log, warnCountAtThisTime: warnCount };
-    });
-
-    let currentIndex = 0;
-
+    //embed and button functions
     const buildEmbed = async (index) => {
         const log = allLogs[index];
         const formattedDate = new Date(log.timestamp).toLocaleString('en-US', {
@@ -56,14 +39,15 @@ export async function execute(interaction) {
             timeZone: 'CST'
         });
 
-        return  new EmbedBuilder()
-            .setColor(log.type === 'Warn' ? 0xffcc00 : 0xff4444)
+        return new EmbedBuilder()
+            .setColor(logColors[log.type] ?? 0x888888)
             .setThumbnail(user.displayAvatarURL())
             .addFields(
-                { name: 'Member', value: `<@${user.id}>`, inline: false },
+                { name: 'Member', value: `<@${user.id}>`, inline: true },
                 { name: 'Type', value: `\`${log.type}\``, inline: true },
+                { name: 'channel', value: `<#${log.channel}>`, inline: false },
                 { name: 'Reason', value: `\`${log.reason || 'No reason provided'}\``, inline: false },
-                { name: 'Warns at warn', value: `\`${log.warnCountAtThisTime}\``, inline: false },
+                { name: 'Warns at warn', value: `\`${activeWarnings[index].weight}\``, inline: false },
                 ...(log.type === 'Mute'
                     ? [{ name: 'Duration', value: `\`${Math.round(log.duration / 60000)} minutes\``, inline: true }]
                     : []),
@@ -74,7 +58,6 @@ export async function execute(interaction) {
                 iconURL: modUser.displayAvatarURL({ dynamic: true })
             });
     };
-
     const buildButtons = (index) => {
         const buttons = [
             new ButtonBuilder()
@@ -97,9 +80,27 @@ export async function execute(interaction) {
                     .setStyle(ButtonStyle.Danger)
             );
         }
-
         return new ActionRowBuilder().addComponents(buttons);
     };
+
+    if (!allLogs.length) {
+        return interaction.reply({
+            embeds: [
+                new EmbedBuilder()
+                    .setColor(0xFFFF00)
+                    .setAuthor({ name: '⚠️ No modlogs found for that user.' })
+            ]
+        });
+    }
+
+    // Track warn count per log
+    let warnCount = 0;
+    allLogs = allLogs.map(log => {
+        if (log.type === 'Warn') warnCount++;
+        return { ...log, warnCountAtThisTime: warnCount };
+    });
+
+    let currentIndex = 0;
 
     // Send initial log embed
     await interaction.reply({
@@ -127,13 +128,10 @@ export async function execute(interaction) {
                 currentIndex--;
                 break;
             case 'dellog':
-                if (log.type === 'Warn') {
-                    deleteWarn(log.id);
-                    logRecentCommand(`Warn log deleted from ${user.tag} | Admin: ${modUser.tag}`);
-                } else if (log.type === 'Mute') {
-                    deleteMute(log.id);
-                    logRecentCommand(`Mute log deleted from ${user.tag} | Admin: ${modUser.tag}`);
-                }
+                const deleteFn = log.type === 'Warn' ? deleteWarn : deleteMute;
+                deleteFn(log.id);
+                logRecentCommand(`${log.type} log deleted from ${user.tag} | Admin: ${modUser.tag}`);
+
 
                 allLogs.splice(currentIndex, 1);
 

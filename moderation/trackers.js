@@ -1,4 +1,5 @@
 import { LRUCache } from 'lru-cache';
+import Denque from 'denque';
 import { hobbiescatagorey, mediacatagorey } from '../BotListeners/channelids.js';
 
 export const userMessageTrackers = new LRUCache({
@@ -7,60 +8,80 @@ export const userMessageTrackers = new LRUCache({
   updateAgeOnGet: true,
 });
 
-const GENERAL_SPAM_WINDOW = 8 * 1000; // 10 seconds
-const GENERAL_SPAM_THRESHOLD = 3;
-const DUPLICATE_SPAM_THRESHOLD = 2;
+const GENERAL_SPAM_WINDOW = 8 * 1000;
+const GENERAL_SPAM_THRESHOLD = 4;
+const DUPLICATE_SPAM_THRESHOLD = 3;
+
+
 
 export function updateTracker(userId, message) {
   const now = Date.now();
-  const exclusions = [
-    hobbiescatagorey,
-    mediacatagorey
-  ]
-  const tracker = userMessageTrackers.get(userId) || {
-    total: 0,
-    mediaCount: 0,
-    timestamps: [],
-    recentMessages: []
-  };
 
-  // Track total/media counts
+  const exclusions = [hobbiescatagorey, mediacatagorey];
+  const content = message.content;
+  const minLengthForCapsCheck = 10;
+  let isCapSpam = false;
+
+  let tracker = userMessageTrackers.get(userId);
+  if (!tracker) {
+    tracker = {
+      total: 0,
+      mediaCount: 0,
+      timestamps: new Denque([], { max: 10 }),
+      recentMessages: new Denque([], { max: 5 })
+    };
+  }
+
   tracker.total += 1;
-  if (hasMedia(message) && !exclusions.includes(message.channel.parentId)) {
+
+
+  if (content.length >= minLengthForCapsCheck) {
+    const lettersOnly = content.replace(/[^a-zA-Z]/g, '');
+    const upperCaseCount = (lettersOnly.match(/[A-Z]/g) || []).length
+    const upperRatio = lettersOnly.length > 0 ? upperCaseCount / lettersOnly.length : 0;
+    isCapSpam = upperRatio > .7;
+  }
+
+  const hasMediaContent = hasMedia(message);
+  if (hasMediaContent && !exclusions.includes(message.channel.parentId)) {
     tracker.mediaCount += 1;
   }
 
-  // Track message timestamps for spam
+  // Track timestamps for general spam
   tracker.timestamps.push(now);
-  tracker.timestamps = tracker.timestamps.filter(ts => now - ts <= GENERAL_SPAM_WINDOW);
+  while (tracker.timestamps.length && now - tracker.timestamps.peekFront() > GENERAL_SPAM_WINDOW) {
+    tracker.timestamps.shift();
+  }
 
-  // Track for duplicate messages
+  const wasGeneralSpam = tracker.timestamps.size() >= GENERAL_SPAM_THRESHOLD;
+
+  // Track recent message for duplicates
   tracker.recentMessages.push({ content: message.content, timestamp: now });
-  tracker.recentMessages = tracker.recentMessages.filter(msg => now - msg.timestamp <= GENERAL_SPAM_THRESHOLD);
-
-  // === Boolean flag logic ===
-  const duplicateCount = tracker.recentMessages.filter(msg => msg.content === message.content).length;
+  const recent = tracker.recentMessages.toArray().filter(msg => now - msg.timestamp <= GENERAL_SPAM_WINDOW);
+  const duplicateCount = recent.filter(msg => msg.content === message.content).length;
   const isDuplicateSpam = duplicateCount >= DUPLICATE_SPAM_THRESHOLD;
+  const wasDuplicateSpam = duplicateCount >= DUPLICATE_SPAM_THRESHOLD;
 
   const isMediaViolation = tracker.mediaCount > 1 && tracker.total <= 20;
 
-  const isGeneralSpam = tracker.timestamps.length >= GENERAL_SPAM_THRESHOLD;
-
-  // Reset counts every 20 messages
   if (tracker.total >= 20) {
     tracker.total = 0;
     tracker.mediaCount = 0;
-    tracker.timestamps = [];
+    tracker.timestamps.clear();
   }
 
-  if (tracker.recentMessages.length > GENERAL_SPAM_THRESHOLD && isDuplicateSpam)
-    tracker.recentMessages = [];
-
-  if (tracker.mediaCount > 1 && tracker.total <= 20)
-    tracker.mediaCount = 0;
+  if (tracker.recentMessages.size() > GENERAL_SPAM_THRESHOLD && isDuplicateSpam) {
+    tracker.recentMessages.clear();
+  }
 
   userMessageTrackers.set(userId, tracker);
-  return { isMediaViolation, isGeneralSpam, isDuplicateSpam };
+  return {
+    isMediaViolation,
+    isGeneralSpam: wasGeneralSpam,
+    isDuplicateSpam: wasDuplicateSpam,
+    isCapSpam,
+    triggeredByCurrentMessage: wasGeneralSpam || wasDuplicateSpam || isMediaViolation
+  };
 }
 
 function hasMedia(message) {

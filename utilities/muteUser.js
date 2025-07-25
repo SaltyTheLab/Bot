@@ -13,52 +13,54 @@ export async function muteUser({
   targetUser,
   moderatorUser,
   reason,
-  duration,
-  unit,
-  channel,
+  channelid,
   isAutomated = true,
   violations = [],
-  violationType = 'Mute',
+  duration,
+  unit,
 }) {
   // Fetch guild members safely
-  const target = await guild.members.fetch(targetUser).catch(() => null);
-  const issuer = await guild.members.fetch(moderatorUser).catch(() => null);
+  const [target, issuer, channel] = await Promise.all([
+    guild.members.fetch(targetUser).catch(() => null),
+    guild.members.fetch(moderatorUser).catch(() => null),
+    guild.channels.fetch(channelid),
+  ]);
   if (!target || !issuer) return '❌ Could not find target or issuer.';
 
   // Validate duration and unit
   const multiplier = unitMap[unit];
   if (!multiplier || duration <= 0) return '❌ Invalid duration or unit.';
-  console.log(duration);
   // Get warn stats for target user
   const warnStats = await getWarnStats(target.id, violations);
-  const { currentWarnWeight, activeWarnings, weightedWarns } = warnStats;
+  let { currentWarnWeight, activeWarnings } = warnStats;
 
   // Calculate mute duration in ms capped at max timeout
-  const durationMs = Math.min(duration * multiplier * weightedWarns, MAX_TIMEOUT_MS);
+  const durationMs = Math.min(duration * multiplier, MAX_TIMEOUT_MS);
   const expiresAt = new Date(Date.now() + durationMs);
   const formattedExpiry = `<t:${Math.floor(expiresAt.getTime() / 1000)}:F>`;
 
-  // Determine next punishment label for display
-  const { label } = getNextPunishment(activeWarnings.length, { next: true });
-
   // Save mute to database once
-  addMute(target.id, issuer.id, reason, durationMs, currentWarnWeight, violationType);
+  if (isAutomated)
+    addMute(target.id, issuer.id, reason, durationMs, currentWarnWeight, channel.id);
 
-  // Helper for human-friendly duration display
-  function getDurationDisplay(ms) {
-    if (ms >= unitMap.day) {
-      const days = Math.ceil(ms / unitMap.day);
-      return `${days} day${days !== 1 ? 's' : ''}`;
-    }
-    if (ms >= unitMap.hour) {
-      const hours = Math.ceil(ms / unitMap.hour);
-      return `${hours} hour${hours !== 1 ? 's' : ''}`;
-    }
-    const minutes = Math.ceil(ms / unitMap.min);
-    return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
-  }
+  ({ activeWarnings } = await getWarnStats(target.id, violations));
+
+
+  const { label } = getNextPunishment(activeWarnings.length + currentWarnWeight);
+
+  const getDurationDisplay = ms => {
+    if (ms >= unitMap.day) return `${Math.ceil(ms / unitMap.day)} day(s)`;
+    if (ms >= unitMap.hour) return `${Math.ceil(ms / unitMap.hour)} hour(s)`;
+    return `${Math.ceil(ms / unitMap.min)} minute(s)`;
+  };
   const durationStr = getDurationDisplay(durationMs);
-
+  function buildcommon(reason, currentWarnWeight, durationStr, activeWarnings = []) {
+    return [
+      { name: 'Reason:', value: `\`${reason}\`` },
+      { name: 'Punishments:', value: `\`${currentWarnWeight} warn, ${durationStr}\`` },
+      { name: 'Active Warnings:', value: `\`${activeWarnings.length}\``, inline: false },
+    ]
+  }
   // DM embed to user
   const dmEmbed = new EmbedBuilder()
     .setColor(0xffa500)
@@ -66,10 +68,7 @@ export async function muteUser({
     .setThumbnail(guild.iconURL())
     .setDescription(`${target}, you have been issued a \`${durationStr} mute\` in Salty's Cave.`)
     .addFields(
-      { name: 'Reason:', value: `\`${reason}\`` },
-      { name: 'Punishments:', value: `\`${currentWarnWeight} warn, ${durationStr}\`` },
-      { name: 'Next Punishment:', value: `\`${label}\``, inline: false },
-      { name: 'Active Warnings:', value: `\`${activeWarnings.length}\``, inline: false },
+      ...buildcommon(reason, currentWarnWeight, durationStr, activeWarnings),
       { name: 'Mute expires on:', value: formattedExpiry, inline: false },
     )
     .setTimestamp();
@@ -85,20 +84,10 @@ export async function muteUser({
     .addFields(
       { name: 'Target:', value: `${target}`, inline: true },
       { name: 'Channel:', value: `${channel}`, inline: true },
-      { name: 'Punishments:', value: `\`${currentWarnWeight} warn, ${durationStr}\`` },
-      { name: 'Reason:', value: `\`${reason}\``, inline: false },
+      ...buildcommon(reason, currentWarnWeight, durationStr, activeWarnings),
       { name: 'Next Punishment:', value: `\`${label}\``, inline: false },
-      { name: 'Active Warnings:', value: `\`${activeWarnings.length}\``, inline: false },
     )
     .setTimestamp();
-
-  // Attempt to timeout user
-  try {
-    await target.timeout(durationMs, reason);
-  } catch (err) {
-    console.log(`Failed to mute user ${target.user.tag}:`, err.message);
-    // Owners or admins might not be mutable
-  }
 
   // Attempt to DM user
   try {
@@ -106,6 +95,14 @@ export async function muteUser({
     logEmbed.setFooter({ text: 'User was DMed.' });
   } catch {
     logEmbed.setFooter({ text: 'User could not be DMed.' });
+  }
+
+  // Attempt to timeout user
+  try {
+    await target.timeout(durationMs, reason);
+  } catch (err) {
+    console.log(`Failed to mute user ${target.user.tag}:`, err.message);
+    // Owners or admins might not be mutable
   }
 
   // Send log to mute log channel

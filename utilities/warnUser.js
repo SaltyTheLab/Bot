@@ -11,14 +11,17 @@ export async function warnUser({
   targetUser,
   moderatorUser,
   reason,
-  channel,
+  channelid,
   isAutomated = true,
-  violations = [],
-  violationType = 'Warn'
+  violations = []
 }) {
   // Fetch members safely, accept either ID or User object
-  const target = await guild.members.fetch(targetUser.id || targetUser).catch(() => null);
-  const issuer = await guild.members.fetch(moderatorUser.id || moderatorUser).catch(() => null);
+  const [target, issuer, channel] = await Promise.all([
+    guild.members.fetch(targetUser.id || targetUser).catch(() => null),
+    guild.members.fetch(moderatorUser.id || moderatorUser).catch(() => null),
+    guild.channels.fetch(channelid)
+  ]);
+
   if (!target || !issuer) return '❌ Could not find the user(s) in this guild.';
 
   // Calculate warn expiry time (for display)
@@ -29,7 +32,7 @@ export async function warnUser({
   const { currentWarnWeight } = await getWarnStats(target.id, violations);
 
   // Add the new warning to the DB
-   addWarn(target.id, issuer.id, reason, currentWarnWeight, violationType);
+  addWarn(target.id, issuer.id, reason, currentWarnWeight, channelid);
 
   // Fetch updated active warnings for the user
   const { activeWarnings } = await getWarnStats(target.id);
@@ -37,6 +40,14 @@ export async function warnUser({
   // Get label for the next punishment stage
   const { label } = getNextPunishment(activeWarnings.length);
 
+  function buildcommon(reason, currentWarnWeight, label, activeWarnings = []) {
+    return [
+      { name: 'Reason:', value: `\`${reason}\``, inline: false },
+      { name: 'Punishments:', value: `\`${currentWarnWeight} warn\``, inline: false },
+      { name: 'Next Punishment:', value: `\`${label}\``, inline: false },
+      { name: 'Active Warnings:', value: `\`${Array.isArray(activeWarnings) ? activeWarnings.length : 0}\``, inline: false },
+    ]
+  }
   // Build DM embed to notify the user
   const dmEmbed = new EmbedBuilder()
     .setColor(0xffff00)
@@ -46,11 +57,8 @@ export async function warnUser({
     })
     .setThumbnail(guild.iconURL())
     .setDescription(`<@${target.id}>, you were given a \`warning\` in Salty's Cave.`)
-    .addFields(
-      { name: 'Reason:', value: `\`${reason}\``, inline: false },
-      { name: 'Punishments:', value: `\`${currentWarnWeight} warn\``, inline: false },
-      { name: 'Next Punishment:', value: `\`${label}\``, inline: false },
-      { name: 'Active Warnings:', value: `\`${Array.isArray(activeWarnings) ? activeWarnings.length : 0}\``, inline: false },
+    .setFields(
+      ...buildcommon(reason, currentWarnWeight, label, activeWarnings),
       { name: 'Warn expires on:', value: formattedExpiry, inline: false },
     )
     .setTimestamp();
@@ -71,13 +79,10 @@ export async function warnUser({
       iconURL: issuer.displayAvatarURL({ dynamic: true }),
     })
     .setThumbnail(target.displayAvatarURL())
-    .addFields(
+    .setFields(
       { name: 'Target:', value: `${target}`, inline: true },
-      { name: 'Channel:', value: `${channel}`, inline: true },
-      { name: 'Reason:', value: `\`${reason}\``, inline: false },
-      { name: 'Punishments:', value: `\`${currentWarnWeight} warn\``, inline: false },
-      { name: 'Next Punishment:', value: `\`${label}\``, inline: false },
-      { name: 'Active Warnings:', value: `\`${Array.isArray(activeWarnings) ? activeWarnings.length : 0}\``, inline: false },
+      { name: 'Channel:', value: `<#${channelid}>`, inline: true },
+      ...buildcommon(reason, currentWarnWeight, label, activeWarnings)
     )
     .setTimestamp();
 
