@@ -5,7 +5,6 @@ export const db = new Database('./Database/database.sqlite', {
   fileMustExist: true,
 });
 
-db.pragma('journal_mode = WAL');
 
 // Initialize tables
 // Define schema
