@@ -4,5 +4,6 @@ export const violationWeights = {
   everyonePing: 2,
   spam: 1,
   mediaViolation: 1,
+  CapSpam: 1,
   isNewUser: .9
 };
