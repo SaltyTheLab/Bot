@@ -1,10 +1,11 @@
 import { EmbedBuilder } from 'discord.js';
 import { addWarn } from '../Database/databasefunctions.js';
 import { mutelogChannelid } from '../BotListeners/channelids.js'; // Log channel for warnings
-import { THRESHOLD } from '../moderation/constants.js';
 import { getWarnStats } from '../moderation/simulatedwarn.js';
 import { getNextPunishment } from '../moderation/punishments.js';
 import { logRecentCommand } from '../Logging/recentcommands.js';
+
+const THRESHOLD = 24 * 60 * 60 * 1000; // 24h
 
 export async function warnUser({
   guild,

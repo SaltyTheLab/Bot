@@ -13,19 +13,6 @@ import { messageReactionAdd, messageReactionRemove } from './BotListeners/reacti
 import { embedsenders } from './embeds/embeds.js';
 import { getrolesid } from './BotListeners/channelids.js';
 
-import koffi from 'koffi';
-
-const kernel32 = koffi.load('kernel32.dll');
-const SetThreadExecutionState = kernel32.func(
-  'SetThreadExecutionState', 'uint', ['uint']
-);
-
-const ES_CONTINUOUS = 0x80000000;
-const ES_SYSTEM_REQUIRED = 0x00000001;
-const ES_DISPLAY_REQUIRED = 0x00000002;
-
-SetThreadExecutionState(ES_CONTINUOUS);
-console.log('✅ continous mode activated');
 
 
 // Setup dotenv
@@ -127,6 +114,8 @@ async function cacheInteractiveMessages() {
     })
   );
 }
+
+
 
 // Main async entrypoint
 async function main() {

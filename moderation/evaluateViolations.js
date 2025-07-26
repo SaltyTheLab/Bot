@@ -1,4 +1,3 @@
-import { violationWeights } from './violationWeights.js';
 
 export async function evaluateViolations({ hasInvite, matchedWord, everyonePing, isGeneralSpam, isDuplicateSpam, isMediaViolation, isNewUser, isCapSpam }) {
   const checks = [
