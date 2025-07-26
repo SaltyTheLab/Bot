@@ -1,0 +1,26 @@
+[
+  {
+    "brand": "Apple",
+    "image": "Database\\images\\Apple.png"
+  },
+  {
+    "brand": "Nike",
+    "image": "Database\\images\\nike.png"
+  },
+  {
+    "brand": "Instagram",
+    "image": "Database\\images\\instagram.png"
+  },
+  {
+    "brand": "Microsoft",
+    "image": "Database\\images\\microsoft.png"
+  },
+  {
+    "brand": "Spotify",
+    "image": "Database\\images\\spotify-download-logo-30.png"
+  },
+  {
+    "brand": "Starbucks",
+    "image": "Database\\images\\starbucks.png"
+  }
+]
