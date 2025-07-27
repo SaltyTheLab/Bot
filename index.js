@@ -1,19 +1,10 @@
-import fs from 'node:fs';
 import path from 'node:path';
+import { Worker } from 'node:worker_threads';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { Client, GatewayIntentBits, Collection } from 'discord.js';
 import { config } from 'dotenv';
-import { GuildMemberAdd } from './BotListeners/guildMemberAdd.js';
-import { GuildMemberRemove } from './BotListeners/guildMemberRemove.js';
-import { GuildMemberUpdate } from './BotListeners/guildMemberUpdate.js';
-import { messageUpdate } from './BotListeners/messageUpdate.js';
-import { onMessageCreate } from './BotListeners/messageCreate.js';
-import { messageDelete } from './BotListeners/messageDelete.js';
-import { messageReactionAdd, messageReactionRemove } from './BotListeners/reactionRoles.js';
 import { embedsenders } from './embeds/embeds.js';
-import { getrolesid } from './BotListeners/channelids.js';
-
-
+import { getrolesid } from './BotListeners/Extravariables/channelids.js';
 
 // Setup dotenv
 config();
@@ -46,54 +37,99 @@ export const client = new Client({
 client.commands = new Collection();
 
 // Load commands dynamically
-async function loadCommands() {
-  const commandsPath = path.join(__dirname, 'commands');
-  const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+async function loadCommandsWithWorker() {
+  return new Promise((resolve, reject) => {
+    const commandsPath = path.join(__dirname, 'commands');
+    const worker = new Worker('./utilities/worker.js', { type: 'module' });
 
-  for (const file of commandFiles) {
-    try {
-      const filePath = path.join(commandsPath, file);
-      const command = await import(pathToFileURL(filePath).href);
+    worker.postMessage(commandsPath);
 
-      if (command?.data?.name && typeof command.execute === 'function') {
-        client.commands.set(command.data.name, command);
+    worker.on('message', async (msg) => {
+      if (msg.success) {
+        try {
+          for (const filePath of msg.data) {
+            const command = await import(pathToFileURL(filePath).href);
+            if (command?.data?.name && typeof command.execute === 'function') {
+              client.commands.set(command.data.name, command);
+            } else {
+              console.warn(`[WARN] Invalid command file: ${filePath}`);
+            }
+          }
+          resolve();
+        } catch (err) {
+          reject(err);
+        }
       } else {
-        console.warn(`[WARN] Skipping invalid command module: ${file}`);
+        reject(new Error(msg.error));
       }
-    } catch (err) {
-      console.error(`[ERROR] Failed to load command: ${file}`, err);
-    }
-  }
+    });
+
+    worker.on('error', reject);
+    worker.on('exit', (code) => {
+      if (code !== 0) reject(new Error(`Worker stopped with exit code ${code}`));
+    });
+  });
 }
 
-// Register Commands 
-function registerListeners() {
-  client.on('interactionCreate', async interaction => {
-    if (!interaction.isChatInputCommand()) return;
+// Register Commands and listeners
+async function loadListenersWithWorker() {
+  return new Promise((resolve, reject) => {
+    const listenersPath = path.join(__dirname, 'BotListeners');
+    const worker = new Worker('./utilities/worker.js', { type: 'module' });
 
-    const command = client.commands.get(interaction.commandName);
-    if (!command) return;
+    worker.postMessage(listenersPath);
 
-    try {
-      await command.execute(interaction);
-    } catch (error) {
-      console.error(`[COMMAND ERROR] ${interaction.commandName}`, error);
-      if (!interaction.replied) {
-        await interaction.reply({ content: '❌ Something went wrong executing that command.', ephemeral: true });
+    worker.on('message', async (msg) => {
+      if (msg.success) {
+        try {
+          for (const filePath of msg.data) {
+            let listenerModule;
+            try {
+              listenerModule = await import(pathToFileURL(filePath).href);
+            } catch (err) {
+              console.warn(`[WARN] Failed to import ${filePath}:`, err);
+              continue;
+            }
+
+            if (!listenerModule || typeof listenerModule !== 'object') {
+              console.warn(`[WARN] Skipping invalid listener module: ${filePath}`);
+              continue;
+            }
+
+            const eventsNeedingClient = new Set([
+              'guildMemberAdd',
+              'guildMemberRemove',
+              'messageCreate'
+            ]);
+
+            for (const [eventName, listenerFunc] of Object.entries(listenerModule)) {
+              if (typeof listenerFunc !== 'function') {
+                console.warn(`[WARN] Export "${eventName}" in ${filePath} is not a function`);
+                continue;
+              }
+
+              if (eventsNeedingClient.has(eventName)) 
+                client.on(eventName, (...args) =>  listenerFunc(client, ...args));
+               else 
+                client.on(eventName, (...args) =>  listenerFunc(...args));
+
+              console.log(`✅ Registered listener for event: ${eventName}`);
+            }
+          }
+          resolve();
+        } catch (err) {
+          reject(err);
+        }
       } else {
-        await interaction.followUp({ content: '❌ An error occurred.', ephemeral: true });
+        reject(new Error(msg.error));
       }
-    }
-  });
+    });
 
-  client.on('messageCreate', (message) => onMessageCreate(client, message));
-  client.on('messageDelete', messageDelete);
-  client.on('guildMemberAdd', GuildMemberAdd);
-  client.on('guildMemberRemove', GuildMemberRemove);
-  client.on('guildMemberUpdate', GuildMemberUpdate);
-  client.on('messageUpdate', messageUpdate);
-  client.on('messageReactionAdd', messageReactionAdd);
-  client.on('messageReactionRemove', messageReactionRemove);
+    worker.on('error', reject);
+    worker.on('exit', (code) => {
+      if (code !== 0) reject(new Error(`Worker stopped with exit code ${code}`));
+    });
+  });
 }
 
 async function cacheInteractiveMessages() {
@@ -119,8 +155,8 @@ async function cacheInteractiveMessages() {
 
 // Main async entrypoint
 async function main() {
-  await loadCommands();
-  registerListeners();
+  await loadCommandsWithWorker();
+  await loadListenersWithWorker();
 
   client.once('ready', async () => {
     await cacheInteractiveMessages();
@@ -133,3 +169,4 @@ async function main() {
 }
 
 main().catch(console.error);
+
