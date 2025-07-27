@@ -1,6 +1,6 @@
 import { LRUCache } from 'lru-cache';
 import Denque from 'denque';
-import { hobbiescatagorey, mediacatagorey } from '../BotListeners/channelids.js';
+import { hobbiescatagorey, mediacatagorey } from '../BotListeners/Extravariables/channelids.js';
 
 export const userMessageTrackers = new LRUCache({
   max: 500,
@@ -80,7 +80,7 @@ export function updateTracker(userId, message) {
     isGeneralSpam: wasGeneralSpam,
     isDuplicateSpam: wasDuplicateSpam,
     isCapSpam,
-    triggeredByCurrentMessage: wasGeneralSpam || wasDuplicateSpam || isMediaViolation
+    triggeredByCurrentMessage: wasGeneralSpam || wasDuplicateSpam || isMediaViolation || isCapSpam
   };
 }
 
