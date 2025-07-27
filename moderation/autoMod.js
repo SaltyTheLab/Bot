@@ -1,5 +1,3 @@
-// AutoMod.js
-
 import { muteUser } from '../utilities/muteUser.js';
 import { warnUser } from '../utilities/warnUser.js';
 import { getNextPunishment } from './punishments.js';
@@ -20,7 +18,7 @@ const forbiddenWords = new Set(
 
 const inviteRegex = /(https?:\/\/)?(www\.)?(discord\.gg|discord(app)?\.com\/invite)\/[a-zA-Z0-9-]+/i;
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
-export async function AutoMod(message, client) {
+export async function AutoMod(client, message) {
   const { author, content, member, guild, channel } = message;
   const userId = author.id;
 
@@ -42,10 +40,6 @@ export async function AutoMod(message, client) {
     violationFlags.isMediaViolation || violationFlags.isGeneralSpam || violationFlags.isDuplicateSpam
     || violationFlags.isCapSpam;
   if (!hasViolation) return;
-
-  if (violationFlags.isGeneralSpam && violationFlags.isDuplicateSpam) {
-    violationFlags.isDuplicateSpam = false;
-  }
 
   const shouldDelete = matchedWord || hasInvite || everyonePing || violationFlags.triggeredByCurrentMessage
   const [evaluationResult] = await Promise.all([
