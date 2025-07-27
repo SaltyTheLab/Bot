@@ -14,13 +14,13 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
     const user = interaction.options.getUser('target')
 
-    await clearmodlogs(user.id);
+     clearmodlogs(user.id);
     const reset = new EmbedBuilder()
         .setDescription(
             `moderation tables for ${user} have been cleared`
         )
         .setColor(0xff0000)
-    interaction.reply({
+   await interaction.reply({
         embeds: [reset]
     })
     logRecentCommand(`clearmodlogs - ${user.tag}  Admin: ${interaction.user.tag}`);
