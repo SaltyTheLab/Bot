@@ -41,6 +41,10 @@ export async function AutoMod(client, message) {
     || violationFlags.isCapSpam;
   if (!hasViolation) return;
 
+  if (violationFlags.isGeneralSpam && violationFlags.isDuplicateSpam) {
+    violationFlags.isDuplicateSpam = false;
+  }
+
   const shouldDelete = matchedWord || hasInvite || everyonePing || violationFlags.triggeredByCurrentMessage
   const [evaluationResult] = await Promise.all([
     evaluateViolations({ matchedWord, hasInvite, everyonePing, ...violationFlags, isNewUser }),
