@@ -1,6 +1,6 @@
 import { EmbedBuilder } from "discord.js";
-import { welcomeChannelId, generalChannelid, mutelogChannelid } from "./channelids.js";
-export async function GuildMemberAdd(member) {
+import { welcomeChannelId, generalChannelid, mutelogChannelid } from "./Extravariables/channelids.js";
+export async function guildMemberAdd(member) {
     const welcomeChannel = member.guild.channels.cache.get(welcomeChannelId);
     const generalChannel = member.guild.channels.cache.get(generalChannelid);
     const mutechannel = member.guild.channels.cache.get(mutelogChannelid);

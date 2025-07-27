@@ -1,5 +1,5 @@
 import { EmbedBuilder } from "discord.js";
-import { deletedLogsId } from "./channelids.js";
+import { deletedLogsId } from "./Extravariables/channelids.js";
 export async function messageDelete(message) {
     if (!message.guild || message.partial || !message.author || message.author.bot) return;
 

@@ -1,9 +1,8 @@
 import { EmbedBuilder } from "discord.js";
-import { nameLogChannelId } from "./channelids.js";
-export async function GuildMemberUpdate(oldMember, newMember) {
+import { nameLogChannelId } from "./Extravariables/channelids.js";
+export async function guildMemberUpdate(oldMember, newMember) {
     if (oldMember.nickname === newMember.nickname) return;
-
-    const logChannel = newMember.guild.channels.cache.get(nameLogChannelId);
+        const logChannel = newMember.guild.channels.cache.get(nameLogChannelId);
     if (!logChannel) {
         console.warn('⚠️ Name log channel not found.');
         return;

@@ -9,7 +9,8 @@ const keywords = {
   ping: 'pong!'
 };
 
-export async function onMessageCreate(client, message) {
+export async function messageCreate(client, message) {
+  console.log("test");
   if (message.author.bot || !message.guild || !message.member) return;
   const userId = message.author.id;
   const guildId = message.guild.id;
@@ -20,7 +21,7 @@ export async function onMessageCreate(client, message) {
 
   if (keywords[lowerContent]) return message.reply(keywords[lowerContent]);
 
-  await AutoMod(message, client);
+  await AutoMod(client, message);
 
 }
 

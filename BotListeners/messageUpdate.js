@@ -1,5 +1,5 @@
 import { EmbedBuilder } from "discord.js";
-import { updatedMessagesChannelId } from "./channelids.js";
+import { updatedMessagesChannelId } from "./Extravariables/channelids.js";
 export async function messageUpdate(oldMessage, newMessage) {
     if (!oldMessage.guild || oldMessage.author?.bot || oldMessage.content === newMessage.content) return;
 

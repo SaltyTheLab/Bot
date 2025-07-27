@@ -1,8 +1,8 @@
 import { EmbedBuilder, AuditLogEvent } from "discord.js";
-import { welcomeChannelId } from "./channelids.js";
-import { banlogChannelid } from "./channelids.js";
+import { welcomeChannelId } from "./Extravariables/channelids.js";
+import { banlogChannelid } from "./Extravariables/channelids.js";
 
-export async function GuildMemberRemove(member) {
+export async function guildMemberRemove(member) {
     const welcomeChannel = member.guild.channels.cache.get(welcomeChannelId);
     const banlogChannel = member.guild.channels.cache.get(banlogChannelid);
     if (!welcomeChannel) {
