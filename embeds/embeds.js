@@ -1,5 +1,5 @@
 import { EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle } from 'discord.js';
-import { ruleschannelid, mentalhealthid, ticketappealsid, staffguidesid, getrolesid } from '../BotListeners/channelids.js';
+import { ruleschannelid, mentalhealthid, ticketappealsid, staffguidesid, getrolesid } from '../BotListeners/Extravariables/channelids.js';
 import { loadMessageIDs, saveMessageIDs } from '../utilities/messageStorage.js';
 export let rolemessageid = '';
 export async function embedsenders(guild) {
