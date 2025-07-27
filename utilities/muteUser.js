@@ -1,7 +1,7 @@
 import { EmbedBuilder } from 'discord.js';
 import { getNextPunishment } from '../moderation/punishments.js';
 import { addMute } from '../Database/databasefunctions.js';
-import { mutelogChannelid } from '../BotListeners/channelids.js';
+import { mutelogChannelid } from '../BotListeners/Extravariables/channelids.js';
 import { getWarnStats } from '../moderation/simulatedwarn.js';
 import { logRecentCommand } from '../Logging/recentcommands.js';
 

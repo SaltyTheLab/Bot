@@ -1,5 +1,5 @@
 import { EmbedBuilder } from 'discord.js';
-import { banlogChannelid } from '../BotListeners/channelids.js'; // Your mod-log channel ID
+import { banlogChannelid } from '../BotListeners/Extravariables/channelids.js'; // Your mod-log channel ID
 
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000; // 2 days in ms
 

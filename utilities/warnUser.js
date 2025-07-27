@@ -1,6 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import { addWarn } from '../Database/databasefunctions.js';
-import { mutelogChannelid } from '../BotListeners/channelids.js'; // Log channel for warnings
+import { mutelogChannelid } from '../BotListeners/Extravariables/channelids.js'; // Log channel for warnings
 import { getWarnStats } from '../moderation/simulatedwarn.js';
 import { getNextPunishment } from '../moderation/punishments.js';
 import { logRecentCommand } from '../Logging/recentcommands.js';
