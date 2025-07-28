@@ -1,5 +1,5 @@
 import { EmbedBuilder } from 'discord.js';
-import { addWarn } from '../Database/databasefunctions.js';
+import { addWarn, getUser } from '../Database/databasefunctions.js';
 import { mutelogChannelid } from '../BotListeners/Extravariables/channelids.js'; // Log channel for warnings
 import { getWarnStats } from '../moderation/simulatedwarn.js';
 import { getNextPunishment } from '../moderation/punishments.js';
@@ -16,50 +16,69 @@ export async function warnUser({
   isAutomated = true,
   violations = []
 }) {
-  // Fetch members safely, accept either ID or User object
-  const [target, issuer, channel] = await Promise.all([
+  // --- 1. Fetching Members and Channels ---
+  // Use Promise.all to fetch target, issuer, and channel concurrently.
+  // Directly fetch by ID if targetUser/moderatorUser are objects, access their ID.
+  const [targetMember, moderatorMember, currentChannel] = await Promise.all([
     guild.members.fetch(targetUser.id || targetUser).catch(() => null),
     guild.members.fetch(moderatorUser.id || moderatorUser).catch(() => null),
-    guild.channels.fetch(channelid)
+    guild.channels.fetch(channelid).catch(() => null) // Add catch for channel fetch too
   ]);
 
-  if (!target || !issuer) return '❌ Could not find the user(s) in this guild.';
+  // Check if target or moderator were found
+  if (!targetMember || !moderatorMember) {
+    console.error(`[WarnUser] Target (${targetUser.id || targetUser}) or Moderator (${moderatorUser.id || moderatorUser}) not found in guild ${guild.id}.`);
+    // Consider returning a more descriptive error or throwing if this is a critical failure.
+    // For now, adhering to existing return type:
+    return '❌ Could not find the user(s) in this guild.';
+  }
 
-  // Calculate warn expiry time (for display)
+  // --- 2. Database Operations (getUser, getWarnStats, addWarn) ---
+ 
+  // Get current warn weight *before* adding the new warn.
+  // This is crucial because `addWarn` relies on `currentWarnWeight` for the payload.
+  // Then, after `addWarn`, fetch `activeWarnings`.
+  const { currentWarnWeight } = await getWarnStats(targetMember.id, violations);
+
+  // Add the new warning to the DB.
+  // This is a write operation and should happen before recalculating active warnings.
+  addWarn(targetMember.id, moderatorMember.id, reason, currentWarnWeight, channelid);
+
+  // Fetch updated active warnings for the user after the new warn has been added.
+  const { activeWarnings } = await getWarnStats(targetMember.id); // No `violations` needed here, just getting active ones.
+
+  // Get label for the next punishment stage based on the *total* active warnings.
+  const { label } = getNextPunishment(activeWarnings.length);
+
+
+  // --- 3. Calculating Expiry Time ---
+  // This is fine as is.
   const expiresAt = new Date(Date.now() + THRESHOLD);
   const formattedExpiry = `<t:${Math.floor(expiresAt.getTime() / 1000)}:F>`;
 
-  // Get current warn weight considering new violations
-  const { currentWarnWeight } = await getWarnStats(target.id, violations);
+  // --- 4. Embed Building ---
+  // The `buildcommon` function is good for reusability.
+  // No changes here for efficiency, but consistent naming (`targetMember`, `moderatorMember`)
+  // improves clarity.
 
-  // Add the new warning to the DB
-  addWarn(target.id, issuer.id, reason, currentWarnWeight, channelid);
+  const commonFields = (warnReason, warnWeight, nextPunishmentLabel, activeWarnsCount) => [
+    { name: 'Reason:', value: `\`${warnReason}\``, inline: false },
+    { name: 'Punishments:', value: `\`${warnWeight} warn\``, inline: false },
+    { name: 'Next Punishment:', value: `\`${nextPunishmentLabel}\``, inline: false },
+    { name: 'Active Warnings:', value: `\`${activeWarnsCount}\``, inline: false },
+  ];
 
-  // Fetch updated active warnings for the user
-  const { activeWarnings } = await getWarnStats(target.id);
-
-  // Get label for the next punishment stage
-  const { label } = getNextPunishment(activeWarnings.length);
-
-  function buildcommon(reason, currentWarnWeight, label, activeWarnings = []) {
-    return [
-      { name: 'Reason:', value: `\`${reason}\``, inline: false },
-      { name: 'Punishments:', value: `\`${currentWarnWeight} warn\``, inline: false },
-      { name: 'Next Punishment:', value: `\`${label}\``, inline: false },
-      { name: 'Active Warnings:', value: `\`${Array.isArray(activeWarnings) ? activeWarnings.length : 0}\``, inline: false },
-    ]
-  }
   // Build DM embed to notify the user
   const dmEmbed = new EmbedBuilder()
     .setColor(0xffff00)
     .setAuthor({
-      name: `${target.user.tag} was issued a warning`,
-      iconURL: target.displayAvatarURL({ dynamic: true }),
+      name: `${targetMember.user.tag} was issued a warning`,
+      iconURL: targetMember.displayAvatarURL({ dynamic: true }),
     })
     .setThumbnail(guild.iconURL())
-    .setDescription(`<@${target.id}>, you were given a \`warning\` in Salty's Cave.`)
-    .setFields(
-      ...buildcommon(reason, currentWarnWeight, label, activeWarnings),
+    .setDescription(`<@${targetMember.id}>, you were given a \`warning\` in Salty's Cave.`)
+    .addFields( // Use addFields consistently
+      ...commonFields(reason, currentWarnWeight, label, activeWarnings.length),
       { name: 'Warn expires on:', value: formattedExpiry, inline: false },
     )
     .setTimestamp();
@@ -68,43 +87,59 @@ export async function warnUser({
   const commandEmbed = new EmbedBuilder()
     .setColor(0xffff00)
     .setAuthor({
-      name: `${target.user.tag} was issued a warning`,
-      iconURL: target.displayAvatarURL({ dynamic: true }),
+      name: `${targetMember.user.tag} was issued a warning`,
+      iconURL: targetMember.displayAvatarURL({ dynamic: true }),
     });
 
   // Embed for moderation log channel
   const logEmbed = new EmbedBuilder()
     .setColor(0xffff00)
     .setAuthor({
-      name: `${issuer.user.tag} warned a member`,
-      iconURL: issuer.displayAvatarURL({ dynamic: true }),
+      name: `${moderatorMember.user.tag} warned a member`,
+      iconURL: moderatorMember.displayAvatarURL({ dynamic: true }),
     })
-    .setThumbnail(target.displayAvatarURL())
-    .setFields(
-      { name: 'Target:', value: `${target}`, inline: true },
+    .setThumbnail(targetMember.displayAvatarURL({ dynamic: true })) // Use dynamic for animated avatars
+    .addFields( // Use addFields consistently
+      { name: 'Target:', value: `${targetMember}`, inline: true },
       { name: 'Channel:', value: `<#${channelid}>`, inline: true },
-      ...buildcommon(reason, currentWarnWeight, label, activeWarnings)
+      ...commonFields(reason, currentWarnWeight, label, activeWarnings.length)
     )
     .setTimestamp();
 
-  // Try DMing the user about their warning
+  // --- 5. DMing User & Logging ---
   try {
-    await target.send({ embeds: [dmEmbed] });
+    await targetMember.send({ embeds: [dmEmbed] });
     logEmbed.setFooter({ text: 'User was DMed.' });
-  } catch {
+  } catch (dmError) {
+    console.warn(`[WarnUser] Could not DM user ${targetMember.user.tag}: ${dmError.message}`);
     logEmbed.setFooter({ text: 'User could not be DMed.' });
   }
 
-  // Send log embed to the warning log channel, if it exists
   const logChannel = guild.channels.cache.get(mutelogChannelid);
-  if (logChannel) await logChannel.send({ embeds: [logEmbed] });
+  if (logChannel) {
+    try {
+      await logChannel.send({ embeds: [logEmbed] });
+    } catch (logSendError) {
+      console.error(`[WarnUser] Failed to send warn log to channel ${mutelogChannelid}: ${logSendError.message}`);
+    }
+  } else {
+    console.warn(`[WarnUser] Mute log channel with ID ${mutelogChannelid} not found.`);
+  }
 
-  // Log this command usage for audit
-  logRecentCommand(`warn - ${target.user.tag} - ${reason} - issuer: ${issuer.user.tag}`);
+  // --- 6. Logging Command and Sending Confirmation ---
+  logRecentCommand(`warn - ${targetMember.user.tag} - ${reason} - issuer: ${moderatorMember.user.tag}`);
 
   // Send confirmation embed if automated, else return the embed for manual use
   if (isAutomated) {
-    await channel.send({ embeds: [commandEmbed] });
+    if (currentChannel) { // Only send if the channel was successfully fetched
+      try {
+        await currentChannel.send({ embeds: [commandEmbed] });
+      } catch (sendError) {
+        console.error(`[WarnUser] Failed to send command confirmation to channel ${channelid}: ${sendError.message}`);
+      }
+    } else {
+      console.warn(`[WarnUser] Original command channel with ID ${channelid} not found, cannot send confirmation.`);
+    }
   } else {
     return commandEmbed;
   }

@@ -29,8 +29,16 @@ export async function AutoMod(client, message) {
 
   const violationFlags = updateTracker(userId, message);
 
-  const [matchedWord, hasInvite, everyonePing, isNewUser] = [
-    [...forbiddenWords].find(word => lowerContent.includes(word)),
+  let matchedWord = null;
+  if (forbiddenWords.size > 0) {
+    for (const word of forbiddenWords) {
+      if (lowerContent.includes(word)) {
+        matchedWord = word;
+      }
+    }
+  }
+
+  const [hasInvite, everyonePing, isNewUser] = [
     inviteRegex.test(content),
     message.mentions.everyone,
     Date.now() - member.joinedTimestamp < TWO_DAYS_MS
@@ -46,27 +54,43 @@ export async function AutoMod(client, message) {
   }
 
   const shouldDelete = matchedWord || hasInvite || everyonePing || violationFlags.triggeredByCurrentMessage
-  const [evaluationResult] = await Promise.all([
+  const [evaluationResult, deletionResult] = await Promise.all([
     evaluateViolations({ matchedWord, hasInvite, everyonePing, ...violationFlags, isNewUser }),
-    shouldDelete ? message.delete().catch(() => null) : Promise.resolve()
+    shouldDelete ? message.delete().catch(err => {
+      console.error(`Failed to delete message message: ${err.message}`);
+      return null;
+
+    }) : Promise.resolve(null)
   ]);
 
   if (!evaluationResult || !evaluationResult.violations.length) return;
 
-  let reasonText = `AutoMod: ${evaluationResult.allReasons.join(', ')}`;
-  if (isNewUser && reasonText.endsWith('while new to the server.')) {
-    reasonText = reasonText.replace(/,([^,]*)$/, ' $1');
+  const reasons = evaluationResult.allReasons;
+  let reasonText = `AutoMod: ${reasons.join(', ')}`;
+  if (isNewUser) {
+    const lastReason = reasons[reasons.length - 1];
+    if (lastReason && lastReason.includes('while new to the server.')) {
+      if (reasons.length > 1) {
+        reasons[reasons.length - 2] += ` and ${lastReason}`;
+        reasons.pop();
+        reasonText = `AutoMod: ${reasons.join(', ')}`;
+      } else {
+        reasonText = `AutoMod: ${lastReason}`;
+      }
+    }
   } else {
-    reasonText = reasonText.replace(/,([^,]*)$/, ' and$1');
+    const lastCommaIndex = reasonText.lastIndexOf(',');
+    if (lastCommaIndex !== -1) {
+      reasonText = reasonText.substring(0, lastCommaIndex) + 'and' + reasonText.substring(lastCommaIndex + 1);
+    }
   }
 
-  const statsPromise = getWarnStats(userId, evaluationResult.violations);
-  const [{ activeWarnings }, { duration, unit }] = await Promise.all([
-    statsPromise,
-    statsPromise.then(({ activeWarnings, currentWarnWeight }) =>
-      getNextPunishment(activeWarnings.length + currentWarnWeight)
-    )
-  ]);
+  const warnStats = await getWarnStats(userId, evaluationResult.violations);
+  const { activeWarnings, currentWarnWeight } = warnStats;
+
+  const { duration, unit } = getNextPunishment(activeWarnings.length + currentWarnWeight);
+
+
   const commonPayload = {
     guild,
     targetUser: userId,

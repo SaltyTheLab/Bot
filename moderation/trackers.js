@@ -27,9 +27,10 @@ export function updateTracker(userId, message) {
     tracker = {
       total: 0,
       mediaCount: 0,
-      timestamps: new Denque([], { max: 10 }),
-      recentMessages: new Denque([], { max: 5 })
+      timestamps: new Denque(),
+      recentMessages: new Denque()
     };
+    userMessageTrackers.set(userId, tracker);
   }
 
   tracker.total += 1;
@@ -38,8 +39,10 @@ export function updateTracker(userId, message) {
   if (content.length >= minLengthForCapsCheck) {
     const lettersOnly = content.replace(/[^a-zA-Z]/g, '');
     const upperCaseCount = (lettersOnly.match(/[A-Z]/g) || []).length
-    const upperRatio = lettersOnly.length > 0 ? upperCaseCount / lettersOnly.length : 0;
-    isCapSpam = upperRatio > .7;
+    if (lettersOnly.length > 0) {
+      const upperRatio = lettersOnly.length > 0 ? upperCaseCount / lettersOnly.length : 0;
+      isCapSpam = upperRatio > .7;
+    }
   }
 
   const hasMediaContent = hasMedia(message);
@@ -57,8 +60,17 @@ export function updateTracker(userId, message) {
 
   // Track recent message for duplicates
   tracker.recentMessages.push({ content: message.content, timestamp: now });
-  const recent = tracker.recentMessages.toArray().filter(msg => now - msg.timestamp <= GENERAL_SPAM_WINDOW);
-  const duplicateCount = recent.filter(msg => msg.content === message.content).length;
+
+  while (tracker.recentMessages.length && (now - tracker.recentMessages.peekFront().timestamp > GENERAL_SPAM_WINDOW)) {
+    tracker.recentMessages.shift();
+  }
+
+  let duplicateCount = 0;
+  for (let i = 0; i < tracker.recentMessages.length; i++) {
+    if (tracker.recentMessages.get(i).content === message.content) {
+      duplicateCount++;
+    }
+  }
   const isDuplicateSpam = duplicateCount >= DUPLICATE_SPAM_THRESHOLD;
   const wasDuplicateSpam = duplicateCount >= DUPLICATE_SPAM_THRESHOLD;
 
@@ -85,7 +97,7 @@ export function updateTracker(userId, message) {
 }
 
 function hasMedia(message) {
-  if (!message.attachments || !message.embeds) return false;
+  if ((!message.attachments || message.attachments.size === 0) && (!message.embeds || message.embeds.length === 0)) return false;
 
   return (
     message.attachments.size > 0 ||
