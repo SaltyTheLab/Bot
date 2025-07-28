@@ -1,38 +1,32 @@
-// db-layer.js
 import db from './database.js';
 
 // ───── USER XP/LEVEL SYSTEM ─────
 
-export function getUser(userId, guildId) {
+export function getUser(userId) {
   // Ensure user exists
   db.prepare(`
-    INSERT OR IGNORE INTO users (userId, guildId, xp, level)
-    VALUES (?, ?, 0, 1)
-  `).run(userId, guildId);
+    INSERT OR IGNORE INTO users (userId, xp, level)
+    VALUES (?,0, 100)
+  `).run(userId);
 
   const userData = db.prepare(`
-    SELECT * FROM users WHERE userId = ? AND guildId = ?
-  `).get(userId, guildId);
+    SELECT * FROM users WHERE userId = ?
+  `).get(userId);
 
   const allUsers = db.prepare(`
-    SELECT * FROM users WHERE guildId = ?
-  `).all(guildId);
+    SELECT * FROM users WHERE userId is not null
+  `).all();
 
   return { userData, allUsers };
 }
 
-export function updateUser(userId, guildId, xp, level) {
-  db.prepare(`
-    UPDATE users SET xp = ?, level = ? WHERE userId = ? AND guildId = ?
-  `).run(xp, level, userId, guildId);
-}
 
-export function saveUser({ userId, guildId, xp, level }) {
+export function saveUser({ userId, xp, level }) {
   db.prepare(`
-    INSERT INTO users (userId, guildId, xp, level)
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT(userId, guildId) DO UPDATE SET xp = excluded.xp, level = excluded.level
-  `).run(userId, guildId, xp, level);
+    INSERT INTO users (userId, xp, level)
+    VALUES (?, ?, ?)
+    ON CONFLICT(userId) DO UPDATE SET xp = excluded.xp, level = excluded.level
+  `).run(userId, xp, level);
 }
 // ───── NOTES ─────
 
@@ -41,7 +35,7 @@ export function addNote({ userId, moderatorId, note }) {
     VALUES (?,?,?,?)`).run(userId, moderatorId, note, Date.now())
 }
 
-export function viewNotes( userId ) {
+export function viewNotes(userId) {
   const rows = db.prepare(`SELECT * FROM notes
     WHERE userId = ? 
     ORDER BY timestamp DESC
@@ -49,7 +43,7 @@ export function viewNotes( userId ) {
   return Array.isArray(rows) ? rows : [];
 }
 
-export function deleteNote(id ) {
+export function deleteNote(id) {
   db.prepare(`DELETE FROM notes WHERE id = ?
 `).run(id);
 }
@@ -59,13 +53,13 @@ export function deleteNote(id ) {
 export function addWarn(userId, moderatorId, reason, weight, channel) {
   return db.prepare(`
     INSERT INTO punishments (userId, moderatorId, reason, timestamp, active, weight, type, channel)
-    VALUES (?, ?, ?, ?, 1, ?, ?, ?)
-  `).run(userId, moderatorId, reason, Date.now(), weight, 'Warn', channel);
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(userId, moderatorId, reason, Date.now(), 1, weight, 'Warn', channel);
 }
 
-export async function  getPunishments(userId) {
+export async function getPunishments(userId) {
   const rows = db.prepare(`
-    SELECT * FROM punishments WHERE userId = ? ORDER BY timestamp DESC
+    SELECT * FROM punishments WHERE userId = ?  ORDER BY timestamp DESC
   `).all(userId);
   return Array.isArray(rows) ? rows : [];
 }
@@ -82,8 +76,8 @@ export async function getActiveWarns(userId) {
 export function addMute(userId, moderatorId, reason, durationMs, weight, channel) {
   return db.prepare(`
     INSERT INTO punishments (userId, moderatorId, reason, duration, timestamp, active, weight, type, channel)
-    VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)
-  `).run(userId, moderatorId, reason, durationMs, Date.now(), weight, 'Mute', channel);
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(userId, moderatorId, reason, durationMs, Date.now(), 1, weight, 'Mute', channel);
 }
 
 //───── Admin ─────
