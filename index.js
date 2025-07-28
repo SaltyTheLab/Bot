@@ -4,7 +4,7 @@ import { fileURLToPath, pathToFileURL } from 'url';
 import { Client, GatewayIntentBits, Collection } from 'discord.js';
 import { config } from 'dotenv';
 import { embedsenders } from './embeds/embeds.js';
-import { getrolesid } from './BotListeners/Extravariables/channelids.js';
+import EmbedIDs from './embeds/EmbedIDs.json' with { type: 'json' }
 
 // Setup dotenv
 config();
@@ -12,15 +12,6 @@ config();
 // Setup paths for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-const interactiveMessages = [
-  { channelId: getrolesid, messageId: "1395238443444862976" },
-  { channelId: getrolesid, messageId: "1395238444665540673" },
-  { channelId: getrolesid, messageId: "1395238446213234829" },
-  { channelId: getrolesid, messageId: "1395238447181992070" },
-  { channelId: getrolesid, messageId: "1395238495647174797" },
-  { channelId: getrolesid, messageId: "1395238496616190144" }
-];
 
 // Initialize Discord client
 export const client = new Client({
@@ -108,10 +99,10 @@ async function loadListenersWithWorker() {
                 continue;
               }
 
-              if (eventsNeedingClient.has(eventName)) 
-                client.on(eventName, (...args) =>  listenerFunc(client, ...args));
-               else 
-                client.on(eventName, (...args) =>  listenerFunc(...args));
+              if (eventsNeedingClient.has(eventName))
+                client.on(eventName, (...args) => listenerFunc(client, ...args));
+              else
+                client.on(eventName, (...args) => listenerFunc(...args));
 
               console.log(`✅ Registered listener for event: ${eventName}`);
             }
@@ -132,26 +123,58 @@ async function loadListenersWithWorker() {
   });
 }
 
-async function cacheInteractiveMessages() {
-  await Promise.all(
-    interactiveMessages.map(async ({ channelId, messageId }) => {
-      try {
-        const channel = await client.channels.fetch(channelId);
-        if (!channel?.isTextBased()) {
-          console.warn(`⚠️ Channel ${channelId} is not text-based, skipping.`);
-          return;
-        }
+async function cacheInteractiveMessages(client) {
+  console.log('Attempting to cache all stored embeds...'); // Updated log
 
-        const message = await channel.messages.fetch(messageId);
-        console.log(`✅ Cached message ${message.id} from channel ${channelId}`);
-      } catch (err) {
-        console.error(`❌ Failed to fetch message ${messageId} in channel ${channelId}`, err);
+  const cacheTasks = [];
+
+  // Iterate directly through the main array from the imported JSON config
+  if (Array.isArray(EmbedIDs)) {
+    for (const embedInfo of EmbedIDs) {
+      // Destructure name, messageId, AND channelid directly from each object
+      const { name, messageId, channelid } = embedInfo;
+
+      // Basic validation: ensure we have both IDs
+      if (!messageId || !channelid) {
+        console.warn(`⚠️ Skipping caching for embed '${name}': Missing messageId (${messageId}) or channelid (${channelid}).`);
+        continue; // Skip if essential info is missing
       }
-    })
-  );
+
+      // Push an async task for each message to be cached
+      cacheTasks.push((async () => {
+        try {
+          const channel = await client.channels.fetch(channelid); // Use the channelid from JSON
+
+          if (!channel) {
+            console.warn(`⚠️ Channel with ID ${channelid} (for '${name}') not found. Skipping caching for this message.`);
+            return;
+          }
+
+          if (!channel.isTextBased()) {
+            console.warn(`⚠️ Channel '${channel.name}' (${channelid}) (for '${name}') is not text-based. Skipping caching.`);
+            return;
+          }
+
+          const message = await channel.messages.fetch(messageId);
+          console.log(`✅ Successfully cached embed '${name}' (ID: ${message.id}) from channel '${channel.name}' (${channelid}).`);
+        } catch (err) {
+          console.error(`❌ Failed to cache embed '${name}' (ID: ${messageId}) in channel ${channelid}:`, err.message);
+          // Common Discord API errors for more specific debugging
+          if (err.code === 10003) { // Unknown Channel
+            console.error("   - Discord API Error: Unknown Channel. Is the channel ID correct or has the channel been deleted?");
+          } else if (err.code === 10008) { // Unknown Message
+            console.error("   - Discord API Error: Unknown Message. Has this message been deleted?");
+          }
+        }
+      })()); // Immediately invoke the async function
+    }
+  } else {
+    console.log("ℹ️ EmbedIDs.json is not a single array. No embeds to cache.");
+  }
+
+  await Promise.all(cacheTasks);
+  console.log('Finished attempting to cache all stored embeds.'); // Updated log
 }
-
-
 
 // Main async entrypoint
 async function main() {
@@ -159,13 +182,13 @@ async function main() {
   await loadListenersWithWorker();
 
   client.once('ready', async () => {
-    await cacheInteractiveMessages();
+    await cacheInteractiveMessages(client);
+    embedsenders(client, process.env.GUILD_ID);
     console.log(`✅ Logged in as ${client.user.tag}`);
   });
 
-  embedsenders(client, process.env.GUILD_ID);
-
   await client.login(process.env.TOKEN);
+
 }
 
 main().catch(console.error);

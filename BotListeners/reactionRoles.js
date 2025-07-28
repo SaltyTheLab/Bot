@@ -1,17 +1,21 @@
-import { loadMessageIDs } from "../utilities/messageStorage.js";
+import embedIDs from '../embeds/EmbedIDs.json' with {type: 'json'}
 import { emojiRoleMap } from "./Extravariables/rolemap.js";
 
-const messageIDs = loadMessageIDs();
+const messageIDs = embedIDs;
 
 
 // Common role message IDs to react to
 const validKeys = ['colors', 'pronouns', 'continent', 'stream', 'dividers', 'consoles'];
-const validRoleMessageIds = validKeys.map(key => messageIDs[key]).filter(Boolean);
+const validRoleMessageIds = messageIDs
+  .filter(embedInfo => validKeys.includes(embedInfo.name)) // Filter for only the relevant embed names
+  .map(embedInfo => embedInfo.messageId) // Get the messageId for each filtered embed
+  .filter(Boolean); // Remove any potential undefined or null entries (though shouldn't happen if structure is consistent)
 
 /**
  * Handle reaction-based role assignment or removal
  */
-async function handleReactionChange( reaction, user, action = 'add') {
+async function handleReactionChange(reaction, user, action = 'add') {
+  console.log("triggered")
   if (user.bot) return;
 
   try {
@@ -55,13 +59,13 @@ async function handleReactionChange( reaction, user, action = 'add') {
 /**
  * Reaction add handler
  */
-export async function messageReactionAdd( reaction, user) {
+export async function messageReactionAdd(reaction, user) {
   await handleReactionChange(reaction, user, 'add');
 }
 
 /**
  * Reaction remove handler
  */
-export async function messageReactionRemove( reaction, user) {
-  await handleReactionChange( reaction, user, 'remove');
+export async function messageReactionRemove(reaction, user) {
+  await handleReactionChange(reaction, user, 'remove');
 }

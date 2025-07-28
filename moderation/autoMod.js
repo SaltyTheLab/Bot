@@ -4,17 +4,11 @@ import { getNextPunishment } from './punishments.js';
 import { getWarnStats } from './simulatedwarn.js';
 import { updateTracker } from './trackers.js';
 import { evaluateViolations } from './evaluateViolations.js';
-import { fileURLToPath } from 'node:url';
-import fs from 'node:fs';
-import path from 'node:path';
+import forbbidenWordsData from '../moderation/forbiddenwords.json' with {type :'json'};
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
-const forbiddenWordsPath = path.join(__dirname, '../moderation/forbiddenwords.json');
-const forbiddenWords = new Set(
-  JSON.parse(fs.readFileSync(forbiddenWordsPath, 'utf8')).forbiddenWords.map(w => w.toLowerCase())
-);
+
+const forbiddenWords = new Set(forbbidenWordsData.forbiddenWords.map(w => w.toLowerCase()));
 
 const inviteRegex = /(https?:\/\/)?(www\.)?(discord\.gg|discord(app)?\.com\/invite)\/[a-zA-Z0-9-]+/i;
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
