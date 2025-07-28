@@ -66,7 +66,7 @@ export async function muteUser({
   const durationStr = getDurationDisplay(effectiveDurationMs);
 
   const warnExpiresAt = new Date(Date.now() + unitMap.day); // 1 day from now
-  const formattedWarnExpiry = `<t:${Math.floor(expiresAt.getTime() / 1000)}:F>`; // Relative timestamp
+  const formattedWarnExpiry = `<t:${Math.floor(warnExpiresAt.getTime() / 1000)}:F>`;
 
   const initialWarnStats = await getWarnStats(target.id, violations);
   const { currentWarnWeight } = initialWarnStats;

@@ -2,13 +2,13 @@
 export async function evaluateViolations({ hasInvite, matchedWord, everyonePing, isGeneralSpam, isDuplicateSpam, isMediaViolation, isNewUser, isCapSpam }) {
   const checks = [
     { flag: hasInvite, type: 'invite', reason: 'Discord invite' },
-    { flag: matchedWord, type: 'forbiddenWord', reason: `Forbidden word "${matchedWord}"` },
+    { flag: matchedWord, type: 'forbiddenWord', reason: matchedWord ? `Forbidden word "${matchedWord}"` : 'forbidden word' },
     { flag: everyonePing, type: 'everyonePing', reason: 'Mass ping' },
     { flag: isGeneralSpam, type: 'spam', reason: 'Spamming' },
     { flag: isDuplicateSpam, type: 'spam', reason: 'Spamming the same message' },
     { flag: isMediaViolation, type: 'mediaViolation', reason: 'Media violation' },
     { flag: isNewUser, type: 'isNewUser', reason: 'while new to the server.' },
-    {flag: isCapSpam, type: 'CapSpam', reason: 'Spamming Caps' }
+    { flag: isCapSpam, type: 'CapSpam', reason: 'Spamming Caps' }
   ];
 
   const violations = checks

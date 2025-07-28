@@ -10,7 +10,6 @@ const keywords = {
 };
 
 export async function messageCreate(client, message) {
-  console.log("test");
   if (message.author.bot || !message.guild || !message.member) return;
   const userId = message.author.id;
   const guildId = message.guild.id;
