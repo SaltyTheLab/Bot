@@ -88,8 +88,6 @@ async function loadListenersWithWorker() {
             }
 
             const eventsNeedingClient = new Set([
-              'guildMemberAdd',
-              'guildMemberRemove',
               'messageCreate'
             ]);
 
