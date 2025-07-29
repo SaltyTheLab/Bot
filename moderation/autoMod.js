@@ -95,7 +95,7 @@ export async function AutoMod(client, message) {
     violations: evaluationResult.violations
   };
 
-  if (activeWarnings.length > 0 && duration > 0) {
+  if (activeWarnings.length > 0 || currentWarnWeight >= 2 && duration > 0) {
     await muteUser({
       ...commonPayload,
       duration,
