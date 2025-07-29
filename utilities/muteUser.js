@@ -110,8 +110,7 @@ export async function muteUser({
       iconURL: issuer.user.displayAvatarURL({ dynamic: true }),
     })
     .addFields(
-      { name: 'Target:', value: `${target} (\`${target.id}\`)`, inline: true },
-      { name: 'Moderator:', value: `${issuer} (\`${issuer.id}\`)`, inline: true },
+      { name: 'Target:', value: `${target}`, inline: true },
       { name: 'Channel:', value: `${commandChannel}`, inline: true },
       ...buildBasicFields(reason, currentWarnWeight, durationStr, activeWarnings.length), // Use the more basic helper
       { name: 'Warn expires:', value: formattedWarnExpiry, inline: false },

@@ -156,7 +156,7 @@ export async function execute(interaction) {
             case 'dellog':
                 try {
                     const deleteFn = currentLog.type === 'Warn' ? deleteWarn : deleteMute;
-                    await deleteFn(currentLog.id);
+                     deleteFn(currentLog.id);
                     logRecentCommand(`${currentLog.type} log deleted for ${targetUser.tag} | Admin: ${moderatorUser.tag} | Log ID: ${currentLog.id}`);
 
                     // Remove the deleted log from the array
@@ -178,8 +178,6 @@ export async function execute(interaction) {
                     if (currentIndex >= allLogs.length) {
                         currentIndex = allLogs.length - 1;
                     }
-
-                    await i.followUp({ content: `Successfully deleted ${currentLog.type} log (ID: ${currentLog.id}).`, ephemeral: true });
 
                 } catch (error) {
                     console.error(`Error deleting log ${currentLog.id}:`, error);
