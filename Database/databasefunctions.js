@@ -5,8 +5,8 @@ import db from './database.js';
 export function getUser(userId) {
   // Ensure user exists
   db.prepare(`
-    INSERT OR IGNORE INTO users (userId, xp, level)
-    VALUES (?,0, 100)
+    INSERT OR IGNORE INTO users (userId, xp, level, points)
+    VALUES (?,0, 1, 100)
   `).run(userId);
 
   const userData = db.prepare(`
@@ -21,12 +21,12 @@ export function getUser(userId) {
 }
 
 
-export function saveUser({ userId, xp, level }) {
+export function saveUser({ userId, xp, level, points }) {
   db.prepare(`
-    INSERT INTO users (userId, xp, level)
-    VALUES (?, ?, ?)
-    ON CONFLICT(userId) DO UPDATE SET xp = excluded.xp, level = excluded.level
-  `).run(userId, xp, level);
+    INSERT INTO users (userId, xp, level, points)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(userId) DO UPDATE SET xp = excluded.xp, level = excluded.level, points = excluded.points
+  `).run(userId, xp, level, points);
 }
 // ───── NOTES ─────
 
