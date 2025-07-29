@@ -75,7 +75,7 @@ export async function AutoMod(client, message) {
   } else {
     const lastCommaIndex = reasonText.lastIndexOf(',');
     if (lastCommaIndex !== -1) {
-      reasonText = reasonText.substring(0, lastCommaIndex) + 'and' + reasonText.substring(lastCommaIndex + 1);
+      reasonText = reasonText.substring(0, lastCommaIndex) + ' and' + reasonText.substring(lastCommaIndex + 1);
     }
   }
 
