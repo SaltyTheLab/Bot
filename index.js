@@ -7,7 +7,6 @@ import { reloadCommands, reloadListeners } from './utilities/botreloader.js';
 // Setup dotenv
 config();
 
-
 // Initialize Discord client
 export const client = new Client({
   intents: [
@@ -19,7 +18,7 @@ export const client = new Client({
   ],
   partials: ['MESSAGE', 'CHANNEL', 'REACTION', 'GUILD_MEMBER', 'USER']
 });
-
+//define the client commands variable
 client.commands = new Collection();
 
 
@@ -78,26 +77,21 @@ async function cacheInteractiveMessages(client) {
 
 // Main async entrypoint
 async function main() {
+  //load commands and listeners
   await reloadCommands(client);
   await reloadListeners(client);
-  console.log('--- DEBUG: Loaded Commands Check ---');
-  if (client.commands && client.commands.size > 0) {
-    client.commands.forEach((name) => {
-      console.log(`Command Loaded: ${name}`);
-    });
-  } else {
-    console.log('No commands found in client.commands collection.');
-  }
-  console.log('--- END Loaded Commands Check ---');
+
+  //cache messages and send embeds 
   client.once('ready', async () => {
     await cacheInteractiveMessages(client);
     embedsenders(client, process.env.GUILD_ID);
+
+    //output for debugging
     console.log(`✅ Logged in as ${client.user.tag}`);
   });
 
   await client.login(process.env.TOKEN);
 
 }
-
+//run main loop
 main().catch(console.error);
-
