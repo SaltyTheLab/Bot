@@ -1,17 +1,12 @@
-import path from 'node:path';
-import { Worker } from 'node:worker_threads';
-import { fileURLToPath, pathToFileURL } from 'url';
 import { Client, GatewayIntentBits, Collection } from 'discord.js';
 import { config } from 'dotenv';
 import { embedsenders } from './embeds/embeds.js';
 import EmbedIDs from './embeds/EmbedIDs.json' with { type: 'json' }
+import { reloadCommands, reloadListeners } from './utilities/botreloader.js';
 
 // Setup dotenv
 config();
 
-// Setup paths for ES modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // Initialize Discord client
 export const client = new Client({
@@ -27,99 +22,6 @@ export const client = new Client({
 
 client.commands = new Collection();
 
-// Load commands dynamically
-async function loadCommandsWithWorker() {
-  return new Promise((resolve, reject) => {
-    const commandsPath = path.join(__dirname, 'commands');
-    const worker = new Worker('./utilities/worker.js', { type: 'module' });
-
-    worker.postMessage(commandsPath);
-
-    worker.on('message', async (msg) => {
-      if (msg.success) {
-        try {
-          for (const filePath of msg.data) {
-            const command = await import(pathToFileURL(filePath).href);
-            if (command?.data?.name && typeof command.execute === 'function') {
-              client.commands.set(command.data.name, command);
-            } else {
-              console.warn(`[WARN] Invalid command file: ${filePath}`);
-            }
-          }
-          resolve();
-        } catch (err) {
-          reject(err);
-        }
-      } else {
-        reject(new Error(msg.error));
-      }
-    });
-
-    worker.on('error', reject);
-    worker.on('exit', (code) => {
-      if (code !== 0) reject(new Error(`Worker stopped with exit code ${code}`));
-    });
-  });
-}
-
-// Register Commands and listeners
-async function loadListenersWithWorker() {
-  return new Promise((resolve, reject) => {
-    const listenersPath = path.join(__dirname, 'BotListeners');
-    const worker = new Worker('./utilities/worker.js', { type: 'module' });
-
-    worker.postMessage(listenersPath);
-
-    worker.on('message', async (msg) => {
-      if (msg.success) {
-        try {
-          for (const filePath of msg.data) {
-            let listenerModule;
-            try {
-              listenerModule = await import(pathToFileURL(filePath).href);
-            } catch (err) {
-              console.warn(`[WARN] Failed to import ${filePath}:`, err);
-              continue;
-            }
-
-            if (!listenerModule || typeof listenerModule !== 'object') {
-              console.warn(`[WARN] Skipping invalid listener module: ${filePath}`);
-              continue;
-            }
-
-            const eventsNeedingClient = new Set([
-              'messageCreate'
-            ]);
-
-            for (const [eventName, listenerFunc] of Object.entries(listenerModule)) {
-              if (typeof listenerFunc !== 'function') {
-                console.warn(`[WARN] Export "${eventName}" in ${filePath} is not a function`);
-                continue;
-              }
-
-              if (eventsNeedingClient.has(eventName))
-                client.on(eventName, (...args) => listenerFunc(client, ...args));
-              else
-                client.on(eventName, (...args) => listenerFunc(...args));
-
-              console.log(`✅ Registered listener for event: ${eventName}`);
-            }
-          }
-          resolve();
-        } catch (err) {
-          reject(err);
-        }
-      } else {
-        reject(new Error(msg.error));
-      }
-    });
-
-    worker.on('error', reject);
-    worker.on('exit', (code) => {
-      if (code !== 0) reject(new Error(`Worker stopped with exit code ${code}`));
-    });
-  });
-}
 
 async function cacheInteractiveMessages(client) {
   console.log('Attempting to cache all stored embeds...'); // Updated log
@@ -176,9 +78,17 @@ async function cacheInteractiveMessages(client) {
 
 // Main async entrypoint
 async function main() {
-  await loadCommandsWithWorker();
-  await loadListenersWithWorker();
-
+  await reloadCommands(client);
+  await reloadListeners(client);
+  console.log('--- DEBUG: Loaded Commands Check ---');
+  if (client.commands && client.commands.size > 0) {
+    client.commands.forEach((name) => {
+      console.log(`Command Loaded: ${name}`);
+    });
+  } else {
+    console.log('No commands found in client.commands collection.');
+  }
+  console.log('--- END Loaded Commands Check ---');
   client.once('ready', async () => {
     await cacheInteractiveMessages(client);
     embedsenders(client, process.env.GUILD_ID);
