@@ -11,7 +11,7 @@ db.pragma('foreign_keys = ON')
 const schemaPath = path.resolve('./Database/Schema.sql');
 const schema = fs.readFileSync(schemaPath, 'utf-8');
 const statements = schema.split(';').filter(stmt => stmt.trim() !== '');
-
+//run the schema of the database
 for (const stmt of statements){
   try {
     db.exec(stmt + ';');
@@ -21,5 +21,5 @@ for (const stmt of statements){
     throw error;
   }
 }
-
+//export default open database for database functions
 export default db;

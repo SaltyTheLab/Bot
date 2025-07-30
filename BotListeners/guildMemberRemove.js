@@ -3,8 +3,11 @@ import { welcomeChannelId } from "./Extravariables/channelids.js";
 import { banlogChannelid } from "./Extravariables/channelids.js";
 
 export async function guildMemberRemove(member) {
-    const welcomeChannel = member.guild.channels.cache.get(welcomeChannelId);
-    const banlogChannel = member.guild.channels.cache.get(banlogChannelid);
+    //define welcomechannel and banlog channel
+    const [welcomeChannel, banlogChannel] = [member.guild.channels.cache.get(welcomeChannelId),
+    member.guild.channels.cache.get(banlogChannelid)
+    ]
+
     if (!welcomeChannel) {
         console.warn('⚠️ Welcome channel not found.');
         return;
@@ -13,6 +16,7 @@ export async function guildMemberRemove(member) {
     const now = Date.now();
     const isRecent = (timestamp) => now - timestamp < 5000;
 
+    //set default actions and leave executor null
     let action = "leave";
     let executor = null;
     let reason = "N/A";
@@ -26,7 +30,7 @@ export async function guildMemberRemove(member) {
     const banLog = banLogs.entries.find((entry) =>
         entry.target.id === member.id && isRecent(entry.createdTimestamp)
     );
-
+    // check for ban in audit 
     if (banLog) {
         action = "ban";
         executor = banLog.executor;
@@ -106,6 +110,6 @@ export async function guildMemberRemove(member) {
             .setTitle('A member left the cave')
             .setDescription(`${member} has left the server.`);
     }
-
+    //send embed
     await welcomeChannel.send({ embeds: [embed] });
 }

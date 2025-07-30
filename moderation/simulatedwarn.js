@@ -8,8 +8,9 @@ import { violationWeights } from './violationWeights.js';
  * @returns {Promise<{ activeWarnings, currentWarnWeight }>}
  */
 export async function getWarnStats(userId, newViolationType = []) {
+  //get previous active warnings
   const activeWarningsPromise = getActiveWarns(userId);
-
+// get weights of violations
   const currentWarnWeightPromise = Promise.resolve(
     Array.isArray(newViolationType)
       ? Math.ceil(newViolationType.reduce((acc, v) => {
@@ -19,7 +20,8 @@ export async function getWarnStats(userId, newViolationType = []) {
         }, 0))
       : 0
   );
-
+  
+  //define output variables
   const [activeWarnings, currentWarnWeight] = await Promise.all([
     activeWarningsPromise,
     currentWarnWeightPromise

@@ -2,7 +2,7 @@
 import { EmbedBuilder } from '@discordjs/builders';
 import { saveUser, getUser } from '../Database/databasefunctions.js';
 import { AutoMod } from '../moderation/autoMod.js';
-
+//setup constants
 const bad = 'bad';
 const bot = 'bot';
 const eyes = '1257522749635563561';
@@ -13,29 +13,34 @@ const keywords = {
   saytheline: 'stay frosty :3',
 };
 export async function messageCreate(client, message) {
-
+  //skip if message creator is bot or not in the server
   if (message.author.bot || !message.guild || !message.member) return;
+
+  //convert message to all lowercase and remove all spaces 
   const userId = message.author.id;
   const nospaces = message.content.replace(/ /g, '');
   const lowerContent = nospaces.toLowerCase();
 
+  //add and update xp to the user
   const user = await applyUserXP(userId, message);
   saveUser(user);
+
+  //send reactions for triggers
   if (lowerContent.includes('<@857445139416088647>'))
     message.react(eyes);
   if (lowerContent.includes(bad && bot))
     message.react('😡')
   if (keywords[lowerContent]) message.reply(keywords[lowerContent]);
 
+  //submit to automod
   await AutoMod(client, message);
-
 }
 
 async function applyUserXP(userId, message) {
   const user = getUser(userId);
   user.xp += 20;
 
-  const xpNeeded = Math.floor((user.level - 1) ** 2 * 50);
+  const xpNeeded = Math.floor((user.level) ** 2 * 50);
   if (user.xp >= xpNeeded) {
     user.level++;
     user.xp = 0;

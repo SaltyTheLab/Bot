@@ -15,9 +15,10 @@ const validRoleMessageIds = messageIDs
  * Handle reaction-based role assignment or removal
  */
 async function handleReactionChange(reaction, user, action = 'add') {
-  console.log("triggered")
+  //check for bot user
   if (user.bot) return;
 
+  //fetch the reaction the user used
   try {
     if (reaction.partial) reaction = await reaction.fetch();
     if (reaction.message && reaction.message.partial) await reaction.message.fetch();
@@ -28,26 +29,29 @@ async function handleReactionChange(reaction, user, action = 'add') {
     return;
   }
 
-
-  // 🛠️ Updated line to safely access .id
+  //return if not a vaild message or message id isn't in the messageIDs array
   if (!reaction.message || !validRoleMessageIds.includes(reaction.message.id)) return;
 
+  //assign the emoji id and role
   const emoji = reaction.emoji.id || reaction.emoji.name;
   const roleID = emojiRoleMap[emoji];
 
+  //error out if role id not found
   if (!roleID) {
     console.log(`⚠️ No role mapped to emoji: ${emoji}`);
     return;
   }
-
+  //fetch the guild and member objects
   const guild = reaction.message.guild ?? await reaction.client.guilds.fetch(reaction.message.guildId);
   const member = await guild.members.fetch(user.id).catch(() => null);
 
+  //error out if member not found
   if (!member) {
     console.log('❌ Member not found');
     return;
   }
 
+// attempt to modify the users roles
   try {
     const rolesToModify = Array.isArray(roleID) ? roleID : [roleID];
     await member.roles[action](rolesToModify);
@@ -56,16 +60,12 @@ async function handleReactionChange(reaction, user, action = 'add') {
   }
 }
 
-/**
- * Reaction add handler
- */
+// Reaction add handler
 export async function messageReactionAdd(reaction, user) {
   await handleReactionChange(reaction, user, 'add');
 }
 
-/**
- * Reaction remove handler
- */
+// Reaction remove handler
 export async function messageReactionRemove(reaction, user) {
   await handleReactionChange(reaction, user, 'remove');
 }

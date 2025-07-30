@@ -1,4 +1,4 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { EmbedBuilder, SlashCommandBuilder } from 'discord.js';
 import { reloadCommands, reloadListeners } from '../utilities/botreloader.js'; // Assuming this is now botReloader.js
 export const data = new SlashCommandBuilder()
     .setName('restart')
@@ -7,12 +7,7 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
 
-    if (!interaction.member.permissions.has('Administrator')) {
-        console.log("DEBUG (Reload Command): User is not admin. Attempting to reply with permission error."); // <-- Add this
-        return interaction.reply({ content: 'You must be an administrator to use this command.', ephemeral: true });
-    }
-
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply();
 
     const client = interaction.client;
     let successMessages = [];
@@ -35,16 +30,27 @@ export async function execute(interaction) {
         console.error('❌ Error during listener reload:', err);
         errorMessages.push(`Listeners: ${err.message}`);
     }
-
+    
+    //audit the registered commands for errors in console
+    console.log('--- Loaded Commands Check ---');
+    if (client.commands && client.commands.size > 0) {
+        client.commands.forEach((cmd, name) => {
+            console.log(`Command Loaded: ${name}`);
+        });
+    } else {
+        console.log('No commands found in client.commands collection.');
+    }
+    console.log('--- END Loaded Commands Check ---');
 
     let replyContent;
     if (errorMessages.length === 0) {
-        replyContent = `✅ Bot components reloaded successfully!\n\n${successMessages.join('\n')}`;
+        replyContent = new EmbedBuilder()
+            .setTitle(`✅ Bot components reloaded successfully!`)
     } else {
-        replyContent = `⚠️ Reload completed with some errors:\n- ${errorMessages.join('\n- ')}\n\nCheck console for details.`;
+        replyContent = new EmbedBuilder()
+            .setTitle(`⚠️ Reload completed with some errors:\n- ${errorMessages.join('\n- ')}\n\nCheck console for details.`)
     }
 
-    await interaction.editReply({ content: replyContent, ephemeral: true });
-
+    await interaction.editReply({ embeds: [replyContent] });
 }
 

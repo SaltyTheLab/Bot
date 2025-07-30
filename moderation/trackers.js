@@ -35,7 +35,7 @@ export function updateTracker(userId, message) {
 
   tracker.total += 1;
 
-
+// cap spam check method
   if (content.length >= minLengthForCapsCheck) {
     const lettersOnly = content.replace(/[^a-zA-Z]/g, '');
     const upperCaseCount = (lettersOnly.match(/[A-Z]/g) || []).length
@@ -46,6 +46,7 @@ export function updateTracker(userId, message) {
   }
 
   const hasMediaContent = hasMedia(message);
+  //media check for message and flag it if true
   if (hasMediaContent && !exclusions.includes(message.channel.parentId)) {
     tracker.mediaCount += 1;
   }
@@ -66,33 +67,34 @@ export function updateTracker(userId, message) {
   }
 
   let duplicateCount = 0;
+  //count messages that are the same
   for (let i = 0; i < tracker.recentMessages.length; i++) {
     if (tracker.recentMessages.get(i).content === message.content) {
       duplicateCount++;
     }
   }
   const isDuplicateSpam = duplicateCount >= DUPLICATE_SPAM_THRESHOLD;
-  const wasDuplicateSpam = duplicateCount >= DUPLICATE_SPAM_THRESHOLD;
 
   const isMediaViolation = tracker.mediaCount > 1 && tracker.total <= 20;
-
+// clear messages after 20 sent over, resetting all flags
   if (tracker.total >= 20) {
     tracker.total = 0;
     tracker.mediaCount = 0;
     tracker.timestamps.clear();
   }
-
+  //if spam detected, flag it and clear out recentMessages array
   if (tracker.recentMessages.size() > GENERAL_SPAM_THRESHOLD && isDuplicateSpam) {
     tracker.recentMessages.clear();
   }
 
   userMessageTrackers.set(userId, tracker);
+  //send the flags out of the function
   return {
     isMediaViolation,
     isGeneralSpam: wasGeneralSpam,
-    isDuplicateSpam: wasDuplicateSpam,
+    isDuplicateSpam: isDuplicateSpam,
     isCapSpam,
-    triggeredByCurrentMessage: wasGeneralSpam || wasDuplicateSpam || isMediaViolation || isCapSpam
+    triggeredByCurrentMessage: wasGeneralSpam || isDuplicateSpam || isMediaViolation || isCapSpam
   };
 }
 

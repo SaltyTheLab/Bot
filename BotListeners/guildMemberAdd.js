@@ -1,22 +1,27 @@
 import { EmbedBuilder } from "discord.js";
 import { welcomeChannelId, generalChannelid, mutelogChannelid } from "./Extravariables/channelids.js";
 export async function guildMemberAdd(member) {
-    const welcomeChannel = member.guild.channels.cache.get(welcomeChannelId);
-    const generalChannel = member.guild.channels.cache.get(generalChannelid);
-    const mutechannel = member.guild.channels.cache.get(mutelogChannelid);
+    //get channel objects
+    const [welcomeChannel, generalChannel, mutechannel] = [
+        member.guild.channels.cache.get(welcomeChannelId),
+        member.guild.channels.cache.get(generalChannelid),
+        member.guild.channels.cache.get(mutelogChannelid)
+    ]
+
     if (!welcomeChannel) {
         console.warn('⚠️ Welcome channel not found.');
         return;
     }
-
+    //define account creation date and two days
     const accountCreationDate = member.user.createdAt;
     const twoDaysInMs = 2 * 24 * 60 * 60 * 1000;
+
     //check if account is 2 days old, if so kick
-
+    //convert date from Ms to actual days
     const date = Math.floor(member.user.createdTimestamp / 1000);
-
     const accountAgeInMs = date;
-    console.log(accountAgeInMs);
+
+    //kick member if less then two days old
     if (accountAgeInMs < twoDaysInMs) {
 
         await member.kick('Account too new')
@@ -30,7 +35,7 @@ export async function guildMemberAdd(member) {
             )
         await mutechannel.send({ embeds: [kickmessage] });
     }
-
+    //build and send embeds
     const embed = new EmbedBuilder()
         .setColor(0x00FF99)
         .setDescription(`${member} joined the Server!`)

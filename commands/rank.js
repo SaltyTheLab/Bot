@@ -34,10 +34,6 @@ function roundRect(ctx, x, y, width, height, radius) {
     ctx.closePath();
 }
 
-function calculateXpNeeded(level) {
-    if (level <= 0) return 100;
-    return Math.floor((level ** 2) * 50);
-}
 
 export async function generateRankCard(userData, targetUser, xpNeeded, rank) {
     const canvas = Canvas.createCanvas(500, 100);
@@ -153,24 +149,22 @@ export async function generateRankCard(userData, targetUser, xpNeeded, rank) {
 
 export async function execute(interaction) {
     try {
+        //delay the reply to give time 
         await interaction.deferReply();
-
+        //get the interaction user
         const targetUser = interaction.options.getUser('user') || interaction.user;
         const userId = targetUser.id;
 
         // *** Directly use the result from your existing getUser ***
         const { userData, allUsers } = getUser(userId); // This is where the full table scan happens
-
+        //abort if userdata doesn't exist or there are error in their data
         if (!userData || userData.xp === undefined || userData.level === undefined) {
             return interaction.editReply({ content: 'User data not found or incomplete. They might need to gain some XP first!', ephemeral: true });
         }
 
-        // Sort allUsers (as obtained from getUser) to determine rank
-        // This sort happens in memory after fetching ALL users.
-        const sortedAllUsers = [...allUsers].sort((a, b) => b.xp - a.xp); 
-        
-        const xpNeeded = calculateXpNeeded(userData.level);
-        const rank = sortedAllUsers.findIndex(u => u.userId === userId) + 1;
+        //find user within all users for rank
+        const xpNeeded = Math.floor((userData.level) ** 2 * 50);
+        const rank = allUsers.findIndex(u => u.userId === userId) + 1;
         const rankCard = await generateRankCard(userData, targetUser, xpNeeded, rank);
 
         await interaction.editReply({

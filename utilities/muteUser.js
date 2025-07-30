@@ -26,6 +26,7 @@ export async function muteUser({
   duration,
   unit,
 }) {
+  // get member, interaction user, and channel objects
   const [target, issuer, commandChannel] = await Promise.all([
     guild.members.fetch(targetUser).catch(err => {
       console.error(`[muteUser] Failed to fetch targetUser (${targetUser}):`, err);
@@ -40,7 +41,7 @@ export async function muteUser({
       return null;
     }),
   ]);
-
+  //checks for vaild channel, user, and interaction user
   if (!target) {
     console.error(`[muteUser] Target user not found: ${targetUser}`);
     return '❌ Could not find the target user in this guild.';
@@ -55,32 +56,34 @@ export async function muteUser({
   }
 
   getUser(target.id); // Ensure user exists in DB
-
+  //prepare the unit in ms
   const multiplier = unitMap[unit];
   if (!multiplier || duration <= 0) {
     return '❌ Invalid duration or unit specified for mute.';
   }
-
+  // calculate the duration and put a hard cap of six hours if higher
   const calculatedDurationMs = duration * multiplier;
   const effectiveDurationMs = Math.min(calculatedDurationMs, MAX_TIMEOUT_MS);
   const durationStr = getDurationDisplay(effectiveDurationMs);
 
+  //calculate the time this new active warn will exprie for the user
   const warnExpiresAt = new Date(Date.now() + unitMap.day); // 1 day from now
   const formattedWarnExpiry = `<t:${Math.floor(warnExpiresAt.getTime() / 1000)}:F>`;
 
+  // get the current warn weight of the user being muted 
   const initialWarnStats = await getWarnStats(target.id, violations);
   const { currentWarnWeight } = initialWarnStats;
 
-  if (isAutomated) {
-    await addMute(target.id, issuer.id, reason, effectiveDurationMs, currentWarnWeight, commandChannel.id);
-  }
+  //add the mute to the database
+  addMute(target.id, issuer.id, reason, effectiveDurationMs, currentWarnWeight, commandChannel.id);
 
+  //get active warnings with the new mute added
   const { activeWarnings } = await getWarnStats(target.id, violations);
   const { label: nextPunishmentLabel } = getNextPunishment(activeWarnings.length + currentWarnWeight);
 
   // --- Helper for Common Embed Fields (excluding mute-specific duration/expiry from this helper) ---
   // Now just for the reason and active warnings count, as "Punishments" field will be custom.
-  const buildBasicFields = (reason,currentWarnWeight, durationStr, activeWarnsCount) => {
+  const buildBasicFields = (reason, currentWarnWeight, durationStr, activeWarnsCount) => {
     return [
       { name: 'Reason:', value: `\`${reason}\``, inline: false },
       { name: 'Punishments:', value: `\`${currentWarnWeight} warn, ${durationStr}\``, inline: false },
@@ -96,7 +99,7 @@ export async function muteUser({
     .setThumbnail(guild.iconURL())
     .setDescription(`${target}, you have been issued a \`${durationStr} mute\` in Salty's Cave.`)
     .addFields(
-      ...buildBasicFields(reason,currentWarnWeight, durationStr, activeWarnings.length), // Use the more basic helper
+      ...buildBasicFields(reason, currentWarnWeight, durationStr, activeWarnings.length), // Use the more basic helper
       { name: 'Warn expires:', value: formattedWarnExpiry, inline: false },
     )
     .setTimestamp();

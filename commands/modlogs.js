@@ -16,7 +16,7 @@ export const data = new SlashCommandBuilder()
     .addUserOption(option =>
         option.setName('user').setDescription('The user to view').setRequired(true)
     );
-
+//set log colors
 const LOG_COLORS = {
     Warn: 0xffcc00,
     Mute: 0xff4444,
@@ -25,41 +25,37 @@ const LOG_COLORS = {
 
 function calculateWarnCounts(logs) {
     let warnCount = 0;
-    // Iterate in chronological order to correctly calculate cumulative active warnings
-    // assuming 'logs' is already sorted by timestamp ascending for this calculation
-    // OR if logs are sorted descending, adjust the logic to count backwards or sort temporary.
-    // For modlogs usually displayed newest first, if calculation needs oldest first, sort then map, then re-sort.
-    // Given previous context, allLogs is sorted descending, so we need to sort ascending for the cumulative count.
-    const sortedForCalculation = [...logs].sort((a, b) => a.timestamp - b.timestamp);
-    
+    const sortedForCalculation = [...logs];
+
     return sortedForCalculation.map(log => {
         // Only count active warnings that are of type 'Warn'
         // This logic defines what "warns at log time" means.
-        if (log.type === 'Warn' && log.active) { 
+        if (log.type === 'Warn' && log.active) {
             warnCount++;
         }
         return { ...log, warnCountAtThisTime: warnCount };
-    }).sort((a, b) => b.timestamp - a.timestamp); // Sort back to newest first for display
+    });
 }
 
 export async function execute(interaction) {
-    const targetUser = interaction.options.getUser('user');
-    const moderatorUser = interaction.user;
-    const moderatorMember = await interaction.guild.members.fetch(moderatorUser.id).catch(() => null);
-    
+    // get user, moderator, and database moderator
+    const [targetUser, moderatorUser, moderatorMember] = [
+        interaction.options.getUser('user'),
+        interaction.user,
+        await interaction.guild.members.fetch(moderatorUser.id).catch(() => null)
+    ]
+
     if (!moderatorMember) {
         return interaction.reply({ content: "Error: Could not determine your permissions.", ephemeral: true });
     }
-
+    //define isAdmin for ease of reading
     const isAdmin = moderatorMember.permissions.has(PermissionsBitField.Flags.Administrator);
 
     // Fetch all logs only
     let allLogs = await getPunishments(targetUser.id);
-    
-    // Sort logs once by timestamp (newest first for display) and calculate running warn counts
-    allLogs.sort((a, b) => b.timestamp - a.timestamp); 
     allLogs = calculateWarnCounts(allLogs); // This function now returns the re-sorted array
 
+    //return early with no modlogs found
     if (!allLogs.length) {
         return interaction.reply({
             embeds: [
@@ -72,7 +68,7 @@ export async function execute(interaction) {
     }
 
     let currentIndex = 0;
-
+    //interaction row
     const buildButtons = (idx, totalLogs) => {
         const buttons = [
             new ButtonBuilder()
@@ -97,7 +93,7 @@ export async function execute(interaction) {
         }
         return new ActionRowBuilder().addComponents(buttons);
     };
-
+    //define and build embed template
     const buildLogEmbed = async (log, idx, totalLogs, targetUser, moderatorMember) => {
         const formattedDate = new Date(log.timestamp).toLocaleString('en-US', {
             dateStyle: 'medium',
@@ -127,7 +123,7 @@ export async function execute(interaction) {
                 iconURL: moderatorUser.displayAvatarURL({ dynamic: true })
             });
     };
-
+    //send embed
     await interaction.reply({
         embeds: [await buildLogEmbed(allLogs[currentIndex], currentIndex, allLogs.length, targetUser, moderatorMember)],
         components: [buildButtons(currentIndex, allLogs.length)],
@@ -135,12 +131,12 @@ export async function execute(interaction) {
     });
 
     const message = await interaction.fetchReply();
-
+    //enable the collector 
     const collector = message.createMessageComponentCollector({
         filter: i => i.user.id === moderatorUser.id || (isAdmin && i.user.id !== moderatorUser.id),
         time: 5 * 60 * 1000
     });
-
+    //collector listens for button presses and executes the appropriate action
     collector.on('collect', async i => {
         await i.deferUpdate();
 
@@ -156,7 +152,7 @@ export async function execute(interaction) {
             case 'dellog':
                 try {
                     const deleteFn = currentLog.type === 'Warn' ? deleteWarn : deleteMute;
-                     deleteFn(currentLog.id);
+                    deleteFn(currentLog.id);
                     logRecentCommand(`${currentLog.type} log deleted for ${targetUser.tag} | Admin: ${moderatorUser.tag} | Log ID: ${currentLog.id}`);
 
                     // Remove the deleted log from the array
@@ -185,13 +181,13 @@ export async function execute(interaction) {
                 }
                 break;
         }
-
+        // update the embed
         await i.editReply({
             embeds: [await buildLogEmbed(allLogs[currentIndex], currentIndex, allLogs.length, targetUser, moderatorMember)],
             components: [buildButtons(currentIndex, allLogs.length)]
         });
     });
-
+    //close the collector and disable the buttons
     collector.on('end', async (collected, reason) => {
         if (reason === 'time') {
             const disabledRow = buildButtons(currentIndex, allLogs.length);
