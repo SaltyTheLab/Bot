@@ -13,3 +13,4 @@ export const staffguidesid = '1262533685002113155';
 export const getrolesid = '1235323618582466621';
 export const hobbiescatagorey = '1262972525642649610'
 export const mediacatagorey = '1311485962567548970';
+export const adultcatagorey = '1235309784685744308';

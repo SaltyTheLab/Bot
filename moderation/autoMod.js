@@ -4,7 +4,8 @@ import { getNextPunishment } from './punishments.js';
 import { getWarnStats } from './simulatedwarn.js';
 import { updateTracker } from './trackers.js';
 import { evaluateViolations } from './evaluateViolations.js';
-import forbbidenWordsData from '../moderation/forbiddenwords.json' with {type :'json'};
+import { adultcatagorey } from '../BotListeners/Extravariables/channelids.js';
+import forbbidenWordsData from '../moderation/forbiddenwords.json' with {type: 'json'};
 
 
 
@@ -24,7 +25,7 @@ export async function AutoMod(client, message) {
   const violationFlags = updateTracker(userId, message);
 
   let matchedWord = null;
-  if (forbiddenWords.size > 0) {
+  if (forbiddenWords.size > 0 && message.channel.parentId !== adultcatagorey) {
     for (const word of forbiddenWords) {
       if (lowerContent.includes(word)) {
         matchedWord = word;
@@ -48,7 +49,7 @@ export async function AutoMod(client, message) {
   }
 
   const shouldDelete = matchedWord || hasInvite || everyonePing || violationFlags.triggeredByCurrentMessage
-  const [evaluationResult, deletionResult] = await Promise.all([
+  const [evaluationResult] = await Promise.all([
     evaluateViolations({ matchedWord, hasInvite, everyonePing, ...violationFlags, isNewUser }),
     shouldDelete ? message.delete().catch(err => {
       console.error(`Failed to delete message message: ${err.message}`);
