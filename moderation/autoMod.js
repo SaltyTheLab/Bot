@@ -1,5 +1,6 @@
 import { muteUser } from '../utilities/muteUser.js';
 import { warnUser } from '../utilities/warnUser.js';
+import { banUser } from '../utilities/banUser.js';
 import { getNextPunishment } from './punishments.js';
 import { getWarnStats } from './simulatedwarn.js';
 import { updateTracker } from './trackers.js';
@@ -43,11 +44,11 @@ export async function AutoMod(client, message) {
     violationFlags.isMediaViolation || violationFlags.isGeneralSpam || violationFlags.isDuplicateSpam
     || violationFlags.isCapSpam;
   if (!hasViolation) return;
-//handle spam duplication warn
+  //handle spam duplication warn
   if (violationFlags.isGeneralSpam && violationFlags.isDuplicateSpam) {
     violationFlags.isDuplicateSpam = false;
   }
-//delete violating message and generate reason
+  //delete violating message and generate reason
   const shouldDelete = matchedWord || hasInvite || everyonePing || violationFlags.triggeredByCurrentMessage
   const [evaluationResult] = await Promise.all([
     evaluateViolations({ matchedWord, hasInvite, everyonePing, ...violationFlags, isNewUser }),
@@ -59,7 +60,7 @@ export async function AutoMod(client, message) {
   ]);
 
   if (!evaluationResult || !evaluationResult.violations.length) return;
-// append while new to the server if joined less then two days ago
+  // append while new to the server if joined less then two days ago
   const reasons = evaluationResult.allReasons;
   let reasonText = `AutoMod: ${reasons.join(', ')}`;
   if (isNewUser) {
@@ -79,29 +80,34 @@ export async function AutoMod(client, message) {
       reasonText = reasonText.substring(0, lastCommaIndex) + ' and' + reasonText.substring(lastCommaIndex + 1);
     }
   }
-// get previous activewarnings and warn weight of new warn
+  // get previous activewarnings and warn weight of new warn
   const warnStats = await getWarnStats(userId, evaluationResult.violations);
   const { activeWarnings, currentWarnWeight } = warnStats;
-// calculate mute duration and unit
+  // calculate mute duration and unit
   const { duration, unit } = getNextPunishment(activeWarnings.length + currentWarnWeight);
 
-// common arguments for both warn and mute commands
+  // common arguments for all commands
   const commonPayload = {
     guild,
-    targetUser: userId,
+    targetUserId: userId,
     moderatorUser: client.user,
     reason: reasonText,
     channelid: channel.id,
     isAutomated: true,
-    violations: evaluationResult.violations
   };
-  // issue the mute/warn
-  if (activeWarnings.length > 0 || currentWarnWeight >= 2 && duration > 0) {
+  // issue the mute/warn/ban
+  if (activeWarnings.length >= 3 && isNewUser)
+    banUser(commonPayload);
+  else if (activeWarnings.length > 0 || currentWarnWeight >= 2 && duration > 0) {
     await muteUser({
       ...commonPayload,
+      violations: evaluationResult.violations,
       duration,
       unit
     });
   } else
-    await warnUser(commonPayload);
+    await warnUser({
+      ...commonPayload,
+      violations: evaluationResult.violations
+    });
 }
