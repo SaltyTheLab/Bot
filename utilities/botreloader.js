@@ -74,7 +74,7 @@ export async function reloadCommands(client) {
     return new Promise((resolve, reject) => {
         const commandsPath = path.join(botRoot, 'commands');
         // --- register them to the api ---
-         register();
+        register();
         const worker = new Worker('./utilities/worker.js', { type: 'module' });
 
         worker.postMessage(commandsPath);
@@ -125,7 +125,6 @@ export async function reloadListeners(client) {
     // --- Load and register new listeners ---
     return new Promise((resolve, reject) => {
         const listenersPath = path.join(botRoot, 'BotListeners');
-        console.log(`DEBUG (botReloader): listenersPath being sent to worker: ${listenersPath}`);
         const worker = new Worker('./utilities/worker.js', { type: 'module' });
 
         worker.postMessage(listenersPath);

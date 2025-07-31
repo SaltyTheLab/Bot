@@ -9,7 +9,7 @@ const THRESHOLD = 24 * 60 * 60 * 1000; // 24h
 
 export async function warnUser({
   guild,
-  targetUser,
+  targetUserId,
   moderatorUser,
   reason,
   channelid,
@@ -20,14 +20,14 @@ export async function warnUser({
   // Use Promise.all to fetch target, issuer, and channel concurrently.
   // Directly fetch by ID if targetUser/moderatorUser are objects, access their ID.
   const [targetMember, moderatorMember, currentChannel] = await Promise.all([
-    guild.members.fetch(targetUser.id || targetUser).catch(() => null),
+    guild.members.fetch(targetUserId).catch(() => null),
     guild.members.fetch(moderatorUser.id || moderatorUser).catch(() => null),
     guild.channels.fetch(channelid).catch(() => null) // Add catch for channel fetch too
   ]);
 
   // Check if target or moderator were found
   if (!targetMember || !moderatorMember) {
-    console.error(`[WarnUser] Target (${targetUser.id || targetUser}) or Moderator (${moderatorUser.id || moderatorUser}) not found in guild ${guild.id}.`);
+    console.error(`[WarnUser] Target (${ targetUserId}) or Moderator (${moderatorUser.id || moderatorUser}) not found in guild ${guild.id}.`);
     // Consider returning a more descriptive error or throwing if this is a critical failure.
     // For now, adhering to existing return type:
     return '❌ Could not find the user(s) in this guild.';

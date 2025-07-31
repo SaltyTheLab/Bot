@@ -17,7 +17,7 @@ const getDurationDisplay = ms => {
 
 export async function muteUser({
   guild,
-  targetUser,
+  targetUserId,
   moderatorUser,
   reason,
   channelid,
@@ -28,7 +28,7 @@ export async function muteUser({
 }) {
   // get member, interaction user, and channel objects
   const [target, issuer, commandChannel] = await Promise.all([
-    guild.members.fetch(targetUser).catch(err => {
+    guild.members.fetch(targetUserId).catch(err => {
       console.error(`[muteUser] Failed to fetch targetUser (${targetUser}):`, err);
       return null;
     }),
