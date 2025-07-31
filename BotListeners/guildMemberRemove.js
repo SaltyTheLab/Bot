@@ -1,4 +1,4 @@
-import { EmbedBuilder, AuditLogEvent } from "discord.js";
+import { EmbedBuilder, AuditLogEvent, Embed } from "discord.js";
 import { welcomeChannelId } from "./Extravariables/channelids.js";
 import { banlogChannelid } from "./Extravariables/channelids.js";
 
@@ -22,15 +22,15 @@ export async function guildMemberRemove(member) {
     let reason = "N/A";
     let time = now;
 
-    // Check for ban
+    // Check for ban in audit
     const banLogs = await member.guild.fetchAuditLogs({
         type: AuditLogEvent.MemberBanAdd
     });
-
     const banLog = banLogs.entries.find((entry) =>
         entry.target.id === member.id && isRecent(entry.createdTimestamp)
     );
-    // check for ban in audit 
+
+    //determine variables based on action
     if (banLog) {
         action = "ban";
         executor = banLog.executor;
@@ -67,8 +67,17 @@ export async function guildMemberRemove(member) {
             action = "prune";
         }
     }
-
-    // Create embed
+    const leaveembed = new EmbedBuilder()
+        .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+        .setDescription(`<@${member.id}> left the cave.`)
+        .addFields({
+            name: 'Joined the cave on:',
+            value: member.joinedAt
+                ? `<t:${Math.floor(member.joinedAt.getTime() / 1000)}:F>`
+                : 'Unknown',
+            inline: true,
+        })
+    // Create leave message embed
     const embed = new EmbedBuilder()
         .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
         .addFields({
@@ -111,5 +120,7 @@ export async function guildMemberRemove(member) {
             .setDescription(`${member} has left the server.`);
     }
     //send embed
-    await welcomeChannel.send({ embeds: [embed] });
+    await welcomeChannel.send({ embeds: [leaveembed] });
+    if (action === "ban")
+        await banlogChannel.send({ embeds: [embed] });
 }
