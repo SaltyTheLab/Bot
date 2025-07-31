@@ -163,8 +163,8 @@ export async function execute(interaction) {
         }
 
         //find user within all users for rank
-        const xpNeeded = Math.floor((userData.level) ** 2 * 50);
-        const rank = allUsers.findIndex(u => u.userId === userId) + 1;
+        const xpNeeded = Math.floor((userData.level - 1) ** 1.5 * 52)
+        const rank = allUsers.findIndex(u => u.userId === userId) - 1;
         const rankCard = await generateRankCard(userData, targetUser, xpNeeded, rank);
 
         await interaction.editReply({
