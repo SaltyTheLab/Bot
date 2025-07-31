@@ -7,7 +7,7 @@ import {
     PermissionsBitField
 } from 'discord.js';
 
-import { deleteMute, deleteWarn, getPunishments } from '../Database/databasefunctions.js'; // Removed getActiveWarns
+import { getPunishments } from '../Database/databasefunctions.js';
 import { logRecentCommand } from '../Logging/recentcommands.js';
 
 export const data = new SlashCommandBuilder()
@@ -36,14 +36,66 @@ function calculateWarnCounts(logs) {
         return { ...log, warnCountAtThisTime: warnCount };
     });
 }
+//define and build embed template
+const buildLogEmbed = async (log, idx, totalLogs, targetUser, moderatorUser) => {
+    const formattedDate = new Date(log.timestamp).toLocaleString('en-US', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+        timeZone: 'CST'
+    });
+
+    const fields = [
+        { name: 'Member', value: `<@${targetUser.id}>`, inline: true },
+        { name: 'Type', value: `\`${log.type}\``, inline: true },
+        { name: 'Channel', value: `<#${log.channel}>`, inline: false },
+        { name: 'Reason', value: `\`${log.reason || 'No reason provided'}\``, inline: false },
+        { name: 'Warns at Log Time', value: `\`${log.warnCountAtThisTime}\``, inline: false },
+    ];
+
+    if (log.type === 'Mute') {
+        fields.push({ name: 'Duration', value: `\`${Math.round(log.duration / 60000)} minutes\``, inline: true });
+    }
+    fields.push({ name: 'Log Status', value: log.active ? '✅ Active' : '❌ Inactive/cleared', inline: true });
+
+    return new EmbedBuilder()
+        .setColor(LOG_COLORS[log.type] ?? LOG_COLORS.default)
+        .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
+        .addFields(fields)
+        .setFooter({
+            text: `Staff: ${moderatorUser.tag} | Log ${idx + 1} of ${totalLogs} | ${formattedDate}`,
+            iconURL: moderatorUser.displayAvatarURL({ dynamic: true })
+        });
+};
+const buildButtons = (idx, totalLogs, targetUserId, isDeletable, logId, logType, timestamp) => {
+    const buttons = [
+        new ButtonBuilder()
+            .setCustomId(`modlog_prev_${targetUserId}_${idx}_${timestamp}`)
+            .setLabel('⬅️ Back')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(idx === 0),
+        new ButtonBuilder()
+            .setCustomId(`modlog_next_${targetUserId}_${idx}_${timestamp}`)
+            .setLabel('Next ➡️')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(idx >= totalLogs - 1)
+    ];
+
+    if (isDeletable) {
+        buttons.push(
+            new ButtonBuilder()
+                .setCustomId(`modlog_del_${logId}_${logType}_${targetUserId}_${idx}_${timestamp}`)
+                .setLabel('Delete')
+                .setStyle(ButtonStyle.Danger)
+        );
+    }
+    return new ActionRowBuilder().addComponents(buttons);
+};
 
 export async function execute(interaction) {
     // get user, moderator, and database moderator
-    const [targetUser, moderatorUser, moderatorMember] = [
-        interaction.options.getUser('user'),
-        interaction.user,
-        await interaction.guild.members.fetch(moderatorUser.id).catch(() => null)
-    ]
+    const targetUser = interaction.options.getUser('user');
+    const moderatorUser = interaction.user;
+    const moderatorMember = interaction.member;
 
     if (!moderatorMember) {
         return interaction.reply({ content: "Error: Could not determine your permissions.", ephemeral: true });
@@ -67,136 +119,19 @@ export async function execute(interaction) {
         });
     }
 
-    let currentIndex = 0;
-    //interaction row
-    const buildButtons = (idx, totalLogs) => {
-        const buttons = [
-            new ButtonBuilder()
-                .setCustomId('prev_log')
-                .setLabel('⬅️ Back')
-                .setStyle(ButtonStyle.Secondary)
-                .setDisabled(idx === 0),
-            new ButtonBuilder()
-                .setCustomId('next_log')
-                .setLabel('Next ➡️')
-                .setStyle(ButtonStyle.Secondary)
-                .setDisabled(idx >= totalLogs - 1)
-        ];
+    const currentIndex = 0;
+    const currentLog = allLogs[currentIndex];
+    const totalLogs = allLogs.length;
 
-        if (isAdmin) {
-            buttons.push(
-                new ButtonBuilder()
-                    .setCustomId('dellog')
-                    .setLabel('Delete')
-                    .setStyle(ButtonStyle.Danger)
-            );
-        }
-        return new ActionRowBuilder().addComponents(buttons);
-    };
-    //define and build embed template
-    const buildLogEmbed = async (log, idx, totalLogs, targetUser, moderatorMember) => {
-        const formattedDate = new Date(log.timestamp).toLocaleString('en-US', {
-            dateStyle: 'medium',
-            timeStyle: 'short',
-            timeZone: 'CST'
-        });
+    // Log the command usage
+    logRecentCommand(`Modlogs command used by ${moderatorUser.tag} for user ${targetUser.tag}`);
+    
+    const timestamp = Date.now();
 
-        const fields = [
-            { name: 'Member', value: `<@${targetUser.id}>`, inline: true },
-            { name: 'Type', value: `\`${log.type}\``, inline: true },
-            { name: 'Channel', value: `<#${log.channel}>`, inline: false },
-            { name: 'Reason', value: `\`${log.reason || 'No reason provided'}\``, inline: false },
-            { name: 'Warns at Log Time', value: `\`${log.warnCountAtThisTime}\``, inline: false },
-        ];
-
-        if (log.type === 'Mute') {
-            fields.push({ name: 'Duration', value: `\`${Math.round(log.duration / 60000)} minutes\``, inline: true });
-        }
-        fields.push({ name: 'Log Status', value: log.active ? '✅ Active' : '❌ Inactive/cleared', inline: true });
-
-        return new EmbedBuilder()
-            .setColor(LOG_COLORS[log.type] ?? LOG_COLORS.default)
-            .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
-            .addFields(fields)
-            .setFooter({
-                text: `Staff: ${moderatorMember.displayName || moderatorMember.user.tag} | Log ${idx + 1} of ${totalLogs} | ${formattedDate}`,
-                iconURL: moderatorUser.displayAvatarURL({ dynamic: true })
-            });
-    };
     //send embed
     await interaction.reply({
-        embeds: [await buildLogEmbed(allLogs[currentIndex], currentIndex, allLogs.length, targetUser, moderatorMember)],
-        components: [buildButtons(currentIndex, allLogs.length)],
+        embeds: [await buildLogEmbed(currentLog, currentIndex, totalLogs, targetUser, moderatorUser)],
+        components: [buildButtons(currentIndex, totalLogs, targetUser.id, isAdmin && currentLog.active, currentLog.id, currentLog.type, timestamp)],
         ephemeral: false
-    });
-
-    const message = await interaction.fetchReply();
-    //enable the collector 
-    const collector = message.createMessageComponentCollector({
-        filter: i => i.user.id === moderatorUser.id || (isAdmin && i.user.id !== moderatorUser.id),
-        time: 5 * 60 * 1000
-    });
-    //collector listens for button presses and executes the appropriate action
-    collector.on('collect', async i => {
-        await i.deferUpdate();
-
-        const currentLog = allLogs[currentIndex];
-
-        switch (i.customId) {
-            case 'next_log':
-                currentIndex = Math.min(currentIndex + 1, allLogs.length - 1);
-                break;
-            case 'prev_log':
-                currentIndex = Math.max(currentIndex - 1, 0);
-                break;
-            case 'dellog':
-                try {
-                    const deleteFn = currentLog.type === 'Warn' ? deleteWarn : deleteMute;
-                    deleteFn(currentLog.id);
-                    logRecentCommand(`${currentLog.type} log deleted for ${targetUser.tag} | Admin: ${moderatorUser.tag} | Log ID: ${currentLog.id}`);
-
-                    // Remove the deleted log from the array
-                    allLogs.splice(currentIndex, 1);
-
-                    // Re-calculate warn counts for the remaining logs after deletion
-                    // This function also re-sorts, so allLogs is ready for display
-                    allLogs = calculateWarnCounts(allLogs);
-
-                    if (!allLogs.length) {
-                        await i.editReply({
-                            content: `All modlogs for ${targetUser.tag} have been deleted.`,
-                            embeds: [],
-                            components: []
-                        });
-                        return collector.stop();
-                    }
-
-                    if (currentIndex >= allLogs.length) {
-                        currentIndex = allLogs.length - 1;
-                    }
-
-                } catch (error) {
-                    console.error(`Error deleting log ${currentLog.id}:`, error);
-                    await i.followUp({ content: `Failed to delete log: ${error.message}`, ephemeral: true });
-                }
-                break;
-        }
-        // update the embed
-        await i.editReply({
-            embeds: [await buildLogEmbed(allLogs[currentIndex], currentIndex, allLogs.length, targetUser, moderatorMember)],
-            components: [buildButtons(currentIndex, allLogs.length)]
-        });
-    });
-    //close the collector and disable the buttons
-    collector.on('end', async (collected, reason) => {
-        if (reason === 'time') {
-            const disabledRow = buildButtons(currentIndex, allLogs.length);
-            disabledRow.components.forEach(btn => btn.setDisabled(true));
-
-            await interaction.editReply({
-                components: [disabledRow]
-            }).catch(e => console.error("Failed to disable buttons on collector end:", e));
-        }
-        logRecentCommand(`${moderatorUser.tag} ended modlog session for ${targetUser.tag}`);
     });
 }
