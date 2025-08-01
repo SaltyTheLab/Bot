@@ -2,7 +2,7 @@
 import { EmbedBuilder } from '@discordjs/builders';
 import { saveUser, getUser } from '../Database/databasefunctions.js';
 import { AutoMod } from '../moderation/autoMod.js';
-//setup constants
+//setup constants and common triggers 
 const bad = 'bad';
 const bot = 'bot';
 const eyes = '1257522749635563561';
@@ -13,7 +13,7 @@ const keywords = {
   saytheline: 'stay frosty :3',
   bork: "bark",
   hellothere: "general Kenobi",
-  iamnowgoingtobarkatyou: "woof woof bark bark\nwoof woof woof bark bark\nwoof woof woof\nwoof woof woof\nbark bark bark"
+  barkatyou: "woof woof bark bark\nwoof woof woof bark bark\nwoof woof woof\nwoof woof woof\nbark bark bark"
 };
 export async function messageCreate(client, message) {
   //skip if message creator is bot or not in the server
