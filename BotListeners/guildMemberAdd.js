@@ -119,8 +119,8 @@ export async function guildMemberAdd(member) {
     await generalChannel.send({ embeds: [generalEmbed] });
     const welcomeMessage = await welcomeChannel.send({ embeds: [welcomeEmbed], components: [actionRow] });
 
-    // Schedule the button to be disabled after 15 minutes
-    const fifteenMinutesInMs = 15 * 60 * 1000;
+    // Schedule the button to be disabled after 5 minutes
+    const fiveMinutesInMs = 5 * 60 * 1000;
     setTimeout(async () => {
         try {
             const fetchedMessage = await welcomeChannel.messages.fetch(welcomeMessage.id);
@@ -134,9 +134,9 @@ export async function guildMemberAdd(member) {
                 .addComponents(updatedBanButton);
 
             await fetchedMessage.edit({ components: [updatedActionRow] });
-            console.log(`Ban button for ${member.user.tag} disabled after 15 minutes.`);
+            console.log(`Ban button for ${member.user.tag} disabled after 5 minutes.`);
         } catch (error) {
             console.error(`Failed to disable ban button for ${member.user.tag}:`, error);
         }
-    }, fifteenMinutesInMs);
+    }, fiveMinutesInMs);
 }
