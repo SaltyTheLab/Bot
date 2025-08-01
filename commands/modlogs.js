@@ -37,7 +37,8 @@ function calculateWarnCounts(logs) {
     });
 }
 //define and build embed template
-const buildLogEmbed = async (log, idx, totalLogs, targetUser, moderatorUser) => {
+const buildLogEmbed = async (interaction, log, idx, totalLogs, targetUser) => {
+    const moderator = await interaction.client.users.fetch(log.moderatorId);
     const formattedDate = new Date(log.timestamp).toLocaleString('en-US', {
         dateStyle: 'medium',
         timeStyle: 'short',
@@ -49,7 +50,7 @@ const buildLogEmbed = async (log, idx, totalLogs, targetUser, moderatorUser) => 
         { name: 'Type', value: `\`${log.type}\``, inline: true },
         { name: 'Channel', value: `<#${log.channel}>`, inline: false },
         { name: 'Reason', value: `\`${log.reason || 'No reason provided'}\``, inline: false },
-        { name: 'Warns at Log Time', value: `\`${log.warnCountAtThisTime}\``, inline: false },
+        { name: 'Warns at Log Time', value: `\`${log.weight}\``, inline: false },
     ];
 
     if (log.type === 'Mute') {
@@ -62,8 +63,8 @@ const buildLogEmbed = async (log, idx, totalLogs, targetUser, moderatorUser) => 
         .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
         .addFields(fields)
         .setFooter({
-            text: `Staff: ${moderatorUser.tag} | Log ${idx + 1} of ${totalLogs} | ${formattedDate}`,
-            iconURL: moderatorUser.displayAvatarURL({ dynamic: true })
+            text: `Staff: ${moderator.tag} | Log ${idx + 1} of ${totalLogs} | ${formattedDate}`,
+            iconURL: moderator.displayAvatarURL({ dynamic: true })
         });
 };
 const buildButtons = (idx, totalLogs, targetUserId, isDeletable, logId, logType, timestamp) => {
@@ -121,7 +122,6 @@ export async function execute(interaction) {
 
     const currentIndex = 0;
     const currentLog = allLogs[currentIndex];
-    const totalLogs = allLogs.length;
 
     // Log the command usage
     logRecentCommand(`Modlogs command used by ${moderatorUser.tag} for user ${targetUser.tag}`);
@@ -130,8 +130,8 @@ export async function execute(interaction) {
 
     //send embed
     await interaction.reply({
-        embeds: [await buildLogEmbed(currentLog, currentIndex, totalLogs, targetUser, moderatorUser)],
-        components: [buildButtons(currentIndex, totalLogs, targetUser.id, isAdmin && currentLog.active, currentLog.id, currentLog.type, timestamp)],
+        embeds: [await buildLogEmbed(interaction, currentLog, currentIndex, allLogs.length, targetUser)],
+        components: [buildButtons(currentIndex, allLogs.length, targetUser.id, isAdmin && currentLog.active, currentLog.id, currentLog.type, timestamp)],
         ephemeral: false
     });
 }
