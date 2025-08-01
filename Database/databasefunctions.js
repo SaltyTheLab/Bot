@@ -5,9 +5,9 @@ import db from './database.js';
 export function getUser(userId) {
   // Ensure user exists
   db.prepare(`
-    INSERT OR IGNORE INTO users (userId, xp, level, points)
-    VALUES (?,0, 1, 100)
-  `).run(userId);
+    INSERT OR IGNORE INTO users (userId, xp, level, coins)
+    VALUES (?, ?, ?, ?)
+  `).run(userId, 0, 1, 100);
 
   const userData = db.prepare(`
     SELECT * FROM users WHERE userId = ?
@@ -22,12 +22,12 @@ export function getUser(userId) {
 }
 
 // update user stats
-export function saveUser({ userId, xp, level, points }) {
+export function saveUser({ userId, xp, level, coins }) {
   db.prepare(`
-    INSERT INTO users (userId, xp, level, points)
+    INSERT INTO users (userId, xp, level, coins)
     VALUES (?, ?, ?, ?)
-    ON CONFLICT(userId) DO UPDATE SET xp = excluded.xp, level = excluded.level, points = excluded.points
-  `).run(userId, xp, level, points);
+    ON CONFLICT(userId) DO UPDATE SET xp = excluded.xp, level = excluded.level, coins = excluded.coins
+  `).run(userId, xp, level, coins);
 }
 // ───── NOTES ─────
 //add a note to the notes table

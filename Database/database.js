@@ -7,6 +7,7 @@ export const db = new Database('./Database/database.sqlite', {
 });
 
 db.pragma('foreign_keys = ON')
+db.pragma('journal_mode=DELETE')
 //load and execute schema from seperate sql file
 const schemaPath = path.resolve('./Database/Schema.sql');
 const schema = fs.readFileSync(schemaPath, 'utf-8');

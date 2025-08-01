@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS users (
     userId TEXT,
     xp INTEGER DEFAULT 0,
     level INTEGER DEFAULT 1,
+    coins INTEGER DEFAULT 100,
     PRIMARY KEY (userId)
 );
 
@@ -29,6 +30,6 @@ CREATE TABLE IF NOT EXISTS notes (
     FOREIGN KEY (userId) REFERENCES users(userId)
 );
 
-CREATE INDEX IF NOT EXISTS idx_users_userId ON users(userId);
-CREATE INDEX IF NOT EXISTS idx_punishments_user_type ON punishments(userId, type);
-CREATE INDEX IF NOT EXISTS idx_punishments_user_active ON punishments(userId, active);
+DROP INDEX IF EXISTS idx_users_userId;
+DROP INDEX IF EXISTS idx_punishments_user_type;
+DROP INDEX IF EXISTS idx_punishments_user_active;
