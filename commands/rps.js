@@ -1,11 +1,13 @@
 import { EmbedBuilder, SlashCommandBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } from "discord.js";
+import { getUser, saveUser } from "../Database/databasefunctions.js";
 
 export const data = new SlashCommandBuilder()
     .setName('rps')
     .setDescription('Play rock, paper, scissors')
 
 export function execute(interaction) {
-
+    let userWin = false;
+    const user = interaction.user.id;
     const menu = new EmbedBuilder()
         .setTitle(
             '**Pick your option**'
@@ -54,18 +56,24 @@ export function execute(interaction) {
         }
         let result = 'Something went wrong. ';
 
-        if (beats[userchoice] === opponentchoice)
+        if (beats[userchoice] === opponentchoice) {
             result = 'you win!!!';
+            userWin = true;
+        }
         else if (beats[opponentchoice] === userchoice)
             result = 'Febot Wins!!!';
-        else if(userchoice.toLowerCase() === opponentchoice.toLowerCase())
+        else if (userchoice.toLowerCase() === opponentchoice.toLowerCase())
             result = "it's a tie!!";
 
         const resultEmbed = new EmbedBuilder()
             .setTitle(result)
             .setDescription(`You chose **${userchoice}**.\nOpponent chose **${opponentchoice}**.`)
             .setColor(0xffa500);
-
+        if(userWin){
+            const {userData} = getUser(user)
+            userData.coins += 20;
+            saveUser(userData);
+        }
         await i.update({
             embeds: [resultEmbed],
             components: []
