@@ -1,6 +1,6 @@
 // commands/rank.js
 import { SlashCommandBuilder, AttachmentBuilder } from 'discord.js';
-import { getUser } from '../Database/databasefunctions.js'; // Your existing getUser
+import { getUser } from '../Database/databaseFunctions.js'; // Your existing getUser
 import Canvas from 'canvas';
 
 export const data = new SlashCommandBuilder()
@@ -139,9 +139,11 @@ export async function generateRankCard(userData, targetUser, xpNeeded, rank) {
     ctx.fill();
 
     // Fill of progress bar
-    ctx.fillStyle = '#3ba55d';
-    roundRect(ctx, barX, barY, barWidth * xpPercent, barHeight, radius);
-    ctx.fill();
+    if (xpPercent > 0) {
+        ctx.fillStyle = '#3ba55d';
+        roundRect(ctx, barX, barY, barWidth * xpPercent, barHeight, radius);
+        ctx.fill();
+    }
 
     const bufferImage = canvas.toBuffer('image/png');
     return new AttachmentBuilder(bufferImage, { name: 'rank.png' });
@@ -163,7 +165,7 @@ export async function execute(interaction) {
         }
 
         //find user within all users for rank
-        const xpNeeded = Math.floor((userData.level - 1) ** 1.5 * 52)
+        const xpNeeded = Math.round(((userData.level - 1) ** 1.5 * 52 + 40) / 20) * 20
         const rank = allUsers.findIndex(u => u.userId === userId) - 1;
         const rankCard = await generateRankCard(userData, targetUser, xpNeeded, rank);
 
