@@ -1,7 +1,7 @@
 
 import { EmbedBuilder } from '@discordjs/builders';
-import { saveUser, getUser } from '../Database/databasefunctions.js';
-import { AutoMod } from '../moderation/autoMod.js';
+import { getUser, saveUser } from '../Database/databaseFunctions.js';
+import  AutoMod  from '../moderation/autoMod.js';
 //setup constants and common triggers 
 const bad = 'bad';
 const bot = 'bot';
@@ -23,7 +23,6 @@ export async function messageCreate(client, message) {
   const userId = message.author.id;
   const content = message.content.toLowerCase();
   const lowerContent = content.replace(/ /g, '');
-  console.log(lowerContent);
 
   //send reactions for triggers
   if (lowerContent.includes('<@857445139416088647>'))
@@ -48,7 +47,7 @@ async function applyUserXP(userId, message) {
   const {userData} = getUser(userId);
   userData.xp += 20;
 
-  const xpNeeded = Math.floor((userData.level - 1) ** 1.5 * 52)
+  const xpNeeded = Math.round(((userData.level - 1) ** 1.5 * 52 + 40) / 20) * 20
   if (userData.xp >= xpNeeded) {
     userData.level++;
     userData.xp = 0;
