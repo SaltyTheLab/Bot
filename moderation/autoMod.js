@@ -1,10 +1,10 @@
-import { muteUser } from '../utilities/muteUser.js';
-import { warnUser } from '../utilities/warnUser.js';
-import { banUser } from '../utilities/banUser.js';
-import { getNextPunishment } from './punishments.js';
-import { getWarnStats } from './simulatedwarn.js';
-import { updateTracker } from './trackers.js';
-import { evaluateViolations } from './evaluateViolations.js';
+import muteUser from '../utilities/muteUser.js';
+import warnUser from '../utilities/warnUser.js';
+import banUser from '../utilities/banUser.js';
+import getNextPunishment from './punishments.js';
+import getWarnStats from './simulatedwarn.js';
+import updateTracker from './trackers.js';
+import evaluateViolations from './evaluateViolations.js';
 import { adultcatagorey } from '../BotListeners/Extravariables/channelids.js';
 import forbbidenWordsData from '../moderation/forbiddenwords.json' with {type: 'json'};
 
@@ -14,7 +14,7 @@ const forbiddenWords = new Set(forbbidenWordsData.forbiddenWords.map(w => w.toLo
 
 const inviteRegex = /(https?:\/\/)?(www\.)?(discord\.gg|discord(app)?\.com\/invite)\/[a-zA-Z0-9-]+/i;
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
-export async function AutoMod(client, message) {
+export default async function AutoMod(client, message) {
   const { author, content, member, guild, channel } = message;
   const userId = author.id;
 
@@ -101,13 +101,13 @@ export async function AutoMod(client, message) {
   else if (activeWarnings.length > 0 || currentWarnWeight >= 2 && duration > 0) {
     await muteUser({
       ...commonPayload,
-      violations: evaluationResult.violations,
       duration,
-      unit
+      unit,
+      currentWarnWeight: currentWarnWeight
     });
   } else
     await warnUser({
       ...commonPayload,
-      violations: evaluationResult.violations
+      currentWarnWeight: currentWarnWeight
     });
 }

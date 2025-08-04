@@ -1,9 +1,10 @@
 import { EmbedBuilder } from 'discord.js';
-import { getNextPunishment } from '../moderation/punishments.js';
-import { addMute } from '../Database/databasefunctions.js';
+import getNextPunishment from '../moderation/punishments.js';
 import { mutelogChannelid } from '../BotListeners/Extravariables/channelids.js';
-import { getWarnStats } from '../moderation/simulatedwarn.js';
-import { logRecentCommand } from '../Logging/recentcommands.js';
+import getWarnStats from '../moderation/simulatedwarn.js';
+import { addMute } from '../Database/databaseFunctions.js';
+import logRecentCommand from '../Logging/recentCommands.js';
+
 
 const unitMap = { min: 60000, hour: 3600000, day: 86400000 };
 const MAX_TIMEOUT_MS = 21600000; // 6 hours max timeout for automated timeouts
@@ -15,16 +16,16 @@ const getDurationDisplay = ms => {
     return `${Math.ceil(ms / unitMap.min)} minute(s)`;
 };
 
-export async function muteUser({
+export default async function muteUser({
     guild,
     targetUserId,
     moderatorUser,
     reason,
     channelid,
     isAutomated = true,
-    violations = [],
     duration,
-    unit
+    unit,
+    currentWarnWeight = 1
 }) {
 
     // get member, interaction user, and channel objects
@@ -56,11 +57,6 @@ export async function muteUser({
         console.error(`[muteUser] Command/Violation channel not found with ID: ${channelid}`);
         return '❌ Could not find the specified channel for logging/reply.';
     }
-
-    // Get the user's current warn stats, including the weight of any new violations
-    const { currentWarnWeight, activeWarnings} = await getWarnStats(target.id, violations);
-
-    
     // Prepare the unit in ms
     const multiplier = unitMap[unit];
     if (!multiplier || duration <= 0) {
@@ -68,16 +64,17 @@ export async function muteUser({
     }
 
     // Calculate the effective duration and apply a hard cap of six hours
-    const calculatedDurationMs = duration * multiplier;
+    const calculatedDurationMs = duration * multiplier * (isAutomated ? currentWarnWeight : 1);
     const effectiveDurationMs = Math.min(calculatedDurationMs, MAX_TIMEOUT_MS);
-    console.log(effectiveDurationMs);
     const durationStr = getDurationDisplay(effectiveDurationMs);
 
     // Add the mute to the database
     addMute(target.id, issuer.id, reason, effectiveDurationMs, currentWarnWeight, commandChannel.id);
 
+    const { activeWarnings } = await getWarnStats(targetUserId);
+
     // Get the label for the next punishment
-    const { label: nextPunishmentLabel } = getNextPunishment(activeWarnings.length + currentWarnWeight + 1);
+    const { label: nextPunishmentLabel } = getNextPunishment(activeWarnings.length + currentWarnWeight);
 
     // --- Helper for Common Embed Fields ---
     const buildBasicFields = (reason, currentWarnWeight, durationStr, activeWarnsCount) => {
@@ -129,7 +126,7 @@ export async function muteUser({
     // --- Attempt to Timeout User ---
     try {
         await target.timeout(effectiveDurationMs, reason);
-        logRecentCommand(`Timeout applied for ${target.user.tag} for ${durationStr} by ${issuer.user.tag}`);
+        logRecentCommand(`Mute: Target: ${target.user.tag} | Moderator: ${issuer.user.tag} | Reason: ${reason} | Duration : ${durationStr}`);
     } catch (err) {
         console.error(`[muteUser] Failed to timeout user ${target.user.tag}:`, err.message);
         logEmbed.addFields({ name: 'Timeout Status:', value: `❌ Failed: ${err.message}`, inline: false });
@@ -146,9 +143,6 @@ export async function muteUser({
     } else {
         console.error(`[muteUser] Mute log channel not found with ID: ${mutelogChannelid}`);
     }
-
-    // --- Log Command for Audit ---
-    logRecentCommand(`MUTE: ${target.user.tag} (${target.id}) | Reason: ${reason} | Duration: ${durationStr} | Issuer: ${issuer.user.tag} (${issuer.id})`);
 
     // --- Command Confirmation Embed for Channel ---
     const commandEmbed = new EmbedBuilder()
