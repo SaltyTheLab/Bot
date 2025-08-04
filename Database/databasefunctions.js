@@ -83,7 +83,7 @@ export function addMute(userId, moderatorId, reason, durationMs, weight, channel
 
 // --- BANS ---
 export function addBan(userId, moderatorId, reason, channel) {
-  return db.prepare(`INSET INTO punishments (userId, moderatorId, reason, duration, timestamp, active, weight, type, channel)
+  return db.prepare(`INSERT INTO punishments (userId, moderatorId, reason, duration, timestamp, active, weight, type, channel)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(userId, moderatorId, reason, 0, 0, 1, 1, 'Ban', channel)
 }
