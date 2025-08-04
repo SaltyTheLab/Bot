@@ -1,6 +1,7 @@
 // commands/resetlevel.js
 import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
-import { saveUser } from '../Database/databasefunctions.js';
+import { getUser, saveUser } from '../Database/databaseFunctions.js';
+import logRecentCommand from '../Logging/recentCommands.js';
 
 export const data = new SlashCommandBuilder()
     .setName('resetlevel')
@@ -14,11 +15,11 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
     const targetUser = interaction.options.getUser('user');
-    const guildId = interaction.guild.id;
-    const userId = targetUser.id;
-
+    const { userData } = getUser(targetUser.id)
     // Reset XP and level to 0
-     saveUser(targetUser.id, 0, 1);
+    userData.level = 1;
+    userData.xp = 0;
+    saveUser(userData);
 
     await interaction.reply({
         content: `🔄 Reset **${targetUser.username}**'s XP to 0 and level to 1.`,
