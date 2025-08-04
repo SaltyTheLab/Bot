@@ -18,7 +18,6 @@ export async function guildBanRemove(ban) {
     // A small buffer to account for audit log propagation delays
     const isRecent = (timestamp) => now - timestamp < 5000;
 
-    let executor = null;
     let reason = "No reason provided.";
 
     try {
@@ -29,15 +28,12 @@ export async function guildBanRemove(ban) {
         });
 
         // Find the specific unban entry for this user
-        
         const unbanLog = unbanLogs.entries.find((entry) =>
             entry.target.id === ban.user.id && isRecent(entry.createdTimestamp)
         );
 
-        if (unbanLog) {
-            executor = unbanLog.executor;
+        if (unbanLog)
             reason = unbanLog.reason ?? "No reason provided.";
-        }
 
         // Create an embed for the unban
         const embed = new EmbedBuilder()
