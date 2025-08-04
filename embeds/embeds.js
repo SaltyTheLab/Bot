@@ -440,7 +440,7 @@ async function sendContinentRoleEmbed(guild, messageIDs, key) {
             await msg.react(continent);
 
         } catch (err) {
-            console.error(`❌ Failed to react with ${emoji}:`, err);
+            console.error(`❌ Failed to react with ${continent}:`, err);
         }
     }
 
