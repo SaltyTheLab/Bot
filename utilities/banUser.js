@@ -1,9 +1,10 @@
 import { EmbedBuilder } from 'discord.js';
 import { banlogChannelid } from '../BotListeners/Extravariables/channelids.js'; // Your mod-log channel ID
-import { addBan } from '../Database/databasefunctions.js';
+import { addBan } from '../Database/databaseFunctions.js';
 
 
-export async function banUser({
+
+export default async function banUser({
     guild,
     targetUserId,
     moderatorUser,

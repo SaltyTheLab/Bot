@@ -1,5 +1,5 @@
-import { PermissionFlagsBits, SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { warnUser } from '../utilities/warnUser.js';
+import { PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
+import warnUser from '../utilities/warnUser.js';
 
 
 

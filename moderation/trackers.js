@@ -14,7 +14,7 @@ const DUPLICATE_SPAM_THRESHOLD = 3;
 
 
 
-export function updateTracker(userId, message) {
+export default function updateTracker(userId, message) {
   const now = Date.now();
 
   const exclusions = [hobbiescatagorey, mediacatagorey];

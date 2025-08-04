@@ -1,4 +1,4 @@
-export function getNextPunishment(weightedWarns) {
+export default function getNextPunishment(weightedWarns) {
 
     const punishmentStages = [
         { label: '1 warn', minutes: 0 },

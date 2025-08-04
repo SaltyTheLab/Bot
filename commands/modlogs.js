@@ -6,9 +6,8 @@ import {
     ButtonStyle,
     PermissionsBitField
 } from 'discord.js';
-
-import { getPunishments } from '../Database/databasefunctions.js';
-import { logRecentCommand } from '../Logging/recentcommands.js';
+import logRecentCommand from '../Logging/recentCommands.js';
+import { getPunishments } from '../Database/databaseFunctions.js';
 
 export const data = new SlashCommandBuilder()
     .setName('modlogs')

@@ -6,7 +6,7 @@ import {
     ButtonStyle,
     PermissionFlagsBits
 } from 'discord.js';
-import { viewNotes, deleteNote } from '../Database/databasefunctions.js';
+import { viewNotes, deleteNote } from '../Database/databaseFunctions.js';
 
 export const data = new SlashCommandBuilder()
     .setName('note_show')

@@ -35,7 +35,7 @@ async function loadCommands(commandsPath) {
 }
 
 // ✅ Main logic
- export async function register() {
+ export default async function register() {
  
         const { TOKEN, CLIENT_ID, GUILD_ID } = process.env;
 

@@ -1,5 +1,4 @@
-
-export async function evaluateViolations({ hasInvite, matchedWord, everyonePing, isGeneralSpam, isDuplicateSpam, isMediaViolation, isNewUser, isCapSpam }) {
+export default async function evaluateViolations({ hasInvite, matchedWord, everyonePing, isGeneralSpam, isDuplicateSpam, isMediaViolation, isNewUser, isCapSpam }) {
   const checks = [
     { flag: hasInvite, type: 'invite', reason: 'Discord invite' },
     { flag: matchedWord, type: 'forbiddenWord', reason: matchedWord ? `Forbidden word "${matchedWord}"` : 'forbidden word' },

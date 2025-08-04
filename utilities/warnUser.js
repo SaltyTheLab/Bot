@@ -1,20 +1,21 @@
 import { EmbedBuilder } from 'discord.js';
-import { addWarn, getUser } from '../Database/databasefunctions.js';
-import { mutelogChannelid } from '../BotListeners/Extravariables/channelids.js'; // Log channel for warnings
-import { getWarnStats } from '../moderation/simulatedwarn.js';
-import { getNextPunishment } from '../moderation/punishments.js';
-import { logRecentCommand } from '../Logging/recentcommands.js';
+import { mutelogChannelid } from '../BotListeners/Extravariables/channelids.js';
+import  getWarnStats  from '../moderation/simulatedwarn.js';
+import  getNextPunishment  from '../moderation/punishments.js';
+import { addWarn } from '../Database/databaseFunctions.js';
+import logRecentCommand from '../Logging/recentCommands.js';
+
 
 const THRESHOLD = 24 * 60 * 60 * 1000; // 24h
 
-export async function warnUser({
+export default async function warnUser({
   guild,
   targetUserId,
   moderatorUser,
   reason,
   channelid,
   isAutomated = true,
-  violations = []
+  currentWarnWeight = 1
 }) {
   // --- 1. Fetching Members and Channels ---
   // Use Promise.all to fetch target, issuer, and channel concurrently.
@@ -35,32 +36,22 @@ export async function warnUser({
 
   // --- 2. Database Operations (getUser, getWarnStats, addWarn) ---
  
-  // Get current warn weight *before* adding the new warn.
-  // This is crucial because `addWarn` relies on `currentWarnWeight` for the payload.
-  // Then, after `addWarn`, fetch `activeWarnings`.
-  const { currentWarnWeight } = await getWarnStats(targetMember.id, violations);
 
   // Add the new warning to the DB.
-  // This is a write operation and should happen before recalculating active warnings.
   addWarn(targetMember.id, moderatorMember.id, reason, currentWarnWeight, channelid);
 
   // Fetch updated active warnings for the user after the new warn has been added.
-  const { activeWarnings } = await getWarnStats(targetMember.id); // No `violations` needed here, just getting active ones.
+  const { activeWarnings } = await getWarnStats(targetMember.id);
 
   // Get label for the next punishment stage based on the *total* active warnings.
   const { label } = getNextPunishment(activeWarnings.length);
 
 
   // --- 3. Calculating Expiry Time ---
-  // This is fine as is.
   const expiresAt = new Date(Date.now() + THRESHOLD);
   const formattedExpiry = `<t:${Math.floor(expiresAt.getTime() / 1000)}:F>`;
 
-  // --- 4. Embed Building ---
-  // The `buildcommon` function is good for reusability.
-  // No changes here for efficiency, but consistent naming (`targetMember`, `moderatorMember`)
-  // improves clarity.
-
+  // --- Common fields for Embed Building ---
   const commonFields = (warnReason, warnWeight, nextPunishmentLabel, activeWarnsCount) => [
     { name: 'Reason:', value: `\`${warnReason}\``, inline: false },
     { name: 'Punishments:', value: `\`${warnWeight} warn\``, inline: false },
@@ -126,7 +117,7 @@ export async function warnUser({
     console.warn(`[WarnUser] Mute log channel with ID ${mutelogChannelid} not found.`);
   }
 
-  // --- 6. Logging Command and Sending Confirmation ---
+  // --- Log Command ---
   logRecentCommand(`warn - ${targetMember.user.tag} - ${reason} - issuer: ${moderatorMember.user.tag}`);
 
   // Send confirmation embed if automated, else return the embed for manual use
