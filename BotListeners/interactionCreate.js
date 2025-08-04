@@ -1,7 +1,7 @@
 import { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } from "discord.js";
-import { deleteMute, deleteWarn, getPunishments } from '../Database/databasefunctions.js';
-import { logRecentCommand } from '../Logging/recentcommands.js';
-import { banUser } from "../utilities/banUser.js";
+import banUser from "../utilities/banUser.js";
+import { getPunishments, deleteMute, deleteWarn } from "../Database/databaseFunctions.js";
+import logRecentCommand from "../Logging/recentCommands.js";
 
 const LOG_COLORS = {
     Warn: 0xffcc00,
@@ -280,6 +280,7 @@ export async function interactionCreate(interaction) {
 
             let banSuccess = false;
             let inviteDeleted = false;
+            let inviterBanSuccess = false;
 
             let finalMessage = `Successfully banned ${memberToBan.user.tag} for: "${reason}".`;
 
@@ -331,7 +332,7 @@ export async function interactionCreate(interaction) {
                 }
             }
 
-            if (banSuccess && inviteDeleted) {
+            if (banSuccess && inviteDeleted && inviterBanSuccess) {
                 finalMessage += '\nAssociated invite was also deleted.';
             } else if (banSuccess && !inviteDeleted) {
                 finalMessage += '\nCould not delete the associated invite.';
