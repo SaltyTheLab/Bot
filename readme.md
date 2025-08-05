@@ -17,8 +17,7 @@ delete it and create a new Database.sqlite file. The schema written in sql
 will handle recreating the tables
 
 ## ENV File
-### __One file you NEED to add is a .env file that contains your custom bot TOKEN(KEEP THIS SECURE!!)__
-### __its CLIENT_ID and your GUILD_ID when you create a app on the dev portal.__
+ One file you NEED to add is a .env file that contains your custom bot TOKEN(KEEP THIS SECURE!!) its CLIENT_ID and your GUILD_ID when you create a app on the dev portal.
 
 ### example env file template:
 CLIENT_ID=bot client id here.   
