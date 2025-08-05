@@ -21,7 +21,7 @@ will handle recreating the tables
 ### __its CLIENT_ID and your GUILD_ID when you create a app on the dev portal.__
 
 ### example env file template:
-CLIENT_ID=bot client id here
-GUILD_ID= your server id
-TOKEN=your bots token
+CLIENT_ID=bot client id here.   
+GUILD_ID= your server id.  
+TOKEN=your bots token.  
 
