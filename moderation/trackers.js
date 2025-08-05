@@ -75,8 +75,12 @@ export default function updateTracker(userId, message) {
   }
   const isDuplicateSpam = duplicateCount >= DUPLICATE_SPAM_THRESHOLD;
 
-  const isMediaViolation = tracker.mediaCount > 1 && tracker.total <= 20;
-// clear messages after 20 sent over, resetting all flags
+  const isMediaViolation = tracker.mediaCount > 1 && tracker.total < 20;
+
+  if(isMediaViolation)
+    tracker.mediaCount = 0;
+
+  // clear messages after 20 sent over, resetting all flags
   if (tracker.total >= 20) {
     tracker.total = 0;
     tracker.mediaCount = 0;
