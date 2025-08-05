@@ -13,13 +13,14 @@ own changes.
 
 ### Database
 Database file can be removed as it shows an example. All you have to do is
-delete it and create a new Database.sqlite file
+delete it and create a new Database.sqlite file. The schema written in sql
+will handle recreating the tables
 
-### ENV File
-##__One file you NEED to add is a .env file that contains your custom bot TOKEN(keep this very secure!!),
-its CLIENT_ID and your GUILD_ID when you create a app on the dev portal.__
+## ENV File
+### __One file you NEED to add is a .env file that contains your custom bot TOKEN(KEEP THIS SECURE!!)__
+### __its CLIENT_ID and your GUILD_ID when you create a app on the dev portal.__
 
-## example env file template:
+### example env file template:
 CLIENT_ID=bot client id here
 GUILD_ID= your server id
 TOKEN=your bots token
