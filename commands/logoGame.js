@@ -1,4 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle } from "discord.js";
+import { getUser, saveUser } from "../Database/databaseFunctions.js";
 import fs from 'node:fs';
 import path from 'node:path'
 
@@ -82,14 +83,14 @@ export async function execute(interaction) {
         });
 
         if (i.customId === logo.brand) {
-            await i.update({
-                components: [updatedButtons],
-            });
-        } else {
-            await i.update({
-                components: [updatedButtons],
-            });
+            const { userData } = getUser(user.id);
+            userData.points += 20;
+            saveUser(userData);
         }
+        await i.update({
+            components: [updatedButtons],
+        });
+
         collector.stop();
     });
 }

@@ -4,7 +4,7 @@ import path from 'node:path';
 const recentCommandsPath = path.join(process.cwd(), 'Logging', 'recentCommandslog.json');
 const MAX_COMMANDS = 50;
 
-export async function logRecentCommand(commandString) {
+export default async function logRecentCommand(commandString) {
   try {
     let recentCommands = [];
 

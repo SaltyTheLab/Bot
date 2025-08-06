@@ -22,5 +22,17 @@
   {
     "brand": "Starbucks",
     "image": "Database\\images\\starbucks.png"
+  },
+  {
+    "brand" : "Newgrounds",
+    "image" : "Database\\images\\NewGrounds.png"
+  },
+  {
+    "brand" : "Nine Inch Nails",
+    "image" : "Database\\images\\nine inch nails.png"
+  },
+  {
+    "brand" : "Target",
+    "image" : "Database\\images\\Target.png"
   }
 ]

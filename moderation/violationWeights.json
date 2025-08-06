@@ -1,0 +1,32 @@
+{
+  "violationWeights": [
+    {
+      "type": "forbiddenWord",
+      "Weight": 1
+    },
+    {
+      "type": "invite",
+      "Weight": 2
+    },
+    {
+      "type": "everyonePing",
+      "Weight": 2
+    },
+    {
+      "type": "spam",
+      "Weight": 1
+    },
+    {
+      "type": "mediaViolation",
+      "Weight": 1
+    },
+    {
+      "type": "CapSpam",
+      "Weight": 1
+    },
+    {
+      "type": "isNewUser",
+      "Weight": 0.9
+    }
+  ]
+}

@@ -1,32 +1,31 @@
-import { getActiveWarns } from '../Database/databasefunctions.js';
-import { violationWeights } from './violationWeights.js';
+import Weights from './violationWeights.json' with {type: 'json'};
+import { getActiveWarns } from '../Database/databaseFunctions.js';
 
+const violationWeights = new Map(Weights.violationWeights.map(w => [w.type.toLowerCase(), w.Weight]));
 /**
- * Calculate current and future weighted warnings for a user.
+ * Calculate current warnings for a user.
  * @param {string} userId - The target user's ID.
  * @param {Array<string|{type: string}>} newViolationType - Violations to simulate.
  * @returns {Promise<{ activeWarnings, currentWarnWeight }>}
  */
-export async function getWarnStats(userId, newViolationType = []) {
+export default async function getWarnStats(userId, newViolationType = []) {
+  //get previous active warnings
   const activeWarningsPromise = getActiveWarns(userId);
-
+  // get weights of violations
   const currentWarnWeightPromise = Promise.resolve(
     Array.isArray(newViolationType)
-      ? newViolationType.reduce((acc, v) => {
-          const type = typeof v === 'string' ? v : v?.type;
-          const weight = violationWeights[type] || 1;
-          return Math.ceil(acc + weight);
-        }, 0)
+      ? Math.ceil(newViolationType.reduce((acc, v) => {
+        const type = (typeof v === 'string' ? v : v?.type)?.toLowerCase();
+        const weight = violationWeights.get(type) ?? 1;
+        return acc + weight;
+      }, 0))
       : 0
   );
-
+ 
+  //define output variables
   const [activeWarnings, currentWarnWeight] = await Promise.all([
     activeWarningsPromise,
     currentWarnWeightPromise
   ]);
-
-  return {
-    activeWarnings,
-    currentWarnWeight
-  };
+  return {activeWarnings, currentWarnWeight}
 }

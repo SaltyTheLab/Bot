@@ -1,11 +1,5 @@
 import { EmbedBuilder, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
-import { logRecentCommand } from '../Logging/recentcommands.js';
-import { muteUser } from '../utilities/muteUser.js';
-
-
-
-
-
+import muteUser from '../utilities/muteUser.js';
 
 const unitMap = { min: 60000, hour: 3600000, day: 86400000 };
 
@@ -62,14 +56,12 @@ export async function execute(interaction) {
         return interaction.reply({ content: '⚠️ User is already muted.', ephemeral: true });
     }
 
-    logRecentCommand(`mute - ${target.tag} - ${durationStr} - ${reason} - issuer: ${issuer.tag}`);
-
     const output = await muteUser({
         guild,
         targetUser: target.id,
         moderatorUser: issuer,
         reason,
-        duration,
+        durationMs,
         unit,
         channelid: channelid,
         isAutomated: false

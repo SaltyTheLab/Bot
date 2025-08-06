@@ -1,77 +1,57 @@
-import { loadMessageIDs } from "../utilities/messageStorage.js";
+import embedIDs from '../embeds/EmbedIDs.json' with {type: 'json'}
+import { emojiRoleMap } from "./Extravariables/rolemap.js";
 
-const messageIDs = loadMessageIDs();
+const messageIDs = embedIDs;
 
-export const emojiRoleMap = {
-  '👍': '1395015929062232126',
-  '💻': '1235323729936908379',
-  '📦': '1235323730628968530',
-  '🚉': '1235323732273397893',
-  '🟥': '1235323733246476329',
-  '📱': '1235323733795799154',
-  '🎧': '1272280467940573296',
-  '🔴': '1235323620163846294',
-  '🟣': '1235323621015158827',
-  '🟢': '1235323622546083991',
-  '🩷': '1235323622969835611',
-  '🟠': '1235323624055902289',
-  '🟡': '1235323625037500466',
-  '🔵': '1235323625452601437',
-  '🧡': '1235323773473783989',
-  '💛': '1235323773973168274',
-  '💜': '1235323774505582634',
-  '💚': '1235323775772528766',
-  '🇪🇺': '1235335164436025415',
-  '🦅': '1235335164758855781',
-  '🌄': '1235335165631397909',
-  '🐼': '1235335166772117694',
-  '🐨': '1235335167560912927',
-  '🦒': '1235335168458231951',
-  '▶️': '1331028469794209913',
-  '🚧': [
-    '1235337327732068353',
-    '1235337203572543561',
-    '1235336646749327392',
-    '1235337070504050735'
-  ]
-};
 
 // Common role message IDs to react to
 const validKeys = ['colors', 'pronouns', 'continent', 'stream', 'dividers', 'consoles'];
-const validRoleMessageIds = validKeys.map(key => messageIDs[key]).filter(Boolean);
+const validRoleMessageIds = messageIDs
+  .filter(embedInfo => validKeys.includes(embedInfo.name)) // Filter for only the relevant embed names
+  .map(embedInfo => embedInfo.messageId) // Get the messageId for each filtered embed
+  .filter(Boolean); // Remove any potential undefined or null entries (though shouldn't happen if structure is consistent)
 
 /**
  * Handle reaction-based role assignment or removal
  */
 async function handleReactionChange(reaction, user, action = 'add') {
+  //check for bot user
   if (user.bot) return;
 
+  //fetch the reaction the user used
   try {
-    if (reaction.partial) await reaction.fetch();
-    if (user.partial) await user.fetch();
+    if (reaction.partial) reaction = await reaction.fetch();
+    if (reaction.message && reaction.message.partial) await reaction.message.fetch();
+
+    if (user.partial) user = await user.fetch();
   } catch (err) {
     console.error(`❌ Failed to fetch reaction or user (${action}):`, err);
     return;
   }
 
-  if (!validRoleMessageIds.includes(reaction.message.id)) return;
+  //return if not a vaild message or message id isn't in the messageIDs array
+  if (!reaction.message || !validRoleMessageIds.includes(reaction.message.id)) return;
 
+  //assign the emoji id and role
   const emoji = reaction.emoji.id || reaction.emoji.name;
   const roleID = emojiRoleMap[emoji];
 
+  //error out if role id not found
   if (!roleID) {
     console.log(`⚠️ No role mapped to emoji: ${emoji}`);
     return;
   }
-
+  //fetch the guild and member objects
   const guild = reaction.message.guild ?? await reaction.client.guilds.fetch(reaction.message.guildId);
   const member = await guild.members.fetch(user.id).catch(() => null);
 
+  //error out if member not found
   if (!member) {
     console.log('❌ Member not found');
     return;
   }
 
+// attempt to modify the users roles
   try {
     const rolesToModify = Array.isArray(roleID) ? roleID : [roleID];
     await member.roles[action](rolesToModify);
@@ -80,16 +60,12 @@ async function handleReactionChange(reaction, user, action = 'add') {
   }
 }
 
-/**
- * Reaction add handler
- */
+// Reaction add handler
 export async function messageReactionAdd(reaction, user) {
   await handleReactionChange(reaction, user, 'add');
 }
 
-/**
- * Reaction remove handler
- */
+// Reaction remove handler
 export async function messageReactionRemove(reaction, user) {
   await handleReactionChange(reaction, user, 'remove');
 }

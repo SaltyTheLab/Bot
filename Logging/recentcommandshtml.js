@@ -35,12 +35,6 @@ function updateCommandList() {
     });
 }
 
-function addCommand(command) {
-    recentCommands.unshift(command);
-    if (recentCommands.length > maxCommands) recentCommands.pop();
-    filterCommands(searchInput.value);
-    adjustLayout(filteredCommands.length);
-}
 
 function adjustLayout(lineCount) {
     commandHistory.size = Math.min(Math.max(lineCount, 5), 20);

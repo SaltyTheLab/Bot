@@ -3,7 +3,7 @@ import {
     SlashCommandBuilder,
     PermissionFlagsBits
 } from "discord.js";
-import { addNote } from "../Database/databasefunctions.js";
+import { addNote } from "../Database/databaseFunctions.js";
 
 export const data = new SlashCommandBuilder()
     .setName('addnote')

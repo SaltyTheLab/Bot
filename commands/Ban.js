@@ -1,7 +1,5 @@
-import { PermissionFlagsBits, SlashCommandBuilder, EmbedBuilder } from "discord.js";
-import { logRecentCommand } from "../Logging/recentcommands.js";
-import { banUser } from "../utilities/banUser.js";
-
+import { PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
+import  banUser  from "../utilities/banUser.js";
 
 export const data = new SlashCommandBuilder()
     .setName('ban')
@@ -17,8 +15,6 @@ export const data = new SlashCommandBuilder()
             .setDescription('Reason for the ban')
             .setRequired(true)
     );
-
-
 
 export async function execute(interaction) {
     const target = interaction.options.getUser('target');
@@ -40,7 +36,6 @@ export async function execute(interaction) {
         isAutomated: false
     });
 
-    logRecentCommand(`ban - ${target.tag} - ${reason} - issuer: ${interaction.user.tag}`);
     if (typeof result === 'string') {
         // If banUser returns a string, assume it's a message for user
         return interaction.reply({ content: result });

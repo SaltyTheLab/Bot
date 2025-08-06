@@ -1,9 +1,10 @@
 import { EmbedBuilder } from 'discord.js';
-import { banlogChannelid } from '../BotListeners/channelids.js'; // Your mod-log channel ID
+import { banlogChannelid } from '../BotListeners/Extravariables/channelids.js'; // Your mod-log channel ID
+import { addBan } from '../Database/databaseFunctions.js';
 
-const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000; // 2 days in ms
 
-export async function banUser({
+
+export default async function banUser({
     guild,
     targetUserId,
     moderatorUser,
@@ -14,9 +15,6 @@ export async function banUser({
     const target = await guild.members.fetch(targetUserId).catch(() => null);
     if (!target) return '❌ User not found in the server.';
 
-
-    const issuer = await guild.members.fetch(moderatorUser.id).catch(() => null);
-    const issuerEmbed = moderatorUser.user ?? moderatorUser;
 
     // DM Embed (optional)
     const dmEmbed = new EmbedBuilder()
@@ -35,7 +33,7 @@ export async function banUser({
     const logEmbed = new EmbedBuilder()
         .setColor(0xff0000)
         .setAuthor({ name: `${moderatorUser.tag} banned a member`, iconURL: moderatorUser.displayAvatarURL() })
-        .setThumbnail(target.displayAvatarURL(({dynamic : true})))
+        .setThumbnail(target.displayAvatarURL(({ dynamic: true })))
         .addFields(
             { name: 'Target:', value: `${target}`, inline: true },
             { name: 'Channel:', value: `<#${channel.id}>`, inline: true },
@@ -43,10 +41,10 @@ export async function banUser({
         )
         .setTimestamp();
     try {
-        logEmbed.setFooter({text: 'User was dmed.'})
+        logEmbed.setFooter({ text: 'User was dmed.' })
         await target.send({ embeds: [dmEmbed] });
     } catch {
-        logEmbed.setFooter({text:'User was not dmed.'})
+        logEmbed.setFooter({ text: 'User was not dmed.' })
     }
 
     // Try to ban the user
@@ -55,7 +53,7 @@ export async function banUser({
     } catch (err) {
         return `❌ Failed to ban user: ${err.message ?? err}`;
     }
-
+    addBan(target.id, moderatorUser.id, reason, channel)
     const logChannel = guild.channels.cache.get(banlogChannelid);
     if (logChannel) await logChannel.send({ embeds: [logEmbed] });
     const commandEmbed = new EmbedBuilder()
@@ -64,7 +62,7 @@ export async function banUser({
         }
         )
     if (isAutomated && channel) {
-        await channel.send({embeds: [commandEmbed]});
+        await channel.send({ embeds: [commandEmbed] });
         return;
     }
     return commandEmbed;

@@ -35,32 +35,33 @@ async function loadCommands(commandsPath) {
 }
 
 // ✅ Main logic
-(async () => {
-    const { TOKEN, CLIENT_ID, GUILD_ID } = process.env;
+ export default async function register() {
+ 
+        const { TOKEN, CLIENT_ID, GUILD_ID } = process.env;
 
-    if (!TOKEN || !CLIENT_ID || !GUILD_ID) {
-        console.error('❌ Missing required environment variables: TOKEN, CLIENT_ID, or GUILD_ID.');
-        return;
-    }
+        if (!TOKEN || !CLIENT_ID || !GUILD_ID) {
+            console.error('❌ Missing required environment variables: TOKEN, CLIENT_ID, or GUILD_ID.');
+            return;
+        }
 
-    const commandsPath = path.join(__dirname, 'commands');
-    const commands = await loadCommands(commandsPath);
+        const commandsPath = path.join(__dirname, 'commands');
+        const commands = await loadCommands(commandsPath);
 
-    if (commands.length === 0) {
-        console.warn('⚠️ No valid commands to register.');
-        return;
-    }
+        if (commands.length === 0) {
+            console.warn('⚠️ No valid commands to register.');
+            return;
+        }
 
-    const rest = new REST({ version: '10' }).setToken(TOKEN);
+        const rest = new REST({ version: '10' }).setToken(TOKEN);
 
-    try {
-        console.log('🔄 Registering slash commands...');
-        const data = await rest.put(
-            Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-            { body: commands }
-        );
-        console.log(`✅ Successfully registered ${data.length} commands.`);
-    } catch (err) {
-        console.error('❌ Error registering commands with Discord API:', err);
-    }
-})();
+        try {
+            console.log('🔄 Registering slash commands...');
+            const data = await rest.put(
+                Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+                { body: commands }
+            );
+            console.log(`✅ Successfully registered ${data.length} commands.`);
+        } catch (err) {
+            console.error('❌ Error registering commands with Discord API:', err);
+        }
+};

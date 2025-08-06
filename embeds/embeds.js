@@ -1,45 +1,65 @@
 import { EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle } from 'discord.js';
-import { ruleschannelid, mentalhealthid, ticketappealsid, staffguidesid, getrolesid } from '../BotListeners/channelids.js';
-import { loadMessageIDs, saveMessageIDs } from '../utilities/messageStorage.js';
-export let rolemessageid = '';
-export async function embedsenders(guild) {
-    if (!guild) {
-        console.error('Guild not found');
-        return;
-    }
+import { ruleschannelid, mentalhealthid, ticketappealsid, staffguidesid, getrolesid } from '../BotListeners/Extravariables/channelids.js';
+import { saveMessageIDs, loadMessageIDs } from '../utilities/messageStorage.js'; 
 
-    const messageIDs = loadMessageIDs();
 
-    // Create an array of promises for all embed sends/updates
-    const embedSenders = {
-        rules: sendRulesEmbed,
-        mental: sendMentalHealthEmbed,
-        appeal: sendAppealEmbed,
-        staffguide: sendStaffGuideEmbed,
-        consoles: sendConsoleRoleEmbed,
-        colors: sendColorsRoleEmbed,
-        pronouns: sendPronounsRoleEmbed,
-        continent: sendContinentRoleEmbed,
-        stream: sendStreamRoleEmbed,
-        dividers: sendDividersRoleEmbed
+export async function embedsenders(client, guildId) {
+    // ... (robust guild fetching logic - keep as is) ...
+    let guild = client.guilds.cache.get(guildId); // Use client.client.guilds.cache for safety
+    if (!guild) { /* ... error handling ... */ return; }
+    console.log(`Successfully retrieved guild: ${guild.name} (${guild.id})`);
+
+    // 1. Load the existing message IDs from the file
+    // This will be the array that we modify in memory
+    const messageIDs = loadMessageIDs(); // Call the function to load the array
+
+    // Define your embed sending functions as an OBJECT (this structure is good)
+    const embedSendersMap = {
+        "rules": sendRulesEmbed,
+        "mental": sendMentalHealthEmbed,
+        "appeal": sendAppealEmbed,
+        "staffguide": sendStaffGuideEmbed,
+        "consoles": sendConsoleRoleEmbed,
+        "colors": sendColorsRoleEmbed,
+        "pronouns": sendPronounsRoleEmbed,
+        "continent": sendContinentRoleEmbed,
+        "stream": sendStreamRoleEmbed,
+        "dividers": sendDividersRoleEmbed
     };
 
     const embedTasks = [];
+    // Iterate directly over the object's entries
+    for (let [embedName, senderFunc] of Object.entries(embedSendersMap)) {
+        console.log(`Checking embed for name: '${embedName}'`);
 
-    for (const [key, senderFunc] of Object.entries(embedSenders)) {
-        if (!messageIDs[key]) {
-            embedTasks.push(senderFunc(guild, messageIDs));
+        // Find the entry in the *current in-memory messageIDs array*
+        const existingEmbedInfo = messageIDs.find(item => item.name === embedName);
+
+        // Condition to send a new embed:
+        // 1. If no entry exists for this embedName in the loaded data, OR
+        // 2. If an entry exists, but it's missing either messageId or channelid
+        if (!existingEmbedInfo || !existingEmbedInfo.messageId || !existingEmbedInfo.channelid) {
+            console.log(`Attempting to send new embed for: '${embedName}' (ID missing or incomplete).`);
+            // Pass guild, the *modifiable messageIDs array*, and the current embedName
+            embedTasks.push(senderFunc(guild, messageIDs, embedName));
+        } else {
+            // Log with both IDs for clarity
+            console.log(`Message '${embedName}' already exists: Message ID: ${existingEmbedInfo.messageId}, Channel ID: ${existingEmbedInfo.channelid}. Skipping creation.`);
+            // Optional: Add logic here to UPDATE existing embeds if their content changes.
         }
     }
 
     await Promise.all(embedTasks);
 
-    // Save updated message IDs once after all embeds are sent
+    // Save ALL updated message IDs once after all new embeds have been sent.
+    // This will overwrite the file, but `messageIDs` now contains all previous entries
+    // plus any newly added ones, so it effectively "adds missing" by saving the complete state.
     saveMessageIDs(messageIDs);
-
+    console.log('Embed sending process completed (new embeds created/IDs saved to file).');
 }
 
-async function sendRulesEmbed(guild, messageIDs) {
+
+async function sendRulesEmbed(guild, messageIDs, key) {
     const rules = new EmbedBuilder()
         .setTitle('**__Rules__**')
         .setAuthor({
@@ -98,13 +118,24 @@ async function sendRulesEmbed(guild, messageIDs) {
         .setDescription('Feel free to grab some roles in <#1235323618582466621> channel.');
 
     const channel = await guild.channels.fetch(ruleschannelid);
+    if (!channel?.isTextBased()) {
+        console.error(`Channel ${ruleschannelid} for '${key}' embed is not text-based.`);
+        return; // Exit if the channel is not suitable
+    }
     const msg = await channel.send({ embeds: [rules, roles] });
 
-    console.log('📝 Saved Rules message ID:', msg.id);
-    messageIDs['rules'] = msg.id;
+    console.log(`📝 Sent '${key}' embed. Message ID:`, msg.id);
+
+    // Add a new entry to the array if it didn't exist
+    messageIDs.push({
+        name: key,
+        messageId: msg.id,
+        channelid: channel.id
+    });
+
 }
 
-async function sendMentalHealthEmbed(guild, messageIDs) {
+async function sendMentalHealthEmbed(guild, messageIDs, key) {
     const mentalhealth = new EmbedBuilder()
         .setTitle('Mental Health')
         .setAuthor({
@@ -177,18 +208,25 @@ async function sendMentalHealthEmbed(guild, messageIDs) {
 
             })
 
-    const bottest = await guild.channels.fetch(mentalhealthid);
-    const msg = await bottest.send({ embeds: [mentalhealth] });
+    const channel = await guild.channels.fetch(mentalhealthid);
+    if (!channel?.isTextBased()) {
+        console.error(`Channel ${mentalhealthid} for '${key}' embed is not text-based.`);
+        return; // Exit if the channel is not suitable
+    }
+    const msg = await channel.send({ embeds: [mentalhealth] });
 
-    console.log('📝 Saved reaction role message ID:', msg.id);
-    messageIDs['mental'] = msg.id;
-    saveMessageIDs(messageIDs);
+    console.log(`📝 Sent '${key}' embed. Message ID:`, msg.id);
 
-    console.log('📝 Saved Rules message ID:', msg.id);
-    messageIDs['rules'] = msg.id;
+    // Add a new entry to the array if it didn't exist
+    messageIDs.push({
+        name: key,
+        messageId: msg.id,
+        channelid: channel.id
+    });
+
 }
 
-async function sendAppealEmbed(guild, messageIDs) {
+async function sendAppealEmbed(guild, messageIDs, key) {
     const appealsembed = new EmbedBuilder()
         .setTitle('Ticket Appeal Form')
         .setDescription([
@@ -206,18 +244,28 @@ async function sendAppealEmbed(guild, messageIDs) {
 
     const row = new ActionRowBuilder().addComponents(appealbutton);
 
-    const bottest = await guild.channels.fetch(ticketappealsid);
-    const msg = await bottest.send({
+    const channel = await guild.channels.fetch(ticketappealsid);
+    if (!channel?.isTextBased()) {
+        console.error(`Channel ${ticketappealsid} for '${key}' embed is not text-based.`);
+        return; // Exit if the channel is not suitable
+    }
+    const msg = await channel.send({
+        name: "appeal",
         embeds: [appealsembed],
         components: [row]
     });
 
-    console.log('📝 Saved reaction role message ID:', msg.id);
-    messageIDs['appeal'] = msg.id;
-    saveMessageIDs(messageIDs);
+    console.log(`📝 Sent '${key}' embed. Message ID:`, msg.id);
+
+    // Add a new entry to the array if it didn't exist
+    messageIDs.push({
+        name: key,
+        messageId: msg.id,
+        channelid: channel.id
+    });
 }
 
-async function sendStaffGuideEmbed(guild, messageIDs) {
+async function sendStaffGuideEmbed(guild, messageIDs, key) {
     const staffguides = new EmbedBuilder()
         .setTitle('Staff Guidelines')
         .setAuthor({
@@ -252,15 +300,25 @@ async function sendStaffGuideEmbed(guild, messageIDs) {
         }
         )
 
-    const staff = await guild.channels.fetch(staffguidesid);
-    const msg = await staff.send({ embeds: [staffguides] });
+    const channel = await guild.channels.fetch(staffguidesid);
+    if (!channel?.isTextBased()) {
+        console.error(`Channel ${staffguidesid} for '${key}' embed is not text-based.`);
+        return; // Exit if the channel is not suitable
+    }
+    const msg = await channel.send({ embeds: [staffguides] });
 
-    console.log('📝 Saved reaction role message ID:', msg.id);
-    messageIDs['staffguide'] = msg.id;
-    saveMessageIDs(messageIDs);
+    console.log(`📝 Sent '${key}' embed. Message ID:`, msg.id);
+
+    // Add a new entry to the array if it didn't exist
+    messageIDs.push({
+        name: key,
+        messageId: msg.id,
+        channelid: channel.id
+    });
+
 }
 
-async function sendConsoleRoleEmbed(guild, messageIDs) {
+async function sendConsoleRoleEmbed(guild, messageIDs, key) {
     const consoles = new EmbedBuilder()
         .setTitle('What do you play on?')
         .setDescription(['💻:<@&1235323729936908379>',
@@ -269,18 +327,29 @@ async function sendConsoleRoleEmbed(guild, messageIDs) {
             '🟥: <@&1235323733246476329>',
             '📱: <@&1235323733795799154>',
             '🎧: <@&1272280467940573296>'].join('\n'))
-    const roles = await guild.channels.fetch(getrolesid);
-    let msg = await roles.send({ embeds: [consoles] });
+    const channel = await guild.channels.fetch(getrolesid);
+    if (!channel?.isTextBased()) {
+        console.error(`Channel ${getrolesid} for '${key}' embed is not text-based.`);
+        return; // Exit if the channel is not suitable
+    }
+    const msg = await channel.send({ embeds: [consoles] });
     const consoleemotes = ['💻', '📦', '🚉', '🟥', '📱', '🎧']
     for (const console of consoleemotes) {
         msg.react(console)
     }
-    console.log('📝 Saved reaction role message ID:', msg.id);
-    messageIDs['consoles'] = msg.id;
-    saveMessageIDs(messageIDs);
+
+    console.log(`📝 Sent '${key}' embed. Message ID:`, msg.id);
+
+
+    // Add a new entry to the array if it didn't exist
+    messageIDs.push({
+        name: key,
+        messageId: msg.id,
+        channelid: channel.id
+    });
 }
 
-async function sendColorsRoleEmbed(guild, messageIDs) {
+async function sendColorsRoleEmbed(guild, messageIDs, key) {
     const color = new EmbedBuilder()
         .setTitle('Get Your Colors here!')
         .setDescription([
@@ -292,19 +361,29 @@ async function sendColorsRoleEmbed(guild, messageIDs) {
             '🟡: <@&1235323625037500466>',
             '🔵: <@&1235323625452601437>'
         ].join('\n'))
-    const roles = await guild.channels.fetch(getrolesid);
-    let msg = await roles.send({ embeds: [color] })
+    const channel = await guild.channels.fetch(getrolesid);
+    if (!channel?.isTextBased()) {
+        console.error(`Channel ${getrolesid} for '${key}' embed is not text-based.`);
+        return; // Exit if the channel is not suitable
+    }
+    const msg = await channel.send({ embeds: [color] });
     const colors = ['🔴', '🟣', '🟢', '🩷', '🟠', '🟡', '🔵']
     for (const color of colors) {
         msg.react(color)
     }
 
-    console.log('📝 Saved reaction role message ID:', msg.id);
-    messageIDs['colors'] = msg.id;
-    saveMessageIDs(messageIDs);
+    console.log(`📝 Sent '${key}' embed. Message ID:`, msg.id);
+
+    // Add a new entry to the array if it didn't exist
+    messageIDs.push({
+        name: key,
+        messageId: msg.id,
+        channelid: channel.id
+    });
+
 }
 
-async function sendPronounsRoleEmbed(guild, messageIDs) {
+async function sendPronounsRoleEmbed(guild, messageIDs, key) {
     const pronouns = new EmbedBuilder()
         .setTitle('Identity?')
         .setDescription([
@@ -313,19 +392,29 @@ async function sendPronounsRoleEmbed(guild, messageIDs) {
             '💜: <@&1235323774505582634>',
             '💚: <@&1235323775772528766>'
         ].join('\n'))
-    const roles = await guild.channels.fetch(getrolesid);
-    let msg = await roles.send({ embeds: [pronouns] })
+    const channel = await guild.channels.fetch(getrolesid);
+    if (!channel?.isTextBased()) {
+        console.error(`Channel ${getrolesid} for '${key}' embed is not text-based.`);
+        return; // Exit if the channel is not suitable
+    }
+    const msg = await channel.send({ embeds: [pronouns] });
     const nouns = ['🧡', '💛', '💜', '💚',]
     for (const pronoun of nouns) {
         msg.react(pronoun)
     }
 
-    console.log('📝 Saved reaction role message ID:', msg.id);
-    messageIDs['pronouns'] = msg.id;
-    saveMessageIDs(messageIDs);
+    console.log(`📝 Sent '${key}' embed. Message ID:`, msg.id);
+
+    // Add a new entry to the array if it didn't exist
+    messageIDs.push({
+        name: key,
+        messageId: msg.id,
+        channelid: channel.id
+    });
+
 }
 
-async function sendContinentRoleEmbed(guild, messageIDs) {
+async function sendContinentRoleEmbed(guild, messageIDs, key) {
     const continent = new EmbedBuilder()
         .setTitle('Where you on the earth?')
         .setDescription([
@@ -336,8 +425,13 @@ async function sendContinentRoleEmbed(guild, messageIDs) {
             '🐨: <@&1235335167560912927>',
             '🦒: <@&1235335168458231951>'
         ].join('\n'))
-    const roles = await guild.channels.fetch(getrolesid);
-    let msg = await roles.send({ embeds: [continent] })
+    const channel = await guild.channels.fetch(getrolesid);
+    if (!channel?.isTextBased()) {
+        console.error(`Channel ${getrolesid} for '${key}' embed is not text-based.`);
+        return; // Exit if the channel is not suitable
+    }
+    const msg = await channel.send({ embeds: [continent] });
+
     const location = [
         '🇪🇺', '🦅', '🌄', '🐼', '🐨', '🦒'
     ];
@@ -346,39 +440,62 @@ async function sendContinentRoleEmbed(guild, messageIDs) {
             await msg.react(continent);
 
         } catch (err) {
-            console.error(`❌ Failed to react with ${emoji}:`, err);
+            console.error(`❌ Failed to react with ${continent}:`, err);
         }
     }
 
-    console.log('📝 Saved reaction role message ID:', msg.id);
-    messageIDs['continent'] = msg.id;
-    saveMessageIDs(messageIDs);
+    console.log(`📝 Sent '${key}' embed. Message ID:`, msg.id);
+    // Add a new entry to the array if it didn't exist
+    messageIDs.push({
+        name: key,
+        messageId: msg.id,
+        channelid: channel.id
+    });
+
 }
 
-async function sendStreamRoleEmbed(guild, messageIDs) {
+async function sendStreamRoleEmbed(guild, messageIDs, key,) {
     const twitch = new EmbedBuilder()
         .setTitle('Twitch Pings')
         .setDescription('React here to get notified of when <@857445139416088647> is live!')
-    const roles = await guild.channels.fetch(getrolesid);
-    let msg = await roles.send({ embeds: [twitch] })
+    const channel = await guild.channels.fetch(getrolesid);
+    if (!channel?.isTextBased()) {
+        console.error(`Channel ${getrolesid} for '${key}' embed is not text-based.`);
+        return; // Exit if the channel is not suitable
+    }
+    const msg = await channel.send({ embeds: [twitch] });
     msg.react('▶️')
 
-    console.log('📝 Saved reaction role message ID:', msg.id);
-    messageIDs['stream'] = msg.id;
-    saveMessageIDs(messageIDs);
+    console.log(`📝 Sent '${key}' embed. Message ID:`, msg.id);
+
+    // Add a new entry to the array if it didn't exist
+    messageIDs.push({
+        name: key,
+        messageId: msg.id,
+        channelid: channel.id
+    });
 }
 
-async function sendDividersRoleEmbed(guild, messageIDs) {
+async function sendDividersRoleEmbed(guild, messageIDs, key,) {
     const dividers = new EmbedBuilder()
         .setTitle('Divders')
         .setDescription(
             'React here to get the Divider roles for easy viewing'
         )
-    const roles = await guild.channels.fetch(getrolesid);
-    let msg = await roles.send({ embeds: [dividers] })
+    const channel = await guild.channels.fetch(getrolesid);
+    if (!channel?.isTextBased()) {
+        console.error(`Channel ${getrolesid} for '${key}' embed is not text-based.`);
+        return; // Exit if the channel is not suitable
+    }
+    const msg = await channel.send({ embeds: [dividers] });
     msg.react('🚧')
 
-    console.log('📝 Saved reaction role message ID:', msg.id);
-    messageIDs['dividers'] = msg.id;
-    saveMessageIDs(messageIDs);
+    console.log(`📝 Sent '${key}' embed. Message ID:`, msg.id);
+
+    // Add a new entry to the array if it didn't exist
+    messageIDs.push({
+        name: key,
+        messageId: msg.id,
+        channelid: channel.id
+    });
 }

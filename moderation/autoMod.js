@@ -1,26 +1,20 @@
-// AutoMod.js
+import muteUser from '../utilities/muteUser.js';
+import warnUser from '../utilities/warnUser.js';
+import banUser from '../utilities/banUser.js';
+import getNextPunishment from './punishments.js';
+import getWarnStats from './simulatedwarn.js';
+import updateTracker from './trackers.js';
+import evaluateViolations from './evaluateViolations.js';
+import { adultcatagorey } from '../BotListeners/Extravariables/channelids.js';
+import forbbidenWordsData from '../moderation/forbiddenwords.json' with {type: 'json'};
 
-import { muteUser } from '../utilities/muteUser.js';
-import { warnUser } from '../utilities/warnUser.js';
-import { getNextPunishment } from './punishments.js';
-import { getWarnStats } from './simulatedwarn.js';
-import { updateTracker } from './trackers.js';
-import { evaluateViolations } from './evaluateViolations.js';
-import { fileURLToPath } from 'node:url';
-import fs from 'node:fs';
-import path from 'node:path';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
-const forbiddenWordsPath = path.join(__dirname, '../moderation/forbiddenwords.json');
-const forbiddenWords = new Set(
-  JSON.parse(fs.readFileSync(forbiddenWordsPath, 'utf8')).forbiddenWords.map(w => w.toLowerCase())
-);
+const forbiddenWords = new Set(forbbidenWordsData.forbiddenWords.map(w => w.toLowerCase()));
 
 const inviteRegex = /(https?:\/\/)?(www\.)?(discord\.gg|discord(app)?\.com\/invite)\/[a-zA-Z0-9-]+/i;
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
-export async function AutoMod(message, client) {
+export default async function AutoMod(client, message) {
   const { author, content, member, guild, channel } = message;
   const userId = author.id;
 
@@ -31,60 +25,89 @@ export async function AutoMod(message, client) {
 
   const violationFlags = updateTracker(userId, message);
 
-  const [matchedWord, hasInvite, everyonePing, isNewUser] = [
-    [...forbiddenWords].find(word => lowerContent.includes(word)),
+  let matchedWord = null;
+  if (forbiddenWords.size > 0 && message.channel.parentId !== adultcatagorey) {
+    for (const word of forbiddenWords) {
+      if (lowerContent.includes(word)) {
+        matchedWord = word;
+      }
+    }
+  }
+  //test message for red flags
+  const [hasInvite, everyonePing, isNewUser] = [
     inviteRegex.test(content),
     message.mentions.everyone,
     Date.now() - member.joinedTimestamp < TWO_DAYS_MS
   ];
-
+  //variable to flag message for automod detection
   const hasViolation = matchedWord || hasInvite || everyonePing ||
     violationFlags.isMediaViolation || violationFlags.isGeneralSpam || violationFlags.isDuplicateSpam
     || violationFlags.isCapSpam;
   if (!hasViolation) return;
-
+  //handle spam duplication warn
   if (violationFlags.isGeneralSpam && violationFlags.isDuplicateSpam) {
     violationFlags.isDuplicateSpam = false;
   }
-
+  //delete violating message and generate reason
   const shouldDelete = matchedWord || hasInvite || everyonePing || violationFlags.triggeredByCurrentMessage
   const [evaluationResult] = await Promise.all([
     evaluateViolations({ matchedWord, hasInvite, everyonePing, ...violationFlags, isNewUser }),
-    shouldDelete ? message.delete().catch(() => null) : Promise.resolve()
+    shouldDelete ? message.delete().catch(err => {
+      console.error(`Failed to delete message message: ${err.message}`);
+      return null;
+
+    }) : Promise.resolve(null)
   ]);
 
   if (!evaluationResult || !evaluationResult.violations.length) return;
-
-  let reasonText = `AutoMod: ${evaluationResult.allReasons.join(', ')}`;
-  if (isNewUser && reasonText.endsWith('while new to the server.')) {
-    reasonText = reasonText.replace(/,([^,]*)$/, ' $1');
+  // append while new to the server if joined less then two days ago
+  const reasons = evaluationResult.allReasons;
+  let reasonText = `AutoMod: ${reasons.join(', ')}`;
+  if (isNewUser) {
+    const lastReason = reasons[reasons.length - 1];
+    if (lastReason && lastReason.includes('while new to the server.')) {
+      if (reasons.length > 1) {
+        reasons[reasons.length - 2] += ` and ${lastReason}`;
+        reasons.pop();
+        reasonText = `AutoMod: ${reasons.join(', ')}`;
+      } else {
+        reasonText = `AutoMod: ${lastReason}`;
+      }
+    }
   } else {
-    reasonText = reasonText.replace(/,([^,]*)$/, ' and$1');
+    const lastCommaIndex = reasonText.lastIndexOf(',');
+    if (lastCommaIndex !== -1) {
+      reasonText = reasonText.substring(0, lastCommaIndex) + ' and' + reasonText.substring(lastCommaIndex + 1);
+    }
   }
+  // get previous activewarnings and warn weight of new warn
+  const warnStats = await getWarnStats(userId, evaluationResult.violations);
+  const { activeWarnings, currentWarnWeight } = warnStats;
+  // calculate mute duration and unit
+  const { duration, unit } = getNextPunishment(activeWarnings.length + currentWarnWeight);
 
-  const statsPromise = getWarnStats(userId, evaluationResult.violations);
-  const [{ activeWarnings }, { duration, unit }] = await Promise.all([
-    statsPromise,
-    statsPromise.then(({ activeWarnings, currentWarnWeight }) =>
-      getNextPunishment(activeWarnings.length + currentWarnWeight)
-    )
-  ]);
+  // common arguments for all commands
   const commonPayload = {
     guild,
-    targetUser: userId,
+    targetUserId: userId,
     moderatorUser: client.user,
     reason: reasonText,
     channelid: channel.id,
     isAutomated: true,
-    violations: evaluationResult.violations
   };
-
-  if (activeWarnings.length > 0 && duration > 0) {
+  // issue the mute/warn/ban
+  if (activeWarnings.length >= 3 && isNewUser)
+    banUser(commonPayload);
+  else if (activeWarnings.length > 0 || currentWarnWeight >= 2 && duration > 0) {
     await muteUser({
       ...commonPayload,
       duration,
-      unit
+      unit,
+      currentWarnWeight: currentWarnWeight
     });
   } else
-    await warnUser(commonPayload);
+    await warnUser({
+      ...commonPayload,
+      currentWarnWeight: currentWarnWeight
+    });
 }
