@@ -1,10 +1,8 @@
 
 import { EmbedBuilder } from '@discordjs/builders';
 import { getUser, saveUser } from '../Database/databaseFunctions.js';
-import  AutoMod  from '../moderation/autoMod.js';
+import AutoMod from '../moderation/autoMod.js';
 //setup constants and common triggers 
-const bad = 'bad';
-const bot = 'bot';
 const eyes = '1257522749635563561';
 const keywords = {
   cute: "You're Cute",
@@ -15,6 +13,10 @@ const keywords = {
   hellothere: "general Kenobi",
   barkatyou: "woof woof bark bark\nwoof woof woof bark bark\nwoof woof woof\nwoof woof woof\nbark bark bark"
 };
+const reactions = {
+  "857445139416088647": eyes,
+  bad: '😡'
+}
 export async function messageCreate(client, message) {
   //skip if message creator is bot or not in the server
   if (message.author.bot || !message.guild || !message.member) return;
@@ -24,16 +26,15 @@ export async function messageCreate(client, message) {
   const content = message.content.toLowerCase();
   const lowerContent = content.replace(/ /g, '');
 
-  //send reactions for triggers
-  if (lowerContent.includes('<@857445139416088647>'))
-    message.react(eyes);
-  if (lowerContent.includes(bad && bot))
-    message.react('😡')
-
   for (const keyword in keywords) {
     if (lowerContent.includes(keyword)) {
       message.reply(keywords[keyword]);
     }
+  }
+
+  for (const reaction in reactions) {
+    if (lowerContent.includes(reaction))
+      message.react(reactions[reaction])
   }
 
   //add and update xp to the user
@@ -44,7 +45,15 @@ export async function messageCreate(client, message) {
   await AutoMod(client, message);
 }
 async function applyUserXP(userId, message) {
-  const {userData} = getUser(userId);
+  let userData = getUser(userId);
+
+
+  if (userData.userId === null) {
+    console.warn(`Corrupt user data found for userId: ${userId}. Initializing with defaults.`);
+    const newUserData = { userId: userId, xp: 0, level: 1, coins: 100 };
+    saveUser(newUserData); // Save the clean data immediately
+    userData = getUser(userId); // Re-fetch the now-clean data
+  }
   userData.xp += 20;
 
   const xpNeeded = Math.round(((userData.level - 1) ** 1.5 * 52 + 40) / 20) * 20
