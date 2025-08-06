@@ -56,8 +56,6 @@ export async function execute(interaction) {
         return interaction.reply({ content: '⚠️ User is already muted.', ephemeral: true });
     }
 
-    logRecentCommand(`mute - ${target.tag} - ${durationStr} - ${reason} - issuer: ${issuer.tag}`);
-
     const output = await muteUser({
         guild,
         targetUser: target.id,

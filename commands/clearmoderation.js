@@ -1,5 +1,6 @@
 import { EmbedBuilder, SlashCommandBuilder, PermissionFlagsBits } from "discord.js";
 import { clearmodlogs } from "../Database/databaseFunctions.js";
+import logRecentCommand from "../Logging/recentCommands.js";
 
 export const data = new SlashCommandBuilder()
     .setName('clearmoderationforuser')
