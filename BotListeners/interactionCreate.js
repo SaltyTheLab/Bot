@@ -1,8 +1,9 @@
 import { ButtonBuilder, ButtonStyle, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } from "discord.js";
 import banUser from "../utilities/banUser.js";
-import { getPunishments, deleteMute, deleteWarn } from "../Database/databaseFunctions.js";
-import logRecentCommand from "../Logging/recentCommands.js";
-import { buildButtons, buildLogEmbed } from "../utilities/buildembed.js";
+import { getPunishments, deleteMute, deleteWarn, viewNotes, deleteNote } from "../Database/databaseFunctions.js";
+import logRecentCommand from "../Logging/recentcommands.js";
+import { buildButtons, buildLogEmbed } from "../utilities/buildmodlogembeds.js";
+import { buildEmbed, buildNoteButtons } from "../utilities/buildnoteembeds.js";
 
 export async function interactionCreate(interaction) {
     // Check if the interaction is a chat input command
@@ -21,7 +22,6 @@ export async function interactionCreate(interaction) {
             }
         }
     }
-
     // --- BUTTON INTERACTION HANDLER ---
     if (interaction.isButton()) {
         // --- BAN BUTTON LOGIC ---
@@ -177,8 +177,58 @@ export async function interactionCreate(interaction) {
                 }
             }
         }
-    };
 
+        else if (interaction.customId.startsWith("note_")) {
+
+            await interaction.deferUpdate();
+            const customIdParts = interaction.customId.split('_');
+            const action = customIdParts[1];
+            const target = await interaction.client.users.fetch(customIdParts[2]);
+            let index = customIdParts[3];
+            let allNotes = await viewNotes(target.id)
+
+            switch (action) {
+                case "prev":
+                case "next": {
+                    let newIndex = action === "next" ? index + 1 : index - 1;
+                    const currentNote = allNotes[newIndex]
+                    await interaction.editReply({
+                        embeds: [await buildEmbed(interaction, target, newIndex, currentNote, allNotes.length)],
+                        components: [await buildNoteButtons(target.id, newIndex, currentNote, allNotes.length)]
+                    })
+                    break;
+                }
+                case "delete": {
+                    const noteid = parseInt(customIdParts[4]);
+                    try {
+                        deleteNote(noteid);
+                        allNotes = await viewNotes(target.id);
+                        if (allNotes.length === 0) {
+                            await interaction.editReply({
+                                content: `All notes for ${target} have been deleted`,
+                                embeds: [],
+                                components: []
+                            })
+                            return;
+                        }
+
+                        index = Math.min(index - 1, allNotes.length - 1);
+                        note = allNotes[index]
+                        await interaction.editReply({
+                            embeds: [await buildEmbed(interaction, target, index, note, allNotes.length)],
+                            componenets: [await buildNoteButtons(target.id, index, note, allNotes)]
+                        });
+
+                    } catch (error) {
+                        console.error(`Error deleting log ${noteid}:`, error);
+                        await interaction.followUp({ content: `Failed to delete note: ${error.message}`, ephemeral: true });
+                    }
+                    break;
+                }
+            }
+
+        }
+    }
     if (interaction.isModalSubmit()) {
         if (interaction.customId.startsWith('ban_modal_')) {
             await interaction.deferReply({ ephemeral: true });
@@ -276,4 +326,5 @@ export async function interactionCreate(interaction) {
             await originalMessage.edit({ components: [updatedActionRow] });
         }
     }
-}
+};
+
