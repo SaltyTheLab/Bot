@@ -12,7 +12,7 @@ export default async function banUser({
     channel,
     isAutomated = false
 }) {
-    const [target] = await guild.members.fetch(targetUserId).catch(() => null);
+    const target = await guild.members.fetch(targetUserId).catch(() => null);
     if (!target) return '❌ User not found in the server.';
 
 
@@ -53,7 +53,7 @@ export default async function banUser({
     } catch (err) {
         return `❌ Failed to ban user: ${err.message ?? err}`;
     }
-    addBan(target.id, moderatorUser, reason, channel)
+    addBan(target.id, moderatorUser.id, reason, channel)
     const logChannel = guild.channels.cache.get(banlogChannelid);
     if (logChannel) await logChannel.send({ embeds: [logEmbed] });
     const commandEmbed = new EmbedBuilder()
