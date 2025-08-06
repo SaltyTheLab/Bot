@@ -7,7 +7,7 @@ export async function guildMemberRemove(member) {
     member.guild.channels.cache.get(banlogChannelid),
     member.guild.channels.cache.get(mutelogChannelid)
     ]
-
+    const user = member.fetch(member);
     if (!welcomeChannel) {
         console.warn('⚠️ Welcome channel not found.');
         return;
@@ -19,14 +19,22 @@ export async function guildMemberRemove(member) {
     //set default actions and leave executor null
     let action = "leave";
     let executor = null;
-    let reason = "N/A";
+    let reason = ``;
     let time = now;
 
-    // Check for ban in audit
+    // Check for ban/kick in audit
     const banLogs = await member.guild.fetchAuditLogs({
         type: AuditLogEvent.MemberBanAdd
     });
     const banLog = banLogs.entries.find((entry) =>
+        entry.target.id === member.id && isRecent(entry.createdTimestamp)
+    );
+    const kickLogs = await member.guild.fetchAuditLogs({
+        type: AuditLogEvent.MemberKick,
+        limit: 5,
+    });
+
+    const kickLog = kickLogs.entries.find((entry) =>
         entry.target.id === member.id && isRecent(entry.createdTimestamp)
     );
 
@@ -35,26 +43,14 @@ export async function guildMemberRemove(member) {
         action = "ban";
         executor = banLog.executor;
         reason = banLog.reason ?? "No reason provided.";
-        time = banLog.createdTimestamp;
+        time = new Date(banLog.createdTimestamp).toLocaleString()
     }
-
     // Check for kick if not banned
-    if (action === "leave") {
-        const kickLogs = await member.guild.fetchAuditLogs({
-            type: AuditLogEvent.MemberKick,
-            limit: 5,
-        });
-
-        const kickLog = kickLogs.entries.find((entry) =>
-            entry.target.id === member.id && isRecent(entry.createdTimestamp)
-        );
-
-        if (kickLog) {
-            action = "kick";
-            executor = kickLog.executor;
-            reason = kickLog.reason ?? "No reason provided.";
-            time = kickLog.createdTimestamp;
-        }
+    if (kickLog) {
+        action = "kick";
+        executor = kickLog.executor;
+        reason = kickLog.reason ?? "No reason provided.";
+        time = new Date(kickLog.createdTimestamp).toLocaleString()
     }
 
     // Heuristic for prune detection
@@ -66,6 +62,7 @@ export async function guildMemberRemove(member) {
             // Joined less than 7 days ago, but account older than 30 days → likely prune
             action = "prune";
         }
+
     }
     const leaveembed = new EmbedBuilder()
         .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
@@ -89,15 +86,17 @@ export async function guildMemberRemove(member) {
             inline: true,
         })
         .setFooter({ text: time });
+
     // Customize message by action
     switch (action) {
         case "ban":
             embed
                 .setColor(0x8b0000)
-                .setTitle('A member was banned')
+                .setTitle(`${executor.tag} banned a member`)
                 .addFields(
-                    { name: 'User', value: `<@${member.id}>`, inline: true },
-                    { name: 'Banned by', value: `<@${executor.id}>`, inline: true },
+                    { name: 'User', value: `${member}`, inline: true },
+                    { name: 'Tag:', value: `\`${member.user.tag}\``, inline: true },
+                    { name: 'id', value: `\`${member.user.id}\``, inline: true },
                     { name: 'Reason', value: reason }
                 )
                 .setFooter({ text: time })
@@ -107,10 +106,11 @@ export async function guildMemberRemove(member) {
         case "kick":
             embed
                 .setColor(0xff5555)
-                .setTitle('A member was kicked')
+                .setTitle(`${executor.tag} kicked a member`)
                 .addFields(
-                    { name: 'User', value: `<@${member.id}>`, inline: true },
-                    { name: 'Kicked by', value: `<@${executor.id}>`, inline: true },
+                    { name: 'User', value: `${member}`, inline: true },
+                    { name: 'Tag:', value: `\`${member.user.tag}\``, inline: true },
+                    { name: 'Id:', value: `\`${member.user.id}\``, inline: true },
                     { name: 'Reason', value: reason }
                 )
                 .setFooter({ text: time })
