@@ -52,9 +52,9 @@ export async function guildMemberAdd(member) {
             const kickmessage = new EmbedBuilder()
                 .setTitle('A member was auto-kicked')
                 .addFields(
-                    { name: `**User**:`, value: `<@${member.id}>`, inline: true },
-                    { name: `**Tag**:`, value: `\`${member.user.tag}\``, inline: true },
-                    { name: '**Reason**:', value: `\`Account under the age of 2d\``, inline: false },
+                    { name: '**User**', value: `<@${member}>`, inline: true },
+                    { name: '**tag**', value: `\`${member.tag}\``, inline: true },
+                    { name: '**Reason**', value: "\`Account under the age of 2 days\`" },
                     { name: '**Account created:**', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>` }
                 );
             await mutechannel.send({ embeds: [kickmessage] });
@@ -78,10 +78,8 @@ export async function guildMemberAdd(member) {
     } catch (error) {
         console.error("Error finding inviter:", error);
     }
-    
     // Update the invite cache with the new counts
     newInvites.forEach(invite => oldInvites.set(invite.code, invite.uses));
-    
     // Build and send embeds
     const welcomeEmbed = new EmbedBuilder()
         .setColor(0x00FF99)
@@ -90,7 +88,6 @@ export async function guildMemberAdd(member) {
         .addFields(
             { name: 'Discord Join Date:', value: `<t:${Math.floor(member.joinedAt.getTime() / 1000)}:R>`, inline: true }
         );
-    
     // Add the inviter field to the welcome embed
     if (inviter) {
         welcomeEmbed.addFields({ name: 'Invited by', value: `<@${inviter.id}>` });
@@ -103,11 +100,10 @@ export async function guildMemberAdd(member) {
         .addFields(
             { name: 'Discord Join Date:', value: `<t:${Math.floor(member.joinedAt.getTime() / 1000)}:R>`, inline: true }
         );
-    
 
     // Create the ban button with the inviter's ID included
     const banButton = new ButtonBuilder()
-        .setCustomId(`inviter_ban_delete_invite_${member.id}_${inviter ? inviter.id : 'no_inviter'}_${invite ? invite.code : 'no_invite_code'}`)
+        .setCustomId(`inviter_ban_delete_invite_${member.id}_${inviter ? inviter.id : 'no inviter'}_${invite ? invite.code : 'no invite code'}`)
         .setLabel('🔨 Ban User & Delete Invite')
         .setStyle(ButtonStyle.Danger)
         .setDisabled(false);
@@ -125,7 +121,7 @@ export async function guildMemberAdd(member) {
         try {
             const fetchedMessage = await welcomeChannel.messages.fetch(welcomeMessage.id);
             const updatedBanButton = new ButtonBuilder()
-                .setCustomId(`inviter_ban_delete_invite_${member.id}_${inviter ? inviter.id : 'no_inviter'}_${invite ? invite.code : 'no_invite_code'}`)
+                .setCustomId(`inviter_ban_delete_invite_${member.id}_${inviter ? inviter.id : 'no inviter'}_${invite ? invite.code : 'no invite code'}`)
                 .setLabel('🔨 Ban (Expired)')
                 .setStyle(ButtonStyle.Danger)
                 .setDisabled(true); // Disable the button
