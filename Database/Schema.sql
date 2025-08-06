@@ -35,3 +35,6 @@ CREATE TABLE
         timestamp INTEGER NOT NULL,
         FOREIGN KEY (userId) REFERENCES users (userId)
     );
+
+CREATE INDEX IF NOT EXISTS idx_userid_levels_xp_coins ON users (level DESC, xp DESC);
+CREATE INDEX IF NOT EXISTS idx_userid_timestamp ON punishments(userId, timestamp DESC);
