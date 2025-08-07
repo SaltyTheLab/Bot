@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, EmbedBuilder, PermissionsBitField } from 'discord.js';
-import logRecentCommand from '../Logging/recentCommands.js';
-import { getPunishments } from '../Database/databaseFunctions.js';
-import { buildLogEmbed, buildButtons } from '../utilities/buildembed.js';
+import { getPunishments } from '../Database/databasefunctions.js';
+import { buildLogEmbed, buildButtons } from '../utilities/buildmodlogembeds.js';
+import logRecentCommand from '../Logging/recentcommands.js';
 
 export const data = new SlashCommandBuilder()
     .setName('modlogs')
@@ -48,15 +48,17 @@ export async function execute(interaction) {
 
     //send embed
     const replyMessage = await interaction.reply({
-        embeds: [await buildLogEmbed(interaction, currentLog, currentIndex, allLogs.length, targetUser)],
-        components: [await buildButtons(currentIndex, allLogs.length, targetUser.id, isAdmin && currentLog.active, currentLog.id, currentLog.type, timestamp)],
+        embeds: [await buildLogEmbed(interaction, currentLog, currentIndex, allLogs.length)],
+        components: [await buildButtons(currentIndex, allLogs.length, targetUser.id, isAdmin && currentLog.active, currentLog.id, currentLog.type)],
         ephemeral: false
     });
 
     setTimeout(async () => {
         try {
-            await replyMessage.edit({ components: [await buildButtons(currentIndex, allLogs.length, targetUser.id, isAdmin && currentLog.active, currentLog.id, currentLog.type, timestamp, true)] });
-            console.log(`Modlog buttons for ${targetUser.tag} were disabled automatically.`);
+            if (replyMessage.embeds && replyMessage.embeds.length > 0) {
+                await replyMessage.edit({ components: [await buildButtons(currentIndex, allLogs.length, targetUser.id, isAdmin && currentLog.active, currentLog.id, currentLog.type, true)] });
+                console.log(`Modlog buttons for ${targetUser.tag} were disabled automatically.`);
+            }
         } catch (error) {
             console.error('Failed to disable buttons automatically:', error);
             // This might happen if the message was deleted before the timeout
