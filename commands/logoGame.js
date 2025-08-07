@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle } from "discord.js";
-import { getUser, saveUser } from "../Database/databaseFunctions.js";
+import { getUser, saveUser } from "../Database/databasefunctions.js";
 import fs from 'node:fs';
 import path from 'node:path'
 
