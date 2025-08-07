@@ -34,11 +34,9 @@ export async function execute(interaction) {
     const unit = interaction.options.getString('unit');
     const issuer = interaction.user;
     const guild = interaction.guild;
-    const channelid = interaction.channel.id;
+    const channel = interaction.channel;
 
     const MAX_TIMEOUT_MS = 2419200000;
-    const durationStr = `${duration} ${unit}`;
-
 
     const multiplier = unitMap[unit];
     if (!multiplier || duration <= 0) {
@@ -58,12 +56,12 @@ export async function execute(interaction) {
 
     const output = await muteUser({
         guild,
-        targetUser: target.id,
+        targetUser: target,
         moderatorUser: issuer,
         reason,
         durationMs,
         unit,
-        channelid: channelid,
+        channel: channel,
         isAutomated: false
     });
 

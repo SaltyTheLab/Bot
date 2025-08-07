@@ -29,7 +29,7 @@ export async function execute(interaction) {
 
     const result = await banUser({
         guild: interaction.guild,
-        targetUserId: target.id,
+        targetUserId: target,
         moderatorUser: interaction.user,
         reason,
         channel: interaction.channel,

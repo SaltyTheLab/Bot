@@ -2,8 +2,8 @@ import { EmbedBuilder } from 'discord.js';
 import getNextPunishment from '../moderation/punishments.js';
 import { mutelogChannelid } from '../BotListeners/Extravariables/channelids.js';
 import getWarnStats from '../moderation/simulatedwarn.js';
-import { addMute } from '../Database/databaseFunctions.js';
-import logRecentCommand from '../Logging/recentCommands.js';
+import { addMute } from '../Database/databasefunctions.js';
+import logRecentCommand from '../Logging/recentcommands.js';
 
 
 const unitMap = { min: 60000, hour: 3600000, day: 86400000 };
@@ -18,45 +18,16 @@ const getDurationDisplay = ms => {
 
 export default async function muteUser({
     guild,
-    targetUserId,
+    targetUser,
     moderatorUser,
     reason,
-    channelid,
+    channel,
     isAutomated = true,
+    currentWarnWeight = 1,
     duration,
-    unit,
-    currentWarnWeight = 1
+    unit
 }) {
 
-    // get member, interaction user, and channel objects
-    const [target, issuer, commandChannel] = await Promise.all([
-        guild.members.fetch(targetUserId).catch(err => {
-            console.error(`[muteUser] Failed to fetch targetUser (${targetUserId}):`, err);
-            return null;
-        }),
-        guild.members.fetch(moderatorUser).catch(err => {
-            console.error(`[muteUser] Failed to fetch moderatorUser (${moderatorUser}):`, err);
-            return null;
-        }),
-        guild.channels.fetch(channelid).catch(err => {
-            console.error(`[muteUser] Failed to fetch commandChannel (${channelid}):`, err);
-            return null;
-        }),
-    ]);
-
-    //checks for vaild channel, user, and interaction user
-    if (!target) {
-        console.error(`[muteUser] Target user not found: ${targetUserId}`);
-        return '❌ Could not find the target user in this guild.';
-    }
-    if (!issuer) {
-        console.error(`[muteUser] Moderator user not found: ${moderatorUser}`);
-        return '❌ Could not find the moderator user in this guild.';
-    }
-    if (!commandChannel) {
-        console.error(`[muteUser] Command/Violation channel not found with ID: ${channelid}`);
-        return '❌ Could not find the specified channel for logging/reply.';
-    }
     // Prepare the unit in ms
     const multiplier = unitMap[unit];
     if (!multiplier || duration <= 0) {
@@ -69,9 +40,9 @@ export default async function muteUser({
     const durationStr = getDurationDisplay(effectiveDurationMs);
 
     // Add the mute to the database
-    addMute(target.id, issuer.id, reason, effectiveDurationMs, currentWarnWeight, commandChannel.id);
+    addMute(targetUser.id, moderatorUser.id, reason, effectiveDurationMs, currentWarnWeight, channel.id);
 
-    const { activeWarnings } = await getWarnStats(targetUserId);
+    const { activeWarnings } = await getWarnStats(targetUser.id);
 
     // Get the label for the next punishment
     const { label: nextPunishmentLabel } = getNextPunishment(activeWarnings.length + currentWarnWeight);
@@ -88,9 +59,9 @@ export default async function muteUser({
     // --- DM Embed to User ---
     const dmEmbed = new EmbedBuilder()
         .setColor(0xffa500)
-        .setAuthor({ name: target.user.tag, iconURL: target.user.displayAvatarURL({ dynamic: true }) })
+        .setAuthor({ name: targetUser.user.tag, iconURL: targetUser.user.displayAvatarURL({ dynamic: true }) })
         .setThumbnail(guild.iconURL())
-        .setDescription(`${target}, you have been issued a \`${durationStr} mute\` in Salty's Cave.`)
+        .setDescription(`${targetUser}, you have been issued a \`${durationStr} mute\` in Salty's Cave.`)
         .addFields(
             ...buildBasicFields(reason, currentWarnWeight, durationStr, activeWarnings.length + currentWarnWeight),
             { name: 'Warn expires:', value: `<t:${Math.floor(Date.now() / 1000) + unitMap.day / 1000}:F>`, inline: false },
@@ -100,14 +71,14 @@ export default async function muteUser({
     // --- Log Embed for Mod Log ---
     const logEmbed = new EmbedBuilder()
         .setColor(0xffa500)
-        .setThumbnail(target.user.displayAvatarURL({ dynamic: true }))
+        .setThumbnail(targetUser.user.displayAvatarURL({ dynamic: true }))
         .setAuthor({
-            name: `${issuer.user.tag} muted a member`,
-            iconURL: issuer.user.displayAvatarURL({ dynamic: true }),
+            name: `${moderatorUser.tag} muted a member`,
+            iconURL: moderatorUser.displayAvatarURL({ dynamic: true }),
         })
         .addFields(
-            { name: 'Target:', value: `${target}`, inline: true },
-            { name: 'Channel:', value: `${commandChannel}`, inline: true },
+            { name: 'Target:', value: `${targetUser.user}`, inline: true },
+            { name: 'Channel:', value: `${channel.id}`, inline: true },
             ...buildBasicFields(reason, currentWarnWeight, durationStr, activeWarnings.length + currentWarnWeight),
             { name: 'Warn expires:', value: `<t:${Math.floor(Date.now() / 1000) + unitMap.day / 1000}:F>`, inline: false },
             { name: 'Next Punishment:', value: `\`${nextPunishmentLabel}\``, inline: false },
@@ -116,19 +87,19 @@ export default async function muteUser({
 
     // --- Attempt to DM user ---
     try {
-        await target.send({ embeds: [dmEmbed] });
+        await targetUser.user.send({ embeds: [dmEmbed] });
         logEmbed.setFooter({ text: 'User was Dmed.' });
     } catch (dmErr) {
-        console.error(`[muteUser] Failed to DM user ${target.user.tag}:`, dmErr.message);
+        console.error(`[muteUser] Failed to DM user ${targetUser.user.tag}:`, dmErr.message);
         logEmbed.setFooter({ text: 'User could not be DMed.' });
     }
 
     // --- Attempt to Timeout User ---
     try {
-        await target.timeout(effectiveDurationMs, reason);
-        logRecentCommand(`Mute: Target: ${target.user.tag} | Moderator: ${issuer.user.tag} | Reason: ${reason} | Duration : ${durationStr}`);
+        await targetUser.timeout(effectiveDurationMs, reason);
+        logRecentCommand(`Mute: Target: ${targetUser.user.user.tag} | Moderator: ${moderatorUser.tag} | Reason: ${reason} | Duration : ${durationStr}`);
     } catch (err) {
-        console.error(`[muteUser] Failed to timeout user ${target.user.tag}:`, err.message);
+        console.error(`[muteUser] Failed to timeout user ${targetUser.user.tag}:`, err.message);
         logEmbed.addFields({ name: 'Timeout Status:', value: `❌ Failed: ${err.message}`, inline: false });
     }
 
@@ -148,22 +119,13 @@ export default async function muteUser({
     const commandEmbed = new EmbedBuilder()
         .setColor(0xffa500)
         .setAuthor({
-            name: `${target.user.tag} was issued a ${durationStr} mute.`,
-            iconURL: target.user.displayAvatarURL({ dynamic: true }),
+            name: `${targetUser.user.tag} was issued a ${durationStr} mute.`,
+            iconURL: targetUser.user.displayAvatarURL({ dynamic: true }),
         });
 
     if (isAutomated) {
-        if (commandChannel) {
-            try {
-                await commandChannel.send({ embeds: [commandEmbed] });
-            } catch (commandSendErr) {
-                console.error(`[muteUser] Failed to send command confirmation to channel ${commandChannel.id}:`, commandSendErr);
-            }
-        } else {
-            console.warn(`[muteUser] No command channel available to send automated mute confirmation.`);
-        }
+        await channel.send({ embeds: [commandEmbed] });
         return;
-    } else {
+    } else
         return commandEmbed;
-    }
 }

@@ -41,7 +41,7 @@ export async function execute(interaction) {
         guild: interaction.guild,
         targetUser: target,
         moderatorUser: issuer,
-        reason,
+        reason: reason,
         channel: channel.id,
         isautomated: false
     });
