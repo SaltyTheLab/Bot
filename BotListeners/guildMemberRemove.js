@@ -7,7 +7,6 @@ export async function guildMemberRemove(member) {
     member.guild.channels.cache.get(banlogChannelid),
     member.guild.channels.cache.get(mutelogChannelid)
     ]
-    const user = member.fetch(member);
     if (!welcomeChannel) {
         console.warn('⚠️ Welcome channel not found.');
         return;

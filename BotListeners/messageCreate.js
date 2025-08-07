@@ -1,6 +1,6 @@
 
 import { EmbedBuilder } from '@discordjs/builders';
-import { getUser, saveUser } from '../Database/databaseFunctions.js';
+import { getUser, saveUser } from '../Database/databasefunctions.js';
 import AutoMod from '../moderation/autoMod.js';
 //setup constants and common triggers 
 const eyes = '1257522749635563561';

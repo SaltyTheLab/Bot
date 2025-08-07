@@ -54,7 +54,7 @@ export async function guildMemberAdd(member) {
                 .addFields(
                     { name: '**User**', value: `<@${member}>`, inline: true },
                     { name: '**tag**', value: `\`${member.tag}\``, inline: true },
-                    { name: '**Reason**', value: "\`Account under the age of 2 days\`" },
+                    { name: '**Reason**', value: "`Account under the age of 2 days`" },
                     { name: '**Account created:**', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>` }
                 );
             await mutechannel.send({ embeds: [kickmessage] });
