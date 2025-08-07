@@ -1,9 +1,8 @@
 import { ButtonBuilder, ButtonStyle, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } from "discord.js";
 import banUser from "../utilities/banUser.js";
-import { getPunishments, deleteMute, deleteWarn, viewNotes, deleteNote } from "../Database/databaseFunctions.js";
+import { getPunishments, deleteMute, deleteWarn, viewNotes, deleteNote } from "../Database/databasefunctions.js";
 import logRecentCommand from "../Logging/recentcommands.js";
-import { buildButtons, buildLogEmbed } from "../utilities/buildmodlogembeds.js";
-import { buildEmbed, buildNoteButtons } from "../utilities/buildnoteembeds.js";
+import { buildButtons, buildLogEmbed, buildNoteEmbed, buildNoteButtons } from "../utilities/buildmodlogembeds.js";
 
 export async function interactionCreate(interaction) {
     // Check if the interaction is a chat input command
@@ -116,7 +115,6 @@ export async function interactionCreate(interaction) {
             const customIdParts = interaction.customId.split('_');
             const action = customIdParts[1];
             const targetUserId = customIdParts[2];
-            const timestamp = parseInt(customIdParts[customIdParts.length - 1]);
             const targetUser = await interaction.client.users.fetch(targetUserId);
             const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
             let allLogs = await getPunishments(targetUserId);
@@ -132,7 +130,7 @@ export async function interactionCreate(interaction) {
 
                     await interaction.editReply({
                         embeds: [await buildLogEmbed(interaction, currentLog, newIndex, allLogs.length, targetUser)],
-                        components: [await buildButtons(newIndex, allLogs.length, targetUserId, isAdmin, currentLog.id, currentLog.type, timestamp)]
+                        components: [await buildButtons(newIndex, allLogs.length, targetUserId, isAdmin, currentLog.id, currentLog.type)]
                     });
                     break;
                 }
@@ -164,8 +162,8 @@ export async function interactionCreate(interaction) {
                         const newCurrentLog = allLogs[currentIndex]
 
                         await interaction.editReply({
-                            embeds: [await buildLogEmbed(interaction, newCurrentLog, currentIndex, allLogs.length, targetUser)],
-                            components: [await buildButtons(currentIndex, allLogs.length, targetUserId, isAdmin, currentLog.id, currentLog.type, timestamp)]
+                            embeds: [await buildLogEmbed(interaction, newCurrentLog, currentIndex, allLogs.length)],
+                            components: [await buildButtons(currentIndex, allLogs.length, targetUserId, isAdmin, currentLog.id, currentLog.type)]
                         });
 
                     } catch (error) {
@@ -184,7 +182,7 @@ export async function interactionCreate(interaction) {
             const customIdParts = interaction.customId.split('_');
             const action = customIdParts[1];
             const target = await interaction.client.users.fetch(customIdParts[2]);
-            let index = customIdParts[3];
+            let index = parseInt(customIdParts[3]);
             let allNotes = await viewNotes(target.id)
 
             switch (action) {
@@ -193,7 +191,7 @@ export async function interactionCreate(interaction) {
                     let newIndex = action === "next" ? index + 1 : index - 1;
                     const currentNote = allNotes[newIndex]
                     await interaction.editReply({
-                        embeds: [await buildEmbed(interaction, target, newIndex, currentNote, allNotes.length)],
+                        embeds: [await buildNoteEmbed(interaction, newIndex, currentNote, allNotes.length)],
                         components: [await buildNoteButtons(target.id, newIndex, currentNote, allNotes.length)]
                     })
                     break;
@@ -213,9 +211,9 @@ export async function interactionCreate(interaction) {
                         }
 
                         index = Math.min(index - 1, allNotes.length - 1);
-                        note = allNotes[index]
+                        let note = allNotes[index]
                         await interaction.editReply({
-                            embeds: [await buildEmbed(interaction, target, index, note, allNotes.length)],
+                            embeds: [await buildNoteEmbed(interaction, index, note, allNotes.length)],
                             componenets: [await buildNoteButtons(target.id, index, note, allNotes)]
                         });
 
