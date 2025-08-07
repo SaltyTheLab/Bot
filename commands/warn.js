@@ -42,7 +42,7 @@ export async function execute(interaction) {
         targetUser: target,
         moderatorUser: issuer,
         reason: reason,
-        channel: channel.id,
+        channel: channel,
         isautomated: false
     });
 
