@@ -14,16 +14,18 @@ CREATE TABLE
         active INTEGER DEFAULT 1,
         weight INTEGER DEFAULT 1,
         channel TEXT NOT NULL,
-        FOREIGN KEY (userId) REFERENCES users (userId)
+        guildId TEXT NOT NULL,
+        FOREIGN KEY (userId, guildId) REFERENCES users (userId, guildId)
     );
 
 CREATE TABLE
     IF NOT EXISTS users (
-        userId TEXT,
+        userId TEXT NOT NULL,
         xp INTEGER DEFAULT 0,
         level INTEGER DEFAULT 1,
         coins INTEGER DEFAULT 100,
-        PRIMARY KEY (userId)
+        guildId TEXT NOT NULL,
+        PRIMARY KEY (userId, guildId)
     );
 
 CREATE TABLE
@@ -33,8 +35,9 @@ CREATE TABLE
         moderatorId TEXT NOT NULL,
         note TEXT NOT NULL,
         timestamp INTEGER NOT NULL,
-        FOREIGN KEY (userId) REFERENCES users (userId)
+        guildId TEXT NOT NULL,
+        FOREIGN KEY (userId, guildId) REFERENCES users (userId, guildId)
     );
 
 CREATE INDEX IF NOT EXISTS idx_userid_levels_xp_coins ON users (level DESC, xp DESC);
-CREATE INDEX IF NOT EXISTS idx_userid_timestamp ON punishments(userId, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_userid_timestamp ON punishments (userId, timestamp DESC);
