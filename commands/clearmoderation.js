@@ -1,6 +1,6 @@
 import { EmbedBuilder, SlashCommandBuilder, PermissionFlagsBits } from "discord.js";
-import { clearmodlogs } from "../Database/databaseFunctions.js";
-import logRecentCommand from "../Logging/recentCommands.js";
+import { clearmodlogs } from "../Database/databasefunctions.js";
+import logRecentCommand from "../Logging/recentcommands.js";
 
 export const data = new SlashCommandBuilder()
     .setName('clearmoderationforuser')
@@ -12,9 +12,10 @@ export const data = new SlashCommandBuilder()
     )
 
 export async function execute(interaction) {
+    guildId = interaction.guild.id
     const user = interaction.options.getUser('target')
 
-    clearmodlogs(user.id);
+    clearmodlogs(user.id, guildId);
     const reset = new EmbedBuilder()
         .setDescription(
             `moderation tables for ${user} have been cleared`

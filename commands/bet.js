@@ -1,5 +1,5 @@
 import { EmbedBuilder, SlashCommandBuilder } from "discord.js";
-import { getUser, saveUser } from "../Database/databaseFunctions.js";
+import { getUser, saveUser } from "../Database/databasefunctions.js";
 
 export const data = new SlashCommandBuilder()
     .setName('bet')
@@ -9,8 +9,8 @@ export const data = new SlashCommandBuilder()
     )
 
 export async function execute(interaction) {
-    const { userData } = getUser(interaction.user.id);
     const user = await interaction.user;
+    const { userData } = getUser(user.id, interaction.guild.id );
     const coincount = interaction.options.getInteger('amount')
     const bet = Math.random()
     const win = Math.ceil(coincount * 1.5);

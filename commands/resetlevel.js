@@ -1,7 +1,7 @@
 // commands/resetlevel.js
 import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
-import { getUser, saveUser } from '../Database/databaseFunctions.js';
-import logRecentCommand from '../Logging/recentCommands.js';
+import { getUser, saveUser } from '../Database/databasefunctions.js';
+import logRecentCommand from '../Logging/recentcommands.js';
 
 export const data = new SlashCommandBuilder()
     .setName('resetlevel')
@@ -14,8 +14,9 @@ export const data = new SlashCommandBuilder()
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild) // optional: restrict to mods/admins
 
 export async function execute(interaction) {
+    const guildId = interaction.guild.id
     const targetUser = interaction.options.getUser('user');
-    const { userData } = getUser(targetUser.id)
+    const { userData } = getUser(targetUser.id, guildId)
     // Reset XP and level to 0
     userData.level = 1;
     userData.xp = 0;
