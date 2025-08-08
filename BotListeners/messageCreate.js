@@ -20,12 +20,12 @@ const reactions = {
 export async function messageCreate(client, message) {
   //skip if message creator is bot or not in the server
   if (message.author.bot || !message.guild || !message.member) return;
-
+  const guildId = message.guild.id;
   //convert message to all lowercase and remove all spaces 
   const userId = message.author.id;
   const content = message.content.toLowerCase();
   const lowerContent = content.replace(/ /g, '');
-
+  
   for (const keyword in keywords) {
     if (lowerContent.includes(keyword)) {
       message.reply(keywords[keyword]);
@@ -38,24 +38,20 @@ export async function messageCreate(client, message) {
   }
 
   //add and update xp to the user
-  const user = await applyUserXP(userId, message);
-  saveUser(user);
+  saveUser(await applyUserXP(userId, message, guildId));
 
-  //submit to automod
-  await AutoMod(client, message);
+  await AutoMod(client, message, guildId);
 }
-async function applyUserXP(userId, message) {
-  let userData = getUser(userId);
 
-
+async function applyUserXP(userId, message, guildId) {
+  let { userData } = getUser(userId, guildId);
   if (userData.userId === null) {
     console.warn(`Corrupt user data found for userId: ${userId}. Initializing with defaults.`);
-    const newUserData = { userId: userId, xp: 0, level: 1, coins: 100 };
-    saveUser(newUserData); // Save the clean data immediately
-    userData = getUser(userId); // Re-fetch the now-clean data
+    const newUserData = { userId: userId, xp: 0, level: 1, coins: 100, guildId: guildId };
+    saveUser(newUserData, guildId); // Save the clean data immediately
+    userData = getUser(userId, guildId); // Re-fetch the now-clean data
   }
   userData.xp += 20;
-
   const xpNeeded = Math.round(((userData.level - 1) ** 1.5 * 52 + 40) / 20) * 20
   if (userData.xp >= xpNeeded) {
     userData.level++;
