@@ -1,5 +1,5 @@
 import Weights from './violationWeights.json' with {type: 'json'};
-import { getActiveWarns } from '../Database/databaseFunctions.js';
+import { getActiveWarns } from '../Database/databasefunctions.js';
 
 const violationWeights = new Map(Weights.violationWeights.map(w => [w.type.toLowerCase(), w.Weight]));
 /**

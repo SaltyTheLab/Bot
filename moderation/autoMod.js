@@ -99,12 +99,11 @@ export default async function AutoMod(client, message) {
     moderatorUser: client.user,
     reason: reasonText,
     channel: channel,
-    isAutomated: true,
-   
+    isAutomated: true
   };
 
   // issue the mute/warn/ban
-  if (activeWarnings.length >= 3 && isNewUser)
+  if (activeWarnings.length >= 2 && isNewUser)
     banUser(commonPayload);
   else if (activeWarnings.length > 0 || currentWarnWeight >= 2 && duration > 0) {
     await muteUser({
