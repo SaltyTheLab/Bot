@@ -1,6 +1,8 @@
 import { EmbedBuilder } from "discord.js";
-import { deletedLogsId } from "./Extravariables/channelids.js";
+import { guildModChannelMap } from "./Extravariables/channelids.js";
 export async function messageDelete(message) {
+    const guildId = message.guild.id;
+    const guildChannels = guildModChannelMap[guildId]
     /**
      * check for partial message triggers, message not in guild, message
      * not made by an author or the mssage was created by a bot
@@ -8,7 +10,7 @@ export async function messageDelete(message) {
     if (!message.guild || message.partial || !message.author || message.author.bot) return;
 
     //get the deletedlogs channel
-    const logChannel = message.guild.channels.cache.get(deletedLogsId);
+    const logChannel = await message.guild.channels.fetch(guildChannels.deletedlogChannel);
     if (!logChannel) return;
 
     //create the masked link that leads to the message deletion  

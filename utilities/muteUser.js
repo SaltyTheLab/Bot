@@ -1,10 +1,9 @@
 import { EmbedBuilder } from 'discord.js';
 import getNextPunishment from '../moderation/punishments.js';
-import { mutelogChannelid } from '../BotListeners/Extravariables/channelids.js';
 import getWarnStats from '../moderation/simulatedwarn.js';
 import { addMute } from '../Database/databasefunctions.js';
 import logRecentCommand from '../Logging/recentcommands.js';
-
+import { guildModChannelMap } from '../BotListeners/Extravariables/channelids.js';
 
 const unitMap = { min: 60000, hour: 3600000, day: 86400000 };
 const MAX_TIMEOUT_MS = 21600000; // 6 hours max timeout for automated timeouts
@@ -40,7 +39,7 @@ export default async function muteUser({
     const durationStr = getDurationDisplay(effectiveDurationMs);
 
     // Add the mute to the database
-    addMute(targetUser.id, moderatorUser.id, reason, effectiveDurationMs, currentWarnWeight, channel.id);
+    addMute(targetUser.id, moderatorUser.id, reason, effectiveDurationMs, currentWarnWeight, channel.id, guild.id);
 
     const { activeWarnings } = await getWarnStats(targetUser.id);
 
@@ -61,7 +60,7 @@ export default async function muteUser({
         .setColor(0xffa500)
         .setAuthor({ name: targetUser.user.tag, iconURL: targetUser.user.displayAvatarURL({ dynamic: true }) })
         .setThumbnail(guild.iconURL())
-        .setDescription(`${targetUser}, you have been issued a \`${durationStr} mute\` in Salty's Cave.`)
+        .setDescription(`${targetUser}, you have been issued a \`${durationStr} mute\` in ${guild.name}.`)
         .addFields(
             ...buildBasicFields(reason, currentWarnWeight, durationStr, activeWarnings.length + currentWarnWeight),
             { name: 'Warn expires:', value: `<t:${Math.floor(Date.now() / 1000) + unitMap.day / 1000}:F>`, inline: false },
@@ -86,46 +85,50 @@ export default async function muteUser({
         .setTimestamp();
 
     // --- Attempt to DM user ---
-    try {
-        await targetUser.user.send({ embeds: [dmEmbed] });
-        logEmbed.setFooter({ text: 'User was Dmed.' });
-    } catch (dmErr) {
+    logEmbed.setFooter({ text: 'User was Dmed.' });
+    const dmPromise = targetUser.user.send({ embeds: [dmEmbed] }).catch(dmErr => {
         console.error(`[muteUser] Failed to DM user ${targetUser.user.tag}:`, dmErr.message);
         logEmbed.setFooter({ text: 'User could not be DMed.' });
-    }
+    })
 
     // --- Attempt to Timeout User ---
-    try {
-        await targetUser.timeout(effectiveDurationMs, reason);
-        logRecentCommand(`Mute: Target: ${targetUser.user.user.tag} | Moderator: ${moderatorUser.tag} | Reason: ${reason} | Duration : ${durationStr}`);
-    } catch (err) {
+    const timeoutPromise = targetUser.timeout(effectiveDurationMs, reason).catch(err => {
         console.error(`[muteUser] Failed to timeout user ${targetUser.user.tag}:`, err.message);
-        logEmbed.addFields({ name: 'Timeout Status:', value: `❌ Failed: ${err.message}`, inline: false });
-    }
+        logEmbed.addFields({ name: 'Timeout Status:', value: `❌ Failed: ${err.message}`, inline: false })
+    })
 
     // --- Send Log to Mod Log Channel ---
-    const logChannel = guild.channels.cache.get(mutelogChannelid);
-    if (logChannel) {
-        try {
-            await logChannel.send({ embeds: [logEmbed] });
-        } catch (logSendErr) {
-            console.error(`[muteUser] Failed to send mute log to channel ${mutelogChannelid}:`, logSendErr);
-        }
+    const guildLogChannelConfig = guildModChannelMap[guild.id];
+    let logChannel;
+    if (guildLogChannelConfig && guildLogChannelConfig.mutelogChannel) {
+        logChannel = guild.channels.cache.get(guildLogChannelConfig.mutelogChannel);
     } else {
-        console.error(`[muteUser] Mute log channel not found with ID: ${mutelogChannelid}`);
+        console.warn(`❌ No mute log channel configured for guild: ${guild.name} (${guild.id}). Mute log will not be sent.`);
     }
 
-    // --- Command Confirmation Embed for Channel ---
-    const commandEmbed = new EmbedBuilder()
-        .setColor(0xffa500)
-        .setAuthor({
-            name: `${targetUser.user.tag} was issued a ${durationStr} mute.`,
-            iconURL: targetUser.user.displayAvatarURL({ dynamic: true }),
-        });
+    const logPromise = logChannel?.send({ embeds: [logEmbed] }).catch(logSendErr => {
+        console.error(`[muteUser] Failed to send mute log to channel ${guildLogChannelConfig?.mutelogChannel || 'unknown'}:`, logSendErr);
+    });
+
+    await Promise.all([dmPromise, timeoutPromise, logPromise].filter(Boolean));
+
+    logRecentCommand(`Mute: Target: ${targetUser.user.tag} | Moderator: ${moderatorUser.tag} | Reason: ${reason} | Duration : ${durationStr}`);
 
     if (isAutomated) {
-        await channel.send({ embeds: [commandEmbed] });
+        await channel.send({
+            embeds: [new EmbedBuilder()
+                .setColor(0xffa500)
+                .setAuthor({
+                    name: `${targetUser.user.tag} was issued a ${durationStr} mute.`,
+                    iconURL: targetUser.user.displayAvatarURL({ dynamic: true }),
+                })]
+        });
         return;
     } else
-        return commandEmbed;
+        return new EmbedBuilder()
+            .setColor(0xffa500)
+            .setAuthor({
+                name: `${targetUser.user.tag} was issued a ${durationStr} mute.`,
+                iconURL: targetUser.user.displayAvatarURL({ dynamic: true }),
+            });
 }

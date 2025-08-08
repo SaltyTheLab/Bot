@@ -1,8 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
-import { banlogChannelid } from '../BotListeners/Extravariables/channelids.js'; // Your mod-log channel ID
+import { guildModChannelMap } from '../BotListeners/Extravariables/channelids.js';
 import { addBan } from '../Database/databasefunctions.js';
-
-
 
 export default async function banUser({
     guild,
@@ -12,6 +10,7 @@ export default async function banUser({
     channel,
     isAutomated = false
 }) {
+    const guildChannels = guildModChannelMap[guild.id]
 
     // DM Embed (optional)
     const dmEmbed = new EmbedBuilder()
@@ -50,9 +49,9 @@ export default async function banUser({
     } catch (err) {
         return `❌ Failed to ban user: ${err.message ?? err}`;
     }
-    addBan(targetUser.id, moderatorUser.id, reason, channel)
-    const logChannel = guild.channels.cache.get(banlogChannelid);
-    if (logChannel) await logChannel.send({ embeds: [logEmbed] });
+    addBan(targetUser.id, moderatorUser.id, reason, channel, guild.id)
+    const logChannel = await guild.channels.fetch(guildChannels.banlogchannel);
+    await logChannel?.send({ embeds: [logEmbed] });
     const commandEmbed = new EmbedBuilder()
         .setAuthor({
             name: `${targetUser.tag} was banned`, iconURL: `${targetUser.displayAvatarURL({ dynamic: true })}`

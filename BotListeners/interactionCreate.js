@@ -3,6 +3,7 @@ import banUser from "../utilities/banUser.js";
 import { getPunishments, deleteMute, deleteWarn, viewNotes, deleteNote } from "../Database/databasefunctions.js";
 import logRecentCommand from "../Logging/recentcommands.js";
 import { buildButtons, buildLogEmbed, buildNoteEmbed, buildNoteButtons } from "../utilities/buildmodlogembeds.js";
+import { stringreactions } from "./Extravariables/rolemap.js";
 
 export async function interactionCreate(interaction) {
     // Check if the interaction is a chat input command
@@ -115,9 +116,9 @@ export async function interactionCreate(interaction) {
             const customIdParts = interaction.customId.split('_');
             const action = customIdParts[1];
             const targetUserId = customIdParts[2];
-            const targetUser = await interaction.client.users.fetch(targetUserId);
             const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
-            let allLogs = await getPunishments(targetUserId);
+            const guildId =  interaction.guild.id;
+            let allLogs = await getPunishments(targetUserId, guildId);
 
             //button switch to navigate and delete the users punishments
             switch (action) {
@@ -129,7 +130,7 @@ export async function interactionCreate(interaction) {
                     const currentLog = allLogs[newIndex];
 
                     await interaction.editReply({
-                        embeds: [await buildLogEmbed(interaction, currentLog, newIndex, allLogs.length, targetUser)],
+                        embeds: [await buildLogEmbed(interaction, currentLog, newIndex, allLogs.length)],
                         components: [await buildButtons(newIndex, allLogs.length, targetUserId, isAdmin, currentLog.id, currentLog.type)]
                     });
                     break;
@@ -146,7 +147,7 @@ export async function interactionCreate(interaction) {
                         deleteFn(logId);
                         logRecentCommand(`${logType} log deleted for User ID: ${targetUserId} | Admin: ${interaction.user.tag} | Log ID: ${logId}`);
 
-                        allLogs = await getPunishments(targetUserId);
+                        allLogs = await getPunishments(targetUserId, guildId);
 
 
                         if (allLogs.length === 0) {
@@ -162,7 +163,7 @@ export async function interactionCreate(interaction) {
                         const newCurrentLog = allLogs[currentIndex]
 
                         await interaction.editReply({
-                            embeds: [await buildLogEmbed(interaction, newCurrentLog, currentIndex, allLogs.length)],
+                            embeds: [await buildLogEmbed(interaction, newCurrentLog, currentIndex, allLogs.length, guildId)],
                             components: [await buildButtons(currentIndex, allLogs.length, targetUserId, isAdmin, currentLog.id, currentLog.type)]
                         });
 
@@ -324,5 +325,63 @@ export async function interactionCreate(interaction) {
             await originalMessage.edit({ components: [updatedActionRow] });
         }
     }
-};
+    if (interaction.isStringSelectMenu()) {
+        if (interaction.customId === 'stream_role_select' || interaction.customId === 'Game_role_Select') {
+            await interaction.deferReply({ ephemeral: true })
+            const member = interaction.member;
+            const rolesAdded = [];
+            const rolesRemoved = [];
+
+            const allPossibleSelectValues = Object.keys(stringreactions).filter(key => {
+                return true;
+            });
+
+            for (const roleValue of allPossibleSelectValues) {
+                const roleID = stringreactions[roleValue];
+
+                if (!roleID) {
+                    console.warn(`⚠️ No role mapped for select menu value: ${roleValue}. Skipping.`);
+                    continue;
+                }
+
+                // If the role is selected in the current interaction
+                if (interaction.values.includes(roleValue)) {
+                    // Add role if member doesn't have it
+                    if (!member.roles.cache.has(roleID)) {
+                        try {
+                            await member.roles.add(roleID);
+                            rolesAdded.push(`<@&${roleID}>`);
+                        } catch (err) {
+                            console.error(`❌ Failed to add role ${roleID} to ${member.user.tag}:`, err);
+                        }
+                    }
+                } else {
+                    // Remove role if member has it but it's NOT selected in the current interaction
+                    if (member.roles.cache.has(roleID)) {
+                        try {
+                            await member.roles.remove(roleID);
+                            rolesRemoved.push(`<@&${roleID}>`);
+                        } catch (err) {
+                            console.error(`❌ Failed to remove role ${roleID} from ${member.user.tag}:`, err);
+                        }
+                    }
+                }
+            }
+            let replyContent = '';
+            if (rolesAdded.length > 0) {
+                replyContent += `Added: ${rolesAdded.join(', ')}\n`;
+            }
+            if (rolesRemoved.length > 0) {
+                replyContent += `Removed: ${rolesRemoved.join(', ')}\n`;
+            }
+            if (!replyContent) {
+                replyContent = 'No role changes were made.';
+            }
+
+            await interaction.editReply({ content: replyContent, ephemeral: true });
+            console.log(`✅ Roles updated for ${member.user.tag} via select menu. Added: [${rolesAdded.join(', ')}], Removed: [${rolesRemoved.join(', ')}]`);
+        }
+    }
+}
+
 

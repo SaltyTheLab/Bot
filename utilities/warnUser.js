@@ -1,10 +1,9 @@
 import { EmbedBuilder } from 'discord.js';
-import { mutelogChannelid } from '../BotListeners/Extravariables/channelids.js';
 import getWarnStats from '../moderation/simulatedwarn.js';
 import getNextPunishment from '../moderation/punishments.js';
 import { addWarn } from '../Database/databasefunctions.js';
 import logRecentCommand from '../Logging/recentcommands.js';
-
+import { guildModChannelMap } from '../BotListeners/Extravariables/channelids.js';
 
 const THRESHOLD = 24 * 60 * 60 * 1000; // 24h
 
@@ -21,7 +20,7 @@ export default async function warnUser({
   // --- Database Operations (getUser, getWarnStats, addWarn) ---
 
   // Add the new warning to the DB.
-  addWarn(targetUser.id, moderatorUser.id, reason, currentWarnWeight, channel.id);
+  addWarn(targetUser.id, moderatorUser.id, reason, currentWarnWeight, channel.id, guild.id);
 
   // Fetch updated active warnings for the user after the new warn has been added.
   const { activeWarnings } = await getWarnStats(targetUser.id);
@@ -49,20 +48,12 @@ export default async function warnUser({
       iconURL: targetUser.displayAvatarURL({ dynamic: true }),
     })
     .setThumbnail(guild.iconURL())
-    .setDescription(`<@${targetUser.id}>, you were given a \`warning\` in Salty's Cave.`)
+    .setDescription(`<@${targetUser.id}>, you were given a \`warning\` ${guild.name}.`)
     .addFields( // Use addFields consistently
       ...commonFields(reason, currentWarnWeight, label, activeWarnings.length),
       { name: 'Warn expires on:', value: formattedExpiry, inline: false },
     )
     .setTimestamp();
-
-  // Embed for confirmation in the channel or return
-  const commandEmbed = new EmbedBuilder()
-    .setColor(0xffff00)
-    .setAuthor({
-      name: `${targetUser.user.tag} was issued a warning`,
-      iconURL: targetUser.displayAvatarURL({ dynamic: true }),
-    });
 
   // Embed for moderation log channel
   const logEmbed = new EmbedBuilder()
@@ -80,35 +71,44 @@ export default async function warnUser({
     .setTimestamp();
 
   // --- 5. DMing User & Logging ---
-  try {
-    await targetUser.send({ embeds: [dmEmbed] });
-    logEmbed.setFooter({ text: 'User was DMed.' });
-  } catch (dmError) {
+  logEmbed.setFooter({ text: 'User was DMed.' })
+  const dmPromise = targetUser.send({ embeds: [dmEmbed] }).catch(dmError => {
     console.warn(`[WarnUser] Could not DM user ${targetUser.tag}: ${dmError.message}`);
     logEmbed.setFooter({ text: 'User could not be DMed.' });
-  }
+  })
 
-  const logChannel = guild.channels.cache.get(mutelogChannelid);
-  if (logChannel) {
-    try {
-      await logChannel.send({ embeds: [logEmbed] });
-    } catch (logSendError) {
-      console.error(`[WarnUser] Failed to send warn log to channel ${mutelogChannelid}: ${logSendError.message}`);
-    }
+  const guildLogChannelConfig = guildModChannelMap[guild.id];
+  let logChannel;
+  if (guildLogChannelConfig && guildLogChannelConfig.mutelogChannel) {
+    logChannel = guild.channels.cache.get(guildLogChannelConfig.mutelogChannel);
   } else {
-    console.warn(`[WarnUser] Mute log channel with ID ${mutelogChannelid} not found.`);
+    console.warn(`❌ No mute log channel configured for guild: ${guild.name} (${guild.id}). Mute log will not be sent.`);
   }
+  const logPromise = logChannel?.send({ embeds: [logEmbed] }).catch(logSendErr => {
+    console.error(`[WarnUser] Failed to send warn log to channel ${guildLogChannelConfig?.mutelogChannel || 'unknown'}:`, logSendErr);
+  });
+
+  await Promise.all([dmPromise, logPromise].filter(Boolean));
 
   // --- Log Command ---
   logRecentCommand(`warn - ${targetUser.tag} - ${reason} - issuer: ${moderatorUser.tag}`);
 
+  const commandEmbed = new EmbedBuilder()
+    .setColor(0xffff00)
+    .setAuthor({
+      name: `${targetUser.user.tag} was issued a warning`,
+      iconURL: targetUser.displayAvatarURL({ dynamic: true })
+    })
+
   // Send confirmation embed if automated, else return the embed for manual use
   if (isAutomated) {
     try {
-      await channel.send({ embeds: [commandEmbed] });
+      await channel.send({
+        embeds: [commandEmbed]
+      });
     } catch (sendError) {
       console.error(`[WarnUser] Failed to send command confirmation to channel ${channel.id}: ${sendError.message}`);
     }
   } else
-    return commandEmbed;
+    return commandEmbed
 }

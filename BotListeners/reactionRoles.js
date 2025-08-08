@@ -5,7 +5,7 @@ const messageIDs = embedIDs;
 
 
 // Common role message IDs to react to
-const validKeys = ['colors', 'pronouns', 'continent', 'stream', 'dividers', 'consoles'];
+const validKeys = ['colors', 'pronouns', 'continent', 'stream', 'dividers', 'consoles', 'EvoContent', 'EvoRules', 'EvoGames', 'Evocolors'];
 const validRoleMessageIds = messageIDs
   .filter(embedInfo => validKeys.includes(embedInfo.name)) // Filter for only the relevant embed names
   .map(embedInfo => embedInfo.messageId) // Get the messageId for each filtered embed

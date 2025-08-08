@@ -1,5 +1,5 @@
 import { EmbedBuilder, SlashCommandBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } from "discord.js";
-import { getUser, saveUser } from "../Database/databaseFunctions.js";
+import { getUser, saveUser } from "../Database/databasefunctions.js";
 
 export const data = new SlashCommandBuilder()
     .setName('rps')
@@ -7,6 +7,7 @@ export const data = new SlashCommandBuilder()
 
 export function execute(interaction) {
     let userWin = false;
+    const guildId = interaction.guild.id
     const user = interaction.user.id;
     const menu = new EmbedBuilder()
         .setTitle(
@@ -70,7 +71,7 @@ export function execute(interaction) {
             .setDescription(`You chose **${userchoice}**.\nOpponent chose **${opponentchoice}**.`)
             .setColor(0xffa500);
         if(userWin){
-            const {userData} = getUser(user)
+            const {userData} = getUser(user, guildId)
             userData.coins += 20;
             saveUser(userData);
         }

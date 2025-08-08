@@ -24,7 +24,7 @@ export async function execute(interaction) {
     const isAdmin = moderatorMember.permissions.has(PermissionsBitField.Flags.Administrator);
 
     // Fetch all logs only
-    let allLogs = await getPunishments(targetUser.id);
+    let allLogs = await getPunishments(targetUser.id, interaction.guild.id);
 
     //return early with no modlogs found
     if (!allLogs.length) {
@@ -44,7 +44,6 @@ export async function execute(interaction) {
     // Log the command usage
     logRecentCommand(`Modlogs command used by ${moderatorUser.tag} for user ${targetUser.tag}`);
 
-    const timestamp = Date.now();
 
     //send embed
     const replyMessage = await interaction.reply({

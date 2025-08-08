@@ -1,7 +1,6 @@
 export default function getNextPunishment(weightedWarns) {
 
     const punishmentStages = [
-        { label: '1 warn', minutes: 0 },
         { label: '15 min mute', minutes: 0 },
         { label: '30 min mute', minutes: 15 },
         { label: '45 min mute', minutes: 30 },

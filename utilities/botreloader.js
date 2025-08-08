@@ -73,8 +73,6 @@ export async function reloadCommands(client) {
 
     return new Promise((resolve, reject) => {
         const commandsPath = path.join(botRoot, 'commands');
-        // --- register them to the api ---
-        register();
         const worker = new Worker('./utilities/worker.js', { type: 'module' });
 
         worker.postMessage(commandsPath);

@@ -1,8 +1,8 @@
 import { LRUCache } from 'lru-cache';
 import Denque from 'denque';
-import { hobbiescatagorey, mediacatagorey } from '../BotListeners/Extravariables/channelids.js';
+import { hobbiescatagorey, mediacatagorey, evoadultcatagorey } from '../BotListeners/Extravariables/channelids.js';
 
-export const userMessageTrackers = new LRUCache({
+ const userMessageTrackers = new LRUCache({
   max: 500,
   ttl: 5 * 60 * 1000, // 5 minutes
   updateAgeOnGet: true,
@@ -17,7 +17,7 @@ const DUPLICATE_SPAM_THRESHOLD = 3;
 export default function updateTracker(userId, message) {
   const now = Date.now();
 
-  const exclusions = [hobbiescatagorey, mediacatagorey];
+  const exclusions = [hobbiescatagorey, mediacatagorey, evoadultcatagorey];
   const content = message.content;
   const minLengthForCapsCheck = 10;
   let isCapSpam = false;

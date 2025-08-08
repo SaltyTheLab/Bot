@@ -38,7 +38,15 @@ async function main() {
       await clearExpiredWarns(db)
     });
     await cacheInteractiveMessages(client);
-    embedsenders(client, process.env.GUILD_ID);
+    const guildIdsString = process.env.GUILD_ID;
+    if (guildIdsString) {
+      const guildIDs = guildIdsString.split(',').map(id => id.trim());
+
+      for (const guildId of guildIDs) {
+        console.log(`Attempting to send embeds for Guild ID: ${guildId}`);
+        await embedsenders(guildId, client)
+      }
+    }
     //output for debugging
     console.log(`✅ Logged in as ${client.user.tag}`);
   });

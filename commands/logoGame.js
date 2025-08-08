@@ -21,7 +21,7 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
     const user = interaction.user;
-
+    const guildId = interaction.guild.id
     // Pick a random logo as the correct answer
     const logo = logos[Math.floor(Math.random() * logos.length)];
     const imagePath = path.resolve(`./${logo.image}`);
@@ -83,7 +83,7 @@ export async function execute(interaction) {
         });
 
         if (i.customId === logo.brand) {
-            const { userData } = getUser(user.id);
+            const { userData } = getUser(user.id, guildId);
             userData.points += 20;
             saveUser(userData);
         }

@@ -13,8 +13,9 @@ export async function execute(interaction) {
     const id = interaction.options.getUser('target');
     const target = await interaction.client.users.fetch(id);
     const twoMinutesInMs = 2 * 60 * 1000;
+    const guildId = interaction.guild.id;
 
-    const allnotes = await viewNotes(target.id);
+    const allnotes = await viewNotes(target.id, guildId);
 
     if (!allnotes.length) {
         return interaction.reply({
