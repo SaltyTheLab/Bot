@@ -1,19 +1,37 @@
-import { EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle } from 'discord.js';
-import { ruleschannelid, mentalhealthid, ticketappealsid, staffguidesid, getrolesid } from '../BotListeners/Extravariables/channelids.js';
-import { saveMessageIDs, loadMessageIDs } from '../utilities/messageStorage.js'; 
+import { EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle, StringSelectMenuBuilder } from 'discord.js';
+import { guildChannelMap } from '../BotListeners/Extravariables/channelids.js';
+import { saveMessageIDs, loadMessageIDs } from '../utilities/messageStorage.js';
 
 
-export async function embedsenders(client, guildId) {
-    // ... (robust guild fetching logic - keep as is) ...
-    let guild = client.guilds.cache.get(guildId); // Use client.client.guilds.cache for safety
-    if (!guild) { /* ... error handling ... */ return; }
-    console.log(`Successfully retrieved guild: ${guild.name} (${guild.id})`);
+const guildEmbedConfig = {
+    "1231453115937587270": [ // Salty's Guild ID
+        "rules", "mental", "appeal", "staffguide", "consoles",
+        "colors", "pronouns", "continent", "stream", "dividers"
+    ],
+    "1347217846991851541": [ // Evo's Guild ID
+        "EvoRules", "EvoContent",
+        "EvoGames", "Evocolors"
+    ]
+    // Add more guild configurations here
+};
 
+export async function embedsenders(guildId, client) {
+    if (!guildId) {
+        console.log(`Error: guild not found for ${guildId}`);
+        return;
+    }
+    const guild = client.guilds.cache.get(guildId);
+    console.log(`Successfully retrieved guild: ${guildId}`);
+    const guildChannels = guildChannelMap[guildId];
+    if (!guildChannels) {
+        console.error(`❌ No channel mapping found for guild ID: ${guildId}. Please check guildChannelMap.`);
+        return;
+    }
     // 1. Load the existing message IDs from the file
     // This will be the array that we modify in memory
     const messageIDs = loadMessageIDs(); // Call the function to load the array
 
-    // Define your embed sending functions as an OBJECT (this structure is good)
+    // Define your embed sending functions as an OBJECT
     const embedSendersMap = {
         "rules": sendRulesEmbed,
         "mental": sendMentalHealthEmbed,
@@ -24,15 +42,31 @@ export async function embedsenders(client, guildId) {
         "pronouns": sendPronounsRoleEmbed,
         "continent": sendContinentRoleEmbed,
         "stream": sendStreamRoleEmbed,
-        "dividers": sendDividersRoleEmbed
+        "dividers": sendDividersRoleEmbed,
+        "EvoRules": EvosendRulesEmbed,
+        "EvoContent": EvosendContentRoleEmbed,
+        "EvoGames": EvosendGameRoleEmbed,
+        "Evocolors": EvosendColorsRoleEmbed
     };
+
+    const guildSpecificEmbedNames = guildEmbedConfig[guildId];
+    if (!guildSpecificEmbedNames) {
+        console.warn(`No embed configuration found for guild ID: ${guildId}. Skipping embeds for this guild.`);
+        return;
+    }
 
     const embedTasks = [];
     // Iterate directly over the object's entries
-    for (let [embedName, senderFunc] of Object.entries(embedSendersMap)) {
-        console.log(`Checking embed for name: '${embedName}'`);
+    for (const embedName of guildSpecificEmbedNames) {
+        const senderFunc = embedSendersMap[embedName];
+        if (!senderFunc) {
+            console.error(`❌ No sender function found for embed name: '${embedName}' in embedSendersMap. Check guildEmbedConfig.`);
+            continue; // Skip if a function isn't defined for the specified name
+        }
 
         // Find the entry in the *current in-memory messageIDs array*
+        console.log(`Checking embed for name: '${embedName}'`);
+
         const existingEmbedInfo = messageIDs.find(item => item.name === embedName);
 
         // Condition to send a new embed:
@@ -41,7 +75,7 @@ export async function embedsenders(client, guildId) {
         if (!existingEmbedInfo || !existingEmbedInfo.messageId || !existingEmbedInfo.channelid) {
             console.log(`Attempting to send new embed for: '${embedName}' (ID missing or incomplete).`);
             // Pass guild, the *modifiable messageIDs array*, and the current embedName
-            embedTasks.push(senderFunc(guild, messageIDs, embedName));
+            embedTasks.push(senderFunc(guild, messageIDs, embedName, guildChannels));
         } else {
             // Log with both IDs for clarity
             console.log(`Message '${embedName}' already exists: Message ID: ${existingEmbedInfo.messageId}, Channel ID: ${existingEmbedInfo.channelid}. Skipping creation.`);
@@ -51,15 +85,10 @@ export async function embedsenders(client, guildId) {
 
     await Promise.all(embedTasks);
 
-    // Save ALL updated message IDs once after all new embeds have been sent.
-    // This will overwrite the file, but `messageIDs` now contains all previous entries
-    // plus any newly added ones, so it effectively "adds missing" by saving the complete state.
     saveMessageIDs(messageIDs);
     console.log('Embed sending process completed (new embeds created/IDs saved to file).');
 }
-
-
-async function sendRulesEmbed(guild, messageIDs, key) {
+async function sendRulesEmbed(guild, messageIDs, key, guildChannels) {
     const rules = new EmbedBuilder()
         .setTitle('**__Rules__**')
         .setAuthor({
@@ -117,10 +146,15 @@ async function sendRulesEmbed(guild, messageIDs, key) {
         .setTitle('Roles')
         .setDescription('Feel free to grab some roles in <#1235323618582466621> channel.');
 
-    const channel = await guild.channels.fetch(ruleschannelid);
+    const targetChannelId = guildChannels.rules;
+    if (!targetChannelId) {
+        console.error(`❌ No rules channel ID found for guild ${guild.id}.`);
+        return;
+    }
+    const channel = await guild.channels.fetch(targetChannelId);
     if (!channel?.isTextBased()) {
-        console.error(`Channel ${ruleschannelid} for '${key}' embed is not text-based.`);
-        return; // Exit if the channel is not suitable
+        console.error(`Channel ${targetChannelId} for '${key}' embed is not text-based.`);
+        return;
     }
     const msg = await channel.send({ embeds: [rules, roles] });
 
@@ -135,7 +169,7 @@ async function sendRulesEmbed(guild, messageIDs, key) {
 
 }
 
-async function sendMentalHealthEmbed(guild, messageIDs, key) {
+async function sendMentalHealthEmbed(guild, messageIDs, key, guildChannels) {
     const mentalhealth = new EmbedBuilder()
         .setTitle('Mental Health')
         .setAuthor({
@@ -208,10 +242,15 @@ async function sendMentalHealthEmbed(guild, messageIDs, key) {
 
             })
 
-    const channel = await guild.channels.fetch(mentalhealthid);
+    const targetChannelId = guildChannels.mental;
+    if (!targetChannelId) {
+        console.error(`❌ No mental health channel ID found for guild ${guild.id}.`);
+        return;
+    }
+    const channel = await guild.channels.fetch(targetChannelId);
     if (!channel?.isTextBased()) {
-        console.error(`Channel ${mentalhealthid} for '${key}' embed is not text-based.`);
-        return; // Exit if the channel is not suitable
+        console.error(`Channel ${targetChannelId} for '${key}' embed is not text-based.`);
+        return;
     }
     const msg = await channel.send({ embeds: [mentalhealth] });
 
@@ -226,7 +265,7 @@ async function sendMentalHealthEmbed(guild, messageIDs, key) {
 
 }
 
-async function sendAppealEmbed(guild, messageIDs, key) {
+async function sendAppealEmbed(guild, messageIDs, key, guildChannels) {
     const appealsembed = new EmbedBuilder()
         .setTitle('Ticket Appeal Form')
         .setDescription([
@@ -244,10 +283,15 @@ async function sendAppealEmbed(guild, messageIDs, key) {
 
     const row = new ActionRowBuilder().addComponents(appealbutton);
 
-    const channel = await guild.channels.fetch(ticketappealsid);
+    const targetChannelId = guildChannels.appeal;
+    if (!targetChannelId) {
+        console.error(`❌ No appeal channel ID found for guild ${guild.id}.`);
+        return;
+    }
+    const channel = await guild.channels.fetch(targetChannelId);
     if (!channel?.isTextBased()) {
-        console.error(`Channel ${ticketappealsid} for '${key}' embed is not text-based.`);
-        return; // Exit if the channel is not suitable
+        console.error(`Channel ${targetChannelId} for '${key}' embed is not text-based.`);
+        return;
     }
     const msg = await channel.send({
         name: "appeal",
@@ -265,7 +309,7 @@ async function sendAppealEmbed(guild, messageIDs, key) {
     });
 }
 
-async function sendStaffGuideEmbed(guild, messageIDs, key) {
+async function sendStaffGuideEmbed(guild, messageIDs, key, guildChannels) {
     const staffguides = new EmbedBuilder()
         .setTitle('Staff Guidelines')
         .setAuthor({
@@ -300,10 +344,15 @@ async function sendStaffGuideEmbed(guild, messageIDs, key) {
         }
         )
 
-    const channel = await guild.channels.fetch(staffguidesid);
+    const targetChannelId = guildChannels.staffguide;
+    if (!targetChannelId) {
+        console.error(`❌ No staff guide channel ID found for guild ${guild.id}.`);
+        return;
+    }
+    const channel = await guild.channels.fetch(targetChannelId);
     if (!channel?.isTextBased()) {
-        console.error(`Channel ${staffguidesid} for '${key}' embed is not text-based.`);
-        return; // Exit if the channel is not suitable
+        console.error(`Channel ${targetChannelId} for '${key}' embed is not text-based.`);
+        return;
     }
     const msg = await channel.send({ embeds: [staffguides] });
 
@@ -318,7 +367,7 @@ async function sendStaffGuideEmbed(guild, messageIDs, key) {
 
 }
 
-async function sendConsoleRoleEmbed(guild, messageIDs, key) {
+async function sendConsoleRoleEmbed(guild, messageIDs, key, guildChannels) {
     const consoles = new EmbedBuilder()
         .setTitle('What do you play on?')
         .setDescription(['💻:<@&1235323729936908379>',
@@ -327,10 +376,15 @@ async function sendConsoleRoleEmbed(guild, messageIDs, key) {
             '🟥: <@&1235323733246476329>',
             '📱: <@&1235323733795799154>',
             '🎧: <@&1272280467940573296>'].join('\n'))
-    const channel = await guild.channels.fetch(getrolesid);
+    const targetChannelId = guildChannels.getroles;
+    if (!targetChannelId) {
+        console.error(`❌ No getroles channel ID found for guild ${guild.id}.`);
+        return;
+    }
+    const channel = await guild.channels.fetch(targetChannelId);
     if (!channel?.isTextBased()) {
-        console.error(`Channel ${getrolesid} for '${key}' embed is not text-based.`);
-        return; // Exit if the channel is not suitable
+        console.error(`Channel ${targetChannelId} for '${key}' embed is not text-based.`);
+        return;
     }
     const msg = await channel.send({ embeds: [consoles] });
     const consoleemotes = ['💻', '📦', '🚉', '🟥', '📱', '🎧']
@@ -349,7 +403,7 @@ async function sendConsoleRoleEmbed(guild, messageIDs, key) {
     });
 }
 
-async function sendColorsRoleEmbed(guild, messageIDs, key) {
+async function sendColorsRoleEmbed(guild, messageIDs, key, guildChannels) {
     const color = new EmbedBuilder()
         .setTitle('Get Your Colors here!')
         .setDescription([
@@ -361,10 +415,15 @@ async function sendColorsRoleEmbed(guild, messageIDs, key) {
             '🟡: <@&1235323625037500466>',
             '🔵: <@&1235323625452601437>'
         ].join('\n'))
-    const channel = await guild.channels.fetch(getrolesid);
+    const targetChannelId = guildChannels.getroles;
+    if (!targetChannelId) {
+        console.error(`❌ No getroles channel ID found for guild ${guild.id}.`);
+        return;
+    }
+    const channel = await guild.channels.fetch(targetChannelId);
     if (!channel?.isTextBased()) {
-        console.error(`Channel ${getrolesid} for '${key}' embed is not text-based.`);
-        return; // Exit if the channel is not suitable
+        console.error(`Channel ${targetChannelId} for '${key}' embed is not text-based.`);
+        return;
     }
     const msg = await channel.send({ embeds: [color] });
     const colors = ['🔴', '🟣', '🟢', '🩷', '🟠', '🟡', '🔵']
@@ -383,7 +442,7 @@ async function sendColorsRoleEmbed(guild, messageIDs, key) {
 
 }
 
-async function sendPronounsRoleEmbed(guild, messageIDs, key) {
+async function sendPronounsRoleEmbed(guild, messageIDs, key, guildChannels) {
     const pronouns = new EmbedBuilder()
         .setTitle('Identity?')
         .setDescription([
@@ -392,10 +451,15 @@ async function sendPronounsRoleEmbed(guild, messageIDs, key) {
             '💜: <@&1235323774505582634>',
             '💚: <@&1235323775772528766>'
         ].join('\n'))
-    const channel = await guild.channels.fetch(getrolesid);
+    const targetChannelId = guildChannels.getroles;
+    if (!targetChannelId) {
+        console.error(`❌ No getroles channel ID found for guild ${guild.id}.`);
+        return;
+    }
+    const channel = await guild.channels.fetch(targetChannelId);
     if (!channel?.isTextBased()) {
-        console.error(`Channel ${getrolesid} for '${key}' embed is not text-based.`);
-        return; // Exit if the channel is not suitable
+        console.error(`Channel ${targetChannelId} for '${key}' embed is not text-based.`);
+        return;
     }
     const msg = await channel.send({ embeds: [pronouns] });
     const nouns = ['🧡', '💛', '💜', '💚',]
@@ -414,7 +478,7 @@ async function sendPronounsRoleEmbed(guild, messageIDs, key) {
 
 }
 
-async function sendContinentRoleEmbed(guild, messageIDs, key) {
+async function sendContinentRoleEmbed(guild, messageIDs, key, guildChannels) {
     const continent = new EmbedBuilder()
         .setTitle('Where you on the earth?')
         .setDescription([
@@ -425,10 +489,15 @@ async function sendContinentRoleEmbed(guild, messageIDs, key) {
             '🐨: <@&1235335167560912927>',
             '🦒: <@&1235335168458231951>'
         ].join('\n'))
-    const channel = await guild.channels.fetch(getrolesid);
+    const targetChannelId = guildChannels.getroles;
+    if (!targetChannelId) {
+        console.error(`❌ No getroles channel ID found for guild ${guild.id}.`);
+        return;
+    }
+    const channel = await guild.channels.fetch(targetChannelId);
     if (!channel?.isTextBased()) {
-        console.error(`Channel ${getrolesid} for '${key}' embed is not text-based.`);
-        return; // Exit if the channel is not suitable
+        console.error(`Channel ${targetChannelId} for '${key}' embed is not text-based.`);
+        return;
     }
     const msg = await channel.send({ embeds: [continent] });
 
@@ -454,14 +523,19 @@ async function sendContinentRoleEmbed(guild, messageIDs, key) {
 
 }
 
-async function sendStreamRoleEmbed(guild, messageIDs, key,) {
+async function sendStreamRoleEmbed(guild, messageIDs, key, guildChannels) {
     const twitch = new EmbedBuilder()
         .setTitle('Twitch Pings')
         .setDescription('React here to get notified of when <@857445139416088647> is live!')
-    const channel = await guild.channels.fetch(getrolesid);
+    const targetChannelId = guildChannels.getroles;
+    if (!targetChannelId) {
+        console.error(`❌ No getroles channel ID found for guild ${guild.id}.`);
+        return;
+    }
+    const channel = await guild.channels.fetch(targetChannelId);
     if (!channel?.isTextBased()) {
-        console.error(`Channel ${getrolesid} for '${key}' embed is not text-based.`);
-        return; // Exit if the channel is not suitable
+        console.error(`Channel ${targetChannelId} for '${key}' embed is not text-based.`);
+        return;
     }
     const msg = await channel.send({ embeds: [twitch] });
     msg.react('▶️')
@@ -476,16 +550,21 @@ async function sendStreamRoleEmbed(guild, messageIDs, key,) {
     });
 }
 
-async function sendDividersRoleEmbed(guild, messageIDs, key,) {
+async function sendDividersRoleEmbed(guild, messageIDs, key, guildChannels) {
     const dividers = new EmbedBuilder()
         .setTitle('Divders')
         .setDescription(
             'React here to get the Divider roles for easy viewing'
         )
-    const channel = await guild.channels.fetch(getrolesid);
+    const targetChannelId = guildChannels.getroles;
+    if (!targetChannelId) {
+        console.error(`❌ No getroles channel ID found for guild ${guild.id}.`);
+        return;
+    }
+    const channel = await guild.channels.fetch(targetChannelId);
     if (!channel?.isTextBased()) {
-        console.error(`Channel ${getrolesid} for '${key}' embed is not text-based.`);
-        return; // Exit if the channel is not suitable
+        console.error(`Channel ${targetChannelId} for '${key}' embed is not text-based.`);
+        return;
     }
     const msg = await channel.send({ embeds: [dividers] });
     msg.react('🚧')
@@ -498,4 +577,336 @@ async function sendDividersRoleEmbed(guild, messageIDs, key,) {
         messageId: msg.id,
         channelid: channel.id
     });
+}
+
+async function EvosendColorsRoleEmbed(guild, messageIDs, key, guildChannels) {
+    const Evocolor = new EmbedBuilder()
+        .setTitle('Pick your color')
+        .setDescription(['It\'s a small but fun way to express yourself and stand out from the crowd.',
+            'Just click on any of the colors below and make it your own. And remember, you can always change your color whenever you feel like it!',
+            'Thank you for being a part of our friendly community.',
+            '🔴: <@&1347447588919443557>',
+            '🟣: <@&1347447590928519199>',
+            '🟢: <@&1347447605847920640>',
+            '🔵: <@&1347447594690805933>',
+            '🟤: <@&1347447591901859882>'
+        ].join('\n'))
+    const targetChannelId = guildChannels.getroles;
+    if (!targetChannelId) {
+        console.error(`❌ No getroles channel ID found for guild ${guild.id}.`);
+        return;
+    }
+    const channel = await guild.channels.fetch(targetChannelId);
+    if (!channel?.isTextBased()) {
+        console.error(`Channel ${targetChannelId} for '${key}' embed is not text-based.`);
+        return;
+    }
+    const msg = await channel.send({ embeds: [Evocolor] });
+    const colors = ['🔴', '🟣', '🟢', '🔵', '🟤']
+    for (const color of colors) {
+        msg.react(color)
+    }
+
+    console.log(`📝 Sent '${key}' embed. Message ID:`, msg.id);
+
+    // Add a new entry to the array if it didn't exist
+    messageIDs.push({
+        name: key,
+        messageId: msg.id,
+        channelid: channel.id
+    });
+
+}
+
+async function EvosendContentRoleEmbed(guild, messageIDs, key, guildChannels) {
+    const content = new EmbedBuilder()
+        .setTitle('Want some content updates????')
+        .setDescription('React to this message to get your roles!')
+        .setColor(0x9900ff)
+    const targetChannelId = guildChannels.getroles;
+    if (!targetChannelId) {
+        console.error(`❌ No getroles channel ID found for guild ${guild.id}.`);
+        return;
+    }
+    const channel = await guild.channels.fetch(targetChannelId);
+    if (!channel?.isTextBased()) {
+        console.error(`Channel ${targetChannelId} for '${key}' embed is not text-based.`);
+        return;
+    }
+    const selectMenu = new StringSelectMenuBuilder()
+        .setCustomId('stream_role_select')
+        .setPlaceholder('Select some content')
+        .setMinValues(0)
+        .setMaxValues(8)
+        .addOptions(
+            {
+                label: ' Evo\'s twitch',
+                description: 'Get notifications for Twitch Streams.',
+                value: 'role_twitch_updates',
+                emoji: '📺'
+            },
+            {
+                label: 'Evo\'s Youtube Content',
+                description: 'Get notifications when Evo uploads',
+                value: 'role_youtube_updates',
+                emoji: '▶️'
+            },
+            {
+                label: 'Hulk\'s Twitch',
+                description: 'Get notifications for when Hulk is live',
+                value: 'role_hulk_updates',
+                emoji: '⏯️'
+            },
+
+            {
+                label: 'Twitch Viewer',
+                description: 'Show you watch people on twitch',
+                value: 'role_twitch_viewer',
+                emoji: '🎮'
+            },
+            {
+                label: 'Twitch Streamer',
+                description: 'For people who stream on twitch',
+                value: 'role_twitch',
+                emoji: '⏸️'
+            },
+            {
+                label: 'Artist',
+                description: 'For users who are artists',
+                value: 'role_artist',
+                emoji: '🖌️'
+            },
+            {
+                label: 'D&D DM',
+                description: 'For Dungeon Masters',
+                value: 'role_D&D_Master',
+                emoji: '📚'
+            },
+            {
+                label: 'Game Night/Movie Night Host (VR)',
+                description: 'For people who want to host game/movie nights',
+                value: 'role_game_movie_night',
+                emoji: '🕹️'
+            }
+        )
+    const actionRow = new ActionRowBuilder()
+        .addComponents(selectMenu)
+
+    const msg = await channel.send({
+        embeds: [content],
+        components: [actionRow]
+    });
+    console.log(`📝 Sent '${key}' embed. Message ID:`, msg.id);
+
+    // Add a new entry to the array if it didn't exist
+    messageIDs.push({
+        name: key,
+        messageId: msg.id,
+        channelid: channel.id
+    });
+}
+
+async function EvosendGameRoleEmbed(guild, messageIDs, key, guildChannels) {
+    const gameRole = new EmbedBuilder()
+        .setTitle('Games')
+        .setDescription('Pick the games you play. Don\'t pick games if you don\'t play them.')
+    const targetChannelId = guildChannels.getroles;
+    if (!targetChannelId) {
+        console.error(`❌ No getroles channel ID found for guild ${guild.id}.`);
+        return;
+    }
+    const channel = await guild.channels.fetch(targetChannelId);
+    if (!channel?.isTextBased()) {
+        console.error(`Channel ${targetChannelId} for '${key}' embed is not text-based.`);
+        return;
+    }
+    const gameMenu = new StringSelectMenuBuilder()
+        .setCustomId('Game_role_Select')
+        .setPlaceholder('Select your games')
+        .setMinValues(0)
+        .setMaxValues(17)
+        .addOptions(
+            {
+                label: 'Path of Exile',
+                description: 'get this role if you play the game',
+                value: 'role_game_Exile',
+
+            },
+            {
+                label: 'Monster Hunter',
+                description: 'get this role if you play the game',
+                value: 'role_game_Hunter',
+
+            },
+            {
+                label: 'Call Of Duty',
+                description: 'get this role if you play the game',
+                value: 'role_game_Duty',
+
+            },
+            {
+                label: 'Fortnight',
+                description: 'get this role if you play the game',
+                value: 'role_game_Fortnight',
+
+            },
+            {
+                label: 'Apex Legends ',
+                description: 'get this role if you play the game',
+                value: 'role_game_Lengends',
+
+            },
+            {
+                label: 'Gand Theft Auto',
+                description: 'get this role if you play the game',
+                value: 'role_game_Auto',
+
+            },
+            {
+                label: 'Red Dead Redemption',
+                description: 'get this role if you play the game',
+                value: 'role_game_Redemption',
+
+            },
+            {
+                label: 'Marvel Rivals',
+                description: 'get this role if you play the game',
+                value: 'role_game_Rivals',
+
+            },
+            {
+                label: 'Fallout',
+                description: 'get this role if you play the game',
+                value: 'role_game_Fallout',
+
+            },
+            {
+                label: 'The Elder Scrolls',
+                description: 'get this role if you play the game',
+                value: 'role_game_Scrolls',
+
+            },
+            {
+                label: 'Once Human',
+                description: 'get this role if you play the game',
+                value: 'role_game_Human',
+
+            },
+            {
+                label: 'Destiny',
+                description: 'get this role if you play the game',
+                value: 'role_game_Destiny',
+
+            },
+            {
+                label: 'Dayz',
+                description: 'get this role if you play the game',
+                value: 'role_game_Dayz',
+
+            },
+            {
+                label: '7 Days To Die',
+                description: 'get this role if you play the game',
+                value: 'role_game_7Days',
+
+            },
+            {
+                label: 'Dragon Ball',
+                description: 'get this role if you play the game',
+                value: 'role_game_Dragon',
+
+            },
+            {
+                label: 'Dungeons and Dragons',
+                description: 'get this role if you play the game',
+                value: 'role_game_D&D',
+
+            },
+            {
+                label: 'Borderlands',
+                description: 'get this role if you play the game',
+                value: 'role_game_Borderlands',
+
+            }
+        )
+    const actionRow = new ActionRowBuilder()
+        .addComponents(gameMenu)
+
+    const msg = await channel.send({
+        embeds: [gameRole],
+        components: [actionRow]
+    });
+
+    console.log(`📝 Sent '${key}' embed. Message ID:`, msg.id);
+    messageIDs.push({
+        name: key,
+        messageId: msg.id,
+        channelid: channel.id
+    });
+
+}
+
+async function EvosendRulesEmbed(guild, messageIDs, key, guildChannels) {
+    const rules = new EmbedBuilder()
+        .setAuthor({
+            name: 'EvoNightWolf\'s Server',
+            iconURL: guild.iconURL({ size: 1024, extension: 'png' }) || undefined
+        })
+        .setDescription(['__ ** General Server Rules ** __',
+
+            '1) Be respectful to everyone. Please don\'t antagonize anyone, definitely don\'t bully someone. ',
+
+            '2) If someone is harassing you or bullying you, block them and open a ticket and let us know. Have proof or we will do nothing. I don\'t care too much for he said, she said. If you don\'t block someone, then you\'re basically asking to get mad or sad or annoyed.',
+
+            '3) If you get reported for bullying or harassment, you will be disciplined as per the disciplinary actions stated here.',
+
+            ' * Strike 1. You will be muted for 24 hours',
+            ' * Strike 2. You will be muted for the week and lose permanent permissions in the server.',
+            ' * Strike 3. Like baseball, you\'ll be OUT!!! I will have you banned and any hint of secondary account will be immediately ban. Using secondary accounts will be 1 way for us to ignore your ban appeal.',
+
+            'You can always appeal a ban. Notes and warnings will be a 3 month thing. If you do nothing annoying for 3 months, your warnings will reset but it will still be there and we may just take action either way.',
+
+            '4) Do NOT bag on games, players, or other content creators. This is a place to hang out and have fun and play games. We don\'t need to be putting down games that others like, or other creators. Complaining about something is one thing, but going around calling a game trash, that\'s a you problem and will not be tolerated. Don\'t like someone or a game? Play something else.',
+
+            '5) __ABSOLUTELY NEVER EVER-- ping everyone or any roll. It is disabled but even trying is just childish. Don\'t do it.',
+
+            '6) Do not ping people unless it is a legitimate reason. If you ping someone for anything in particular, keep it to the appropriate channel. If you\'re asked to stop by that person, then stop. If it\'s done again and you get reported, then we will write it down and it\'ll be noted.',
+
+            '7) Please understand that if you\'re uncomfortable, you can message the mods through a ticket. If you have an issue with a mod, message me directly.',
+
+            '8) Info you have to know. I am a furry, there\'s more to it than what you think you know so grow up and maybe ask me about it. You may see content about it, you may see other furries. If you say you\'re a furry and you go and harass others, then you will be banned and reported to discord for hate because bullying isn\'t tolerated. If you don\'t like me for being a furry, server, and at the bottom is leave server.',
+
+            'I do accept messages but not friend requests. But if you\'re messaging me with something I don\'t like, then I will ignore you. ALSO REMEMBER!!!!!! I am a truck driver and work a lot, so if I don\'t reply right away, I am either working, sleeping, or playing a game. I\'m not going to check messages mid game. Come on.',
+        ].join('\n\n'))
+        .addFields(
+            {
+                name: '**__Roles__** ', value: ['1) Please take roles that retain to you. If you don\'t like a game or don\'t play it, then don\'t take it, because you\'re not here to spy on people and you\'re not here to shit on other games.',
+
+                    '2) Please take roles for your games. If you have content to share then please do!!!!!',
+
+                    '3) If you take a role to another creator or to certain things, you will be pinged and notified. Remember, if you want the notification but don\'t care for the ping, server setting notifications for you.'].join('\n\n'), inline: false
+            }
+        )
+
+    const targetChannelId = guildChannels.rules;
+    if (!targetChannelId) {
+        console.error(`❌ No rules channel ID found for guild ${guild.id}.`);
+        return;
+    }
+    const channel = await guild.channels.fetch(targetChannelId);
+    if (!channel?.isTextBased()) {
+        console.error(`Channel ${targetChannelId} for '${key}' embed is not text-based.`);
+        return;
+    }
+    const msg = await channel.send({ embeds: [rules] });
+
+    console.log(`📝 Sent '${key}' embed. Message ID:`, msg.id);
+
+    // Add a new entry to the array if it didn't exist
+    messageIDs.push({
+        name: key,
+        messageId: msg.id,
+        channelid: channel.id
+    });
+
 }
