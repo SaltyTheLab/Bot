@@ -1,8 +1,6 @@
 import { PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import warnUser from '../utilities/warnUser.js';
 
-
-
 export const data = new SlashCommandBuilder()
     .setName('warn')
     .setDescription('Warns a member')
