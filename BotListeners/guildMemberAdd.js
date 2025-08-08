@@ -1,5 +1,5 @@
 import { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } from "discord.js";
-import { welcomeChannelId, generalChannelid, mutelogChannelid, banlogChannelid } from "./Extravariables/channelids.js";
+import { guildModChannelMap } from "./Extravariables/channelids.js";
 
 // A Map to store the old invite counts
 const invites = new Map();
@@ -9,17 +9,14 @@ const invites = new Map();
  * @param {import("discord.js").Client} client The Discord client.
  */
 export async function initializeInvites(client) {
-    const guild = client.guilds.cache.first(); // Assumes a single-guild bot
-    if (!guild) {
-        console.error("Guild not found. Cannot initialize invites.");
-        return;
-    }
-    try {
-        const guildInvites = await guild.invites.fetch();
-        guildInvites.forEach(invite => invites.set(invite.code, invite.uses));
-        console.log("Invites cache initialized.");
-    } catch (error) {
-        console.error("Error fetching invites:", error);
+   for (const [guildId, guild] of client.guilds.cache) {
+        try {
+            const guildInvites = await guild.invites.fetch();
+            guildInvites.forEach(invite => invites.set(invite.code, invite.uses));
+            console.log(`Invites cache initialized for guild: ${guild.name} (${guildId}).`);
+        } catch (error) {
+            console.error(`Error fetching invites for guild ${guild.name} (${guildId}):`, error);
+        }
     }
 }
 
@@ -28,11 +25,14 @@ export async function initializeInvites(client) {
  * @param {import("discord.js").GuildMember} member The new member.
  */
 export async function guildMemberAdd(member) {
-    // Get channel objects
-    const welcomeChannel = member.guild.channels.cache.get(welcomeChannelId);
-    const generalChannel = member.guild.channels.cache.get(generalChannelid);
-    const mutechannel = member.guild.channels.cache.get(mutelogChannelid);
-    const banlogChannel = member.guild.channels.cache.get(banlogChannelid);
+    const guildId = member.guild.id
+    const guildChannels = guildModChannelMap[guildId]
+    const [welcomeChannel, generalChannel, mutechannel, banlogChannel] = [
+        member.guild.channels.cache.get(guildChannels.welcomeChannel),
+        member.guild.channels.cache.get(guildChannels.generalChannel),
+        member.guild.channels.cache.get(guildChannels.mutelogChannel),
+        member.guild.channels.cache.get(guildChannels.banlogChannel)
+    ]
 
     if (!welcomeChannel || !generalChannel || !mutechannel || !banlogChannel) {
         console.warn('⚠️ One or more log channels not found. Check channel IDs.');

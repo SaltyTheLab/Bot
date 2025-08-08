@@ -1,11 +1,14 @@
 import { EmbedBuilder, AuditLogEvent } from "discord.js";
+import { guildModChannelMap } from "./Extravariables/channelids.js";
 import { welcomeChannelId, banlogChannelid, mutelogChannelid } from "./Extravariables/channelids.js";
 
 export async function guildMemberRemove(member) {
+    const guildId = member.guild.id
+    const guildChannels = guildModChannelMap[guildId] 
     //define welcomechannel and banlog channel
     const [welcomeChannel, banlogChannel, muteLogChannel] = [member.guild.channels.cache.get(welcomeChannelId),
-    member.guild.channels.cache.get(banlogChannelid),
-    member.guild.channels.cache.get(mutelogChannelid)
+    member.guild.channels.cache.get(guildChannels.banlogChannel),
+    member.guild.channels.cache.get(guildChannels.mutelogChannel)
     ]
     if (!welcomeChannel) {
         console.warn('⚠️ Welcome channel not found.');

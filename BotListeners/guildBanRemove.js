@@ -1,13 +1,16 @@
 import { EmbedBuilder, AuditLogEvent } from "discord.js";
-import { banlogChannelid } from "./Extravariables/channelids.js";
+import { guildModChannelMap } from "./Extravariables/channelids.js";
 
 /**
  * Handles the guildBanRemove event to log when a ban is lifted.
  * @param {import("discord.js").GuildBan} ban - The GuildBan object representing the unban.
  */
 export async function guildBanRemove(ban) {
+    const guildId = ban.guild.id
+    const guildChannels = guildModChannelMap[guildId]
+
     // Get the ban log channel
-    const banlogChannel = ban.guild.channels.cache.get(banlogChannelid);
+    const banlogChannel = await ban.guild.channels.fetch(guildChannels.banlogChannel);
 
     if (!banlogChannel) {
         console.warn('⚠️ Ban log channel not found for unban.');
