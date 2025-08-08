@@ -50,7 +50,7 @@ export default async function banUser({
     } catch (err) {
         return `❌ Failed to ban user: ${err.message ?? err}`;
     }
-    addBan(targetUser.id, moderatorUser.id, reason, channel)
+    addBan(targetUser.id, moderatorUser.id, reason, channel, guild.id)
     const logChannel = guild.channels.cache.get(banlogChannelid);
     if (logChannel) await logChannel.send({ embeds: [logEmbed] });
     const commandEmbed = new EmbedBuilder()

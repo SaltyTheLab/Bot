@@ -1,9 +1,5 @@
-import {
-    EmbedBuilder,
-    SlashCommandBuilder,
-    PermissionFlagsBits
-} from "discord.js";
-import { addNote } from "../Database/databaseFunctions.js";
+import { EmbedBuilder, SlashCommandBuilder, PermissionFlagsBits } from "discord.js";
+import { addNote } from "../Database/databasefunctions.js";
 
 export const data = new SlashCommandBuilder()
     .setName('addnote')
@@ -19,8 +15,9 @@ export async function execute(interaction) {
     const target = interaction.options.getUser('target')
     const note = interaction.options.getString('note')
     const moderator = interaction.user;
+    const guildId = interaction.guild.id
 
-    addNote({ userId: target.id, moderatorId: moderator.id, note: note })
+    addNote({ userId: target.id, moderatorId: moderator.id, note: note, guildId })
 
     const commandembed = new EmbedBuilder()
         .setColor(0x00a900)
