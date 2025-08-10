@@ -1,6 +1,5 @@
-// commands/rank.js
 import { SlashCommandBuilder, AttachmentBuilder } from 'discord.js';
-import { getUser } from '../Database/databasefunctions.js'; // Your existing getUser
+import { rankUsers, getUser } from '../Database/databasefunctions.js';
 import Canvas from 'canvas';
 
 export const data = new SlashCommandBuilder()
@@ -158,7 +157,10 @@ export async function execute(interaction) {
         const userId = targetUser.id;
         const guildId = interaction.guild.id
         // *** Directly use the result from your existing getUser ***
-        const { userData, allUsers } = getUser(userId, guildId); // This is where the full table scan happens
+        const { userData } = getUser(userId, guildId);
+        // This is where the full table scan happens
+        const { allUsers } = rankUsers(guildId);
+
         //abort if userdata doesn't exist or there are error in their data
         if (!userData || userData.xp === undefined || userData.level === undefined) {
             return interaction.editReply({ content: 'User data not found or incomplete. They might need to gain some XP first!', ephemeral: true });
