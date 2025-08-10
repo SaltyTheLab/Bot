@@ -1,4 +1,3 @@
-// commands/resetlevel.js
 import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
 import { getUser, saveUser } from '../Database/databasefunctions.js';
 import logRecentCommand from '../Logging/recentcommands.js';

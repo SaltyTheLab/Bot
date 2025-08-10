@@ -48,7 +48,7 @@ export async function execute(interaction) {
     //send embed
     const replyMessage = await interaction.reply({
         embeds: [await buildLogEmbed(interaction, currentLog, currentIndex, allLogs.length)],
-        components: [await buildButtons(currentIndex, allLogs.length, targetUser.id, isAdmin && currentLog.active, currentLog.id, currentLog.type)],
+        components: [await buildButtons(currentIndex, allLogs.length, targetUser.id, isAdmin && currentLog.active, currentLog.id)],
         ephemeral: false
     });
 
