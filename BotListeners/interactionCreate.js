@@ -1,6 +1,6 @@
 import { ButtonBuilder, ButtonStyle, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } from "discord.js";
-import banUser from "../utilities/banUser.js";
-import { getPunishments, deleteMute, deleteWarn, viewNotes, deleteNote } from "../Database/databasefunctions.js";
+import punishUser from "../utilities/punishUser.js";
+import { getPunishments, deletePunishment, viewNotes, deleteNote } from "../Database/databasefunctions.js";
 import logRecentCommand from "../Logging/recentcommands.js";
 import { buildButtons, buildLogEmbed, buildNoteEmbed, buildNoteButtons } from "../utilities/buildmodlogembeds.js";
 import { stringreactions } from "./Extravariables/rolemap.js";
@@ -23,28 +23,14 @@ export async function interactionCreate(interaction) {
         }
     }
     // --- BUTTON INTERACTION HANDLER ---
-    if (interaction.isButton()) {
+    else if (interaction.isButton()) {
         // --- BAN BUTTON LOGIC ---
-        if (interaction.customId.startsWith('banuser_') || interaction.customId.startsWith('inviter_ban_delete_invite_')) {
+        if (interaction.customId.startsWith('inviter_ban_delete_invite_')) {
             //split the customId into an array
             const customIdParts = interaction.customId.split('_');
-            // Define variables for user ID, invite code, and inviter ID
-            let userIdToBan;
-            let inviteCode = null;
-            let inviterId = null;
-
-            // Use a conditional block to correctly parse the custom ID based on its prefix
-            if (interaction.customId.startsWith('banuser_')) {
-                userIdToBan = customIdParts[1];
-            } else if (interaction.customId.startsWith('inviter_ban_delete_invite_')) {
-                userIdToBan = customIdParts[4];
-                inviterId = customIdParts[5];
-                inviteCode = customIdParts[6];
-
-            }
-
-            const memberToBan = await interaction.guild.members.fetch(userIdToBan).catch(() => null);
-            let inviter = inviterId !== 'no inviter' ? interaction.guild.members.fetch(inviterId) : null;
+            let memberToBan = customIdParts[4];
+            let inviter = customIdParts[5];
+            let inviteCode = customIdParts[6];
 
             const fiveMinutesInMs = 5 * 60 * 1000;
 
@@ -85,10 +71,10 @@ export async function interactionCreate(interaction) {
 
             //create the modal 
             const modal = new ModalBuilder()
-                .setCustomId(`ban_modal_${userIdToBan}_${inviteCode}_${inviterId}`)
-                .setTitle(`Ban User: ${memberToBan ? memberToBan.user.tag : 'User has left the server'}${inviterId && inviterId !== 'no inviter' ? ` (Invited by ${inviter.tag})` : ''}`);
+                .setCustomId(`ban_modal_${memberToBan}_${inviteCode}_${inviter}`)
+                .setTitle(`Ban User: ${memberToBan ? memberToBan.user.tag : 'User has left the server'}${inviter && inviter !== 'no inviter' ? ` (Invited by ${inviter.tag})` : ''}`);
             const singlemodal = new ModalBuilder()
-                .setCustomId(`ban_${userIdToBan}`)
+                .setCustomId(`ban_${memberToBan}`)
                 .setTitle(`Ban User: ${memberToBan ? memberToBan.user.tag : 'User has left the server'}`);
             //create the Text input box 
             const reasonInput = new TextInputBuilder()
@@ -101,7 +87,7 @@ export async function interactionCreate(interaction) {
             //add the modal, text input box, and create the embed
             const firstActionRow = new ActionRowBuilder().addComponents(reasonInput);
             modal.addComponents(firstActionRow);
-            if (inviterId !== null)
+            if (inviter !== null)
                 await interaction.showModal(modal);
             else
                 await interaction.showModal(singlemodal)
@@ -117,35 +103,31 @@ export async function interactionCreate(interaction) {
             const action = customIdParts[1];
             const targetUserId = customIdParts[2];
             const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
-            const guildId =  interaction.guild.id;
+            const guildId = interaction.guild.id;
             let allLogs = await getPunishments(targetUserId, guildId);
 
             //button switch to navigate and delete the users punishments
             switch (action) {
                 case 'prev':
                 case 'next': {
-
                     const currentIndex = parseInt(customIdParts[3]);
                     const newIndex = action === 'next' ? currentIndex + 1 : currentIndex - 1;
                     const currentLog = allLogs[newIndex];
 
                     await interaction.editReply({
                         embeds: [await buildLogEmbed(interaction, currentLog, newIndex, allLogs.length)],
-                        components: [await buildButtons(newIndex, allLogs.length, targetUserId, isAdmin, currentLog.id, currentLog.type)]
+                        components: [await buildButtons(newIndex, allLogs.length, targetUserId, isAdmin, currentLog.id)]
                     });
                     break;
                 }
 
                 case 'del': {
-                    const logId = customIdParts[3];
-                    const logType = customIdParts[4];
-                    let currentIndex = parseInt(customIdParts[5]);
-                    let currentLog = allLogs[currentIndex];
+                    const logIdToDelete = customIdParts[3];
+                    let oldDisplayIndex = parseInt(customIdParts[4]);
 
                     try {
-                        const deleteFn = logType === 'Warn' ? deleteWarn : deleteMute;
-                        deleteFn(logId);
-                        logRecentCommand(`${logType} log deleted for User ID: ${targetUserId} | Admin: ${interaction.user.tag} | Log ID: ${logId}`);
+                        deletePunishment(logIdToDelete);
+                        logRecentCommand(`log deleted for User ID: ${targetUserId} | Admin: ${interaction.user.tag} | Log ID: ${logIdToDelete}`);
 
                         allLogs = await getPunishments(targetUserId, guildId);
 
@@ -158,17 +140,19 @@ export async function interactionCreate(interaction) {
                             });
                             return;
                         }
-
-                        currentIndex = Math.min(currentIndex, allLogs.length - 1);
-                        const newCurrentLog = allLogs[currentIndex]
+                        let newDisplayIndex;
+                        newDisplayIndex = Math.min(parseInt(oldDisplayIndex) + 1, allLogs.length - 1);
+                        console.log(newDisplayIndex);
+                        const newCurrentLog = allLogs[newDisplayIndex]
+                        
 
                         await interaction.editReply({
-                            embeds: [await buildLogEmbed(interaction, newCurrentLog, currentIndex, allLogs.length, guildId)],
-                            components: [await buildButtons(currentIndex, allLogs.length, targetUserId, isAdmin, currentLog.id, currentLog.type)]
+                            embeds: [await buildLogEmbed(interaction, newCurrentLog, newDisplayIndex, allLogs.length)],
+                            components: [await buildButtons(newDisplayIndex, allLogs.length, targetUserId, isAdmin, newCurrentLog.id)]
                         });
 
                     } catch (error) {
-                        console.error(`Error deleting log ${logId}:`, error);
+                        console.error(`Error deleting log ${logIdToDelete}:`, error);
                         await interaction.followUp({ content: `Failed to delete log: ${error.message}`, ephemeral: true });
                     }
                     break;
@@ -228,22 +212,20 @@ export async function interactionCreate(interaction) {
 
         }
     }
-    if (interaction.isModalSubmit()) {
+    else if (interaction.isModalSubmit()) {
         if (interaction.customId.startsWith('ban_modal_')) {
             await interaction.deferReply({ ephemeral: true });
             const customIdParts = interaction.customId.split('_');
 
             // Correctly parse the user ID, invite code, and inviter ID from the modal's custom ID
-            const userIdToBan = customIdParts[2];
-            const inviteCode = customIdParts[3];
-            const inviterId = customIdParts[4];
+            const userIdToBan = customIdParts[2]
+            const inviter = customIdParts[3];
+            const inviteCode = customIdParts[4];
 
-
-            console.log(`Modal submitted for user ID: ${userIdToBan}, Inviter ID: ${inviterId}`);
+            console.log(`Modal submitted for user ID: ${userIdToBan}, Inviter ID: ${inviter}`);
 
             const reason = interaction.fields.getTextInputValue('banReasonInput');
             const memberToBan = await interaction.guild.members.fetch(userIdToBan).catch(() => null);
-            let inviter = inviterId !== 'no inviter' ? interaction.guild.members.fetch(inviterId) : null;
 
             if (!memberToBan) {
                 await interaction.editReply({ content: 'Could not find the user to ban.', ephemeral: true });
@@ -258,13 +240,14 @@ export async function interactionCreate(interaction) {
 
             // Ban the user who just joined
             try {
-                await banUser({
+                await punishUser({
                     guild: interaction.guild,
-                    targetUserId: userIdToBan,
+                    targetUser: inviter,
                     moderatorUser: interaction.user,
-                    reason: reason,
-                    channel: interaction.channel.id,
-                    isAutomated: false
+                    reason: `${reason}`,
+                    channel: interaction.channel,
+                    isAutomated: false,
+                    banflag: 1
                 });
                 banSuccess = true;
                 finalMessage = `Successfully banned ${memberToBan.user.tag}. `;
@@ -274,15 +257,16 @@ export async function interactionCreate(interaction) {
             }
 
             // Ban the inviter if one exists
-            if (inviterId && inviterId !== 'no inviter') {
+            if (inviter && inviter !== 'no inviter') {
                 try {
-                    await banUser({
+                    await punishUser({
                         guild: interaction.guild,
-                        targetUserId: inviterId,
+                        targetUser: inviter,
                         moderatorUser: interaction.user,
                         reason: `${reason}`,
                         channel: interaction.channel,
-                        isAutomated: false
+                        isAutomated: false,
+                        banflag: 1
                     });
                     inviterBanSuccess = true;
                     finalMessage += `, inviter ${inviter.user.tag}.`;
@@ -325,7 +309,7 @@ export async function interactionCreate(interaction) {
             await originalMessage.edit({ components: [updatedActionRow] });
         }
     }
-    if (interaction.isStringSelectMenu()) {
+    else if (interaction.isStringSelectMenu()) {
         if (interaction.customId === 'stream_role_select' || interaction.customId === 'Game_role_Select') {
             await interaction.deferReply({ ephemeral: true })
             const member = interaction.member;
