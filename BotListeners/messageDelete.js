@@ -10,7 +10,7 @@ export async function messageDelete(message) {
     if (!message.guild || message.partial || !message.author || message.author.bot) return;
 
     //get the deletedlogs channel
-    const logChannel = await message.guild.channels.fetch(guildChannels.deletedlogChannel);
+    const logChannel = message.guild.channels.cache.get(guildChannels.deletedlogChannel);
     if (!logChannel) return;
 
     //create the masked link that leads to the message deletion  
