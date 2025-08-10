@@ -1,5 +1,5 @@
 import { PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
-import warnUser from '../utilities/warnUser.js';
+import punishUser from '../utilities/punishUser.js';
 
 export const data = new SlashCommandBuilder()
     .setName('warn')
@@ -35,7 +35,7 @@ export async function execute(interaction) {
     }
 
     //run through relevent helper command function
-    const output = await warnUser({
+    const output = await punishUser({
         guild: interaction.guild,
         targetUser: target,
         moderatorUser: issuer,

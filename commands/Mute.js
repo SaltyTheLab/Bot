@@ -1,5 +1,5 @@
 import { EmbedBuilder, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
-import muteUser from '../utilities/muteUser.js';
+import punishUser from '../utilities/punishUser.js';
 
 const unitMap = { min: 60000, hour: 3600000, day: 86400000 };
 
@@ -54,15 +54,15 @@ export async function execute(interaction) {
         return interaction.reply({ content: '⚠️ User is already muted.', ephemeral: true });
     }
 
-    const output = await muteUser({
+    const output = await punishUser({
         guild,
         targetUser: target,
         moderatorUser: issuer,
         reason,
-        durationMs,
-        unit,
         channel: channel,
-        isAutomated: false
+        isAutomated: false,
+        durationMs,
+        unit
     });
 
     if (typeof output === 'string') {
