@@ -2,7 +2,6 @@
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
 import path from 'node:path';
-import register from "../deploy-cmds.js";
 
 // --- Calculate botRoot relative to this file ---
 const currentFileDir = path.dirname(fileURLToPath(import.meta.url)); // C:\Users\micha\Desktop\Bot\utilities
