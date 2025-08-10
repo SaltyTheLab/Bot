@@ -1,5 +1,5 @@
 import { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } from "discord.js";
-import { guildModChannelMap } from "./Extravariables/channelids.js";
+import { guildChannelMap, guildModChannelMap } from "./Extravariables/channelids.js";
 
 // A Map to store the old invite counts
 const invites = new Map();
@@ -9,7 +9,7 @@ const invites = new Map();
  * @param {import("discord.js").Client} client The Discord client.
  */
 export async function initializeInvites(client) {
-   for (const [guildId, guild] of client.guilds.cache) {
+    for (const [guildId, guild] of client.guilds.cache) {
         try {
             const guildInvites = await guild.invites.fetch();
             guildInvites.forEach(invite => invites.set(invite.code, invite.uses));
@@ -26,18 +26,14 @@ export async function initializeInvites(client) {
  */
 export async function guildMemberAdd(member) {
     const guildId = member.guild.id
-    const guildChannels = guildModChannelMap[guildId]
-    const [welcomeChannel, generalChannel, mutechannel, banlogChannel] = [
-        member.guild.channels.cache.get(guildChannels.welcomeChannel),
-        member.guild.channels.cache.get(guildChannels.generalChannel),
-        member.guild.channels.cache.get(guildChannels.mutelogChannel),
-        member.guild.channels.cache.get(guildChannels.banlogChannel)
+    const guildmodChannels = guildModChannelMap[guildId]
+    const guildChannels = guildChannelMap[guildId];
+    const Channels = guildChannels.channels
+    const [welcomeChannel, generalChannel, mutechannel] = [
+        await member.guild.channels.fetch(guildmodChannels.welcomeChannel),
+        await member.guild.channels.fetch(Channels.generalChannel),
+        await member.guild.channels.fetch(guildmodChannels.mutelogChannel),
     ]
-
-    if (!welcomeChannel || !generalChannel || !mutechannel || !banlogChannel) {
-        console.warn('⚠️ One or more log channels not found. Check channel IDs.');
-        return;
-    }
 
     // Define account creation date and two days in milliseconds
     const twoDaysInMs = 2 * 24 * 60 * 60 * 1000;
@@ -48,7 +44,7 @@ export async function guildMemberAdd(member) {
     // Kick member if account is less than two days old
     if (accountAgeInMs < twoDaysInMs) {
         try {
-            await member.kick('Account too new');
+            await member.kick({ reason: `Account under the age of 2 days` });
             const kickmessage = new EmbedBuilder()
                 .setTitle('A member was auto-kicked')
                 .addFields(
@@ -86,11 +82,14 @@ export async function guildMemberAdd(member) {
         .setDescription(`${member} joined the Server!`)
         .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
         .addFields(
-            { name: 'Discord Join Date:', value: `<t:${Math.floor(member.joinedAt.getTime() / 1000)}:R>`, inline: true }
-        );
+            { name: 'Discord Join Date:', value: `<t:${Math.floor(member.joinedAt.getTime() / 1000)}>`, inline: true }
+        )
     // Add the inviter field to the welcome embed
     if (inviter) {
-        welcomeEmbed.addFields({ name: 'Invited by', value: `<@${inviter.id}>` });
+        welcomeEmbed.setFooter({
+            name: 'Invited by', value: `<@${inviter.tag}> | ${invite.code} |<t:${Math.floor(member.joinedAt.getTime() / 1000)}:d>`,
+            iconURL: inviter.displayAvatarURL({ dynamic: true })
+        });
     }
 
     const generalEmbed = new EmbedBuilder()
@@ -103,8 +102,8 @@ export async function guildMemberAdd(member) {
 
     // Create the ban button with the inviter's ID included
     const banButton = new ButtonBuilder()
-        .setCustomId(`inviter_ban_delete_invite_${member.id}_${inviter ? inviter.id : 'no inviter'}_${invite ? invite.code : 'no invite code'}`)
-        .setLabel('🔨 Ban User & Delete Invite')
+        .setCustomId(`inviter_ban_delete_invite_${member}_${inviter ? inviter : 'no inviter'}_${invite ? invite.code : 'no invite code'}`)
+        .setLabel(inviter ? '🔨 Ban User & Delete Invite' : '🔨 Ban')
         .setStyle(ButtonStyle.Danger)
         .setDisabled(false);
 
