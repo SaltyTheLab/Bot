@@ -8,9 +8,9 @@ const violationWeights = new Map(Weights.violationWeights.map(w => [w.type.toLow
  * @param {Array<string|{type: string}>} newViolationType - Violations to simulate.
  * @returns {Promise<{ activeWarnings, currentWarnWeight }>}
  */
-export default async function getWarnStats(userId, newViolationType = []) {
+export default async function getWarnStats(userId, guildId, newViolationType = []) {
   //get previous active warnings
-  const activeWarningsPromise = getActiveWarns(userId);
+  const activeWarningsPromise = getActiveWarns(userId, guildId);
   // get weights of violations
   const currentWarnWeightPromise = Promise.resolve(
     Array.isArray(newViolationType)
@@ -21,11 +21,10 @@ export default async function getWarnStats(userId, newViolationType = []) {
       }, 0))
       : 0
   );
- 
   //define output variables
   const [activeWarnings, currentWarnWeight] = await Promise.all([
     activeWarningsPromise,
     currentWarnWeightPromise
   ]);
-  return {activeWarnings, currentWarnWeight}
+  return { activeWarnings, currentWarnWeight }
 }
