@@ -19,7 +19,7 @@ export async function buildLogEmbed(interaction, log, idx, totalLogs) {
         { name: 'Member', value: `<@${log.userId}>`, inline: true },
         { name: 'Type', value: `\`${log.type}\``, inline: true },
         { name: 'Channel', value: `<#${log.channel}>`, inline: false },
-        { name: 'Reason', value: `\`${log.reason || 'No reason provided'}\``, inline: false },
+        { name: 'Reason', value: `\`${log.reason}\``, inline: false },
         { name: 'Warns at Log Time', value: `\`${log.weight}\``, inline: false },
     ];
     //add mute duration if log type is mute
@@ -46,7 +46,7 @@ export async function buildLogEmbed(interaction, log, idx, totalLogs) {
             iconURL: moderator.displayAvatarURL({ dynamic: true })
         });
 };
-export async function buildButtons(idx, totalLogs, targetUserId, isDeletable, logId, logType, disabled = false) {
+export async function buildButtons(idx, totalLogs, targetUserId, isDeletable, logId, disabled = false) {
     const buttons = [
         new ButtonBuilder()
             .setCustomId(`modlog_prev_${targetUserId}_${idx}`)
@@ -63,7 +63,7 @@ export async function buildButtons(idx, totalLogs, targetUserId, isDeletable, lo
     if (isDeletable) {
         buttons.push(
             new ButtonBuilder()
-                .setCustomId(`modlog_del_${targetUserId}_${logId}_${logType}_${idx}`)
+                .setCustomId(`modlog_del_${targetUserId}_${logId}_${idx}`)
                 .setLabel('Delete')
                 .setStyle(ButtonStyle.Danger)
                 .setDisabled(disabled)
