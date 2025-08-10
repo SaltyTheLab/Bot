@@ -1,23 +1,21 @@
-import muteUser from '../utilities/muteUser.js';
-import warnUser from '../utilities/warnUser.js';
-import banUser from '../utilities/banUser.js';
+import punishUser from '../utilities/punishUser.js';
 import getNextPunishment from './punishments.js';
 import getWarnStats from './simulatedwarn.js';
-import updateTracker from './trackers.js';
+import updateTracker, { clearSpamFlags } from './trackers.js';
 import evaluateViolations from './evaluateViolations.js';
-import { adultcatagorey } from '../BotListeners/Extravariables/channelids.js';
+import guildChannelMap from '../BotListeners/Extravariables/channelids.js';
 import forbbidenWordsData from '../moderation/forbiddenwords.json' with {type: 'json'};
-
-
 
 const forbiddenWords = new Set(forbbidenWordsData.forbiddenWords.map(w => w.toLowerCase()));
 
 const inviteRegex = /(https?:\/\/)?(www\.)?(discord\.gg|discord(app)?\.com\/invite)\/[a-zA-Z0-9-]+/i;
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
 export default async function AutoMod(client, message) {
+
   const { author, content, member, guild, channel } = message;
   const userId = author.id;
-
+  const guildchannels = guildChannelMap[guild.id];
+  const exclusions = guildchannels.exclusions;
   const lowerContent = content.toLowerCase();
 
   console.log(`[AutoMod] Message from ${author.tag}: ${content}`);
@@ -25,7 +23,7 @@ export default async function AutoMod(client, message) {
   const violationFlags = updateTracker(userId, message);
 
   let matchedWord = null;
-  if (forbiddenWords.size > 0 && message.channel.parentId !== adultcatagorey) {
+  if (forbiddenWords.size > 0 && !Object.values(exclusions).includes(message.channel.parentId) && !Object.values(exclusions).includes(message.channel.id)) {
     for (const word of forbiddenWords) {
       if (lowerContent.includes(word)) {
         matchedWord = word;
@@ -45,7 +43,8 @@ export default async function AutoMod(client, message) {
     violationFlags.isMediaViolation || violationFlags.isGeneralSpam || violationFlags.isDuplicateSpam
     || violationFlags.isCapSpam;
   if (!hasViolation) return;
-
+  if (violationFlags.isGeneralSpam || violationFlags.isDuplicateSpam)
+    clearSpamFlags(userId);
   //handle spam duplication warn
   if (violationFlags.isGeneralSpam && violationFlags.isDuplicateSpam) {
     violationFlags.isDuplicateSpam = false;
@@ -86,15 +85,16 @@ export default async function AutoMod(client, message) {
   }
 
   // get previous activewarnings and warn weight of new warn
-  const warnStats = await getWarnStats(userId, evaluationResult.violations);
-  const { activeWarnings, currentWarnWeight } = warnStats;
+  const { activeWarnings, currentWarnWeight } = await getWarnStats(userId, guild.id, evaluationResult.violations);
+  console.log(`active warns: ${activeWarnings.length}`)
 
   // calculate mute duration and unit
   const { duration, unit } = getNextPunishment(activeWarnings.length + currentWarnWeight);
 
+
   // common arguments for all commands
   const commonPayload = {
-    guild,
+    guild: guild,
     targetUser: member,
     moderatorUser: client.user,
     reason: reasonText,
@@ -103,18 +103,14 @@ export default async function AutoMod(client, message) {
   };
 
   // issue the mute/warn/ban
-  if (activeWarnings.length >= 2 && isNewUser)
-    banUser(commonPayload);
-  else if (activeWarnings.length > 0 || currentWarnWeight >= 2 && duration > 0) {
-    await muteUser({
+  if ((activeWarnings.length > 2 || currentWarnWeight >= 4) && isNewUser == true) {
+    punishUser({ ...commonPayload, banflag: 1 });
+  } else {
+    await punishUser({
       ...commonPayload,
       currentWarnWeight: currentWarnWeight,
-      duration,
-      unit
+      duration: duration,
+      unit: unit
     });
-  } else
-    await warnUser({
-      ...commonPayload,
-      currentWarnWeight: currentWarnWeight
-    });
+  }
 }
