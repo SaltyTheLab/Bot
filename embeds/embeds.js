@@ -1,5 +1,5 @@
 import { EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle, StringSelectMenuBuilder } from 'discord.js';
-import { guildChannelMap } from '../BotListeners/Extravariables/channelids.js';
+import guildChannelMap from '../BotListeners/Extravariables/channelids.js';
 import { saveMessageIDs, loadMessageIDs } from '../utilities/messageStorage.js';
 
 
