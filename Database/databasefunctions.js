@@ -15,7 +15,7 @@ export function getUser(userId, guildId) {
                 VALUES (?, ?, ?, ?, ?)
             `).run(userId, 0, 1, 100, guildId);
 
-      // 3. After inserting, fetch the newly created user data to ensure it's available
+      // After inserting, fetch the newly created user data to ensure it's available
       userData = db.prepare(`
                 SELECT * FROM users WHERE userId = ? AND guildId = ?
             `).get(userId, guildId);
@@ -25,16 +25,16 @@ export function getUser(userId, guildId) {
       console.error(`❌ [getUser] Error inserting new user ${userId} in guild ${guildId}:`, error);
       return { userData: { userId, xp: 0, level: 1, coins: 100, guildId }, allUsers: [] };
     }
-  } else {
-    console.log(`[getUser] User ${userId} in guild ${guildId} found.`);
-  }
+  };
 
+  return { userData };
+}
+
+export function rankUsers(guildId) {
   const allUsers = db.prepare(`
     SELECT * FROM users WHERE userId is not null AND guildId = ?
-    ORDER BY level DESC, xp DESC
-  `).all(guildId);
-
-  return { userData, allUsers };
+    ORDER BY level DESC, xp DESC`).all(guildId)
+  return { allUsers }
 }
 
 // update user stats
@@ -65,14 +65,7 @@ export function deleteNote(id) {
 `).run(id);
 }
 
-// ───── WARNS ─────
-//add warn to the database
-export function addWarn(userId, moderatorId, reason, weight, channel, guildId) {
-  return db.prepare(`
-    INSERT INTO punishments (userId, moderatorId, reason, timestamp, active, weight, type, channel,guildId)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(userId, moderatorId, reason, Date.now(), 1, weight, 'Warn', channel, guildId);
-}
+// --- Moderation ---
 //get all warns and mutes for a specific user
 export async function getPunishments(userId, guildId) {
   const rows = db.prepare(`
@@ -87,21 +80,11 @@ export async function getActiveWarns(userId, guildId) {
   `).all(userId, guildId);
   return Array.isArray(rows) ? rows : [];
 }
-
-// ───── MUTES ─────
-// add the mute to the database
-export function addMute(userId, moderatorId, reason, durationMs, weight, channel, guildId) {
+export function addPunishment(userId, moderatorId, reason, durationMs, warnType, weight, channel, guildId) {
   return db.prepare(`
     INSERT INTO punishments (userId, moderatorId, reason, duration, timestamp, active, weight, type, channel, guildId)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(userId, moderatorId, reason, durationMs, Date.now(), 1, weight, 'Mute', channel, guildId);
-}
-
-// --- BANS ---
-export function addBan(userId, moderatorId, reason, channel, guildId) {
-  return db.prepare(`INSERT INTO punishments (userId, moderatorId, reason, duration, timestamp, active, weight, type, channel, guildId)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(userId, moderatorId, reason, 0, 0, 1, 1, 'Ban', channel, guildId)
+  `).run(userId, moderatorId, reason, durationMs, Date.now(), 1, weight, warnType, channel, guildId);
 }
 
 //───── Admin ─────
@@ -116,12 +99,6 @@ export function clearActiveWarns(userId, guildId) {
   `).run(userId, guildId);
   return result.changes > 0;
 }
-//deletes a warn from the database
-export function deleteWarn(id) {
+export function deletePunishment(id) {
   db.prepare(`DELETE FROM punishments WHERE id = ?`).run(id);
-}
-//deletes a mute from the database
-export function deleteMute(id) {
-  db.prepare(`
-    DELETE FROM punishments WHERE id = ?`).run(id);
 }
