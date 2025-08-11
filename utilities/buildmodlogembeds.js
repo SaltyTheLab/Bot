@@ -46,15 +46,15 @@ export async function buildLogEmbed(interaction, log, idx, totalLogs) {
             iconURL: moderator.displayAvatarURL({ dynamic: true })
         });
 };
-export async function buildButtons(idx, totalLogs, targetUserId, isDeletable, logId, disabled = false) {
+export async function buildButtons(idx, totalLogs, isDeletable, logId, disabled = false) {
     const buttons = [
         new ButtonBuilder()
-            .setCustomId(`modlog_prev_${targetUserId}_${idx}`)
+            .setCustomId(`modlog_prev`)
             .setLabel('⬅️ Back')
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(idx === 0 || disabled),
         new ButtonBuilder()
-            .setCustomId(`modlog_next_${targetUserId}_${idx}`)
+            .setCustomId(`modlog_next`)
             .setLabel('Next ➡️')
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(idx >= totalLogs - 1 || disabled)
@@ -63,7 +63,7 @@ export async function buildButtons(idx, totalLogs, targetUserId, isDeletable, lo
     if (isDeletable) {
         buttons.push(
             new ButtonBuilder()
-                .setCustomId(`modlog_del_${targetUserId}_${logId}_${idx}`)
+                .setCustomId(`modlog_del_${logId}`)
                 .setLabel('Delete')
                 .setStyle(ButtonStyle.Danger)
                 .setDisabled(disabled)
@@ -93,22 +93,23 @@ export async function buildNoteEmbed(interaction, index, currentNote, length) {
             iconURL: mod.displayAvatarURL({ dynamic: true })
         });
 };
-export async function buildNoteButtons(target, index, currentNote, allnotes, disabled = false) {
+export async function buildNoteButtons(index, allnotes, id, disabled = false) {
+    console.log(`notebutton index: ${index}`)
     return new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-            .setCustomId(`note_prev_${target}_${index}`)
+            .setCustomId(`note_prev`)
             .setLabel('◀️ prev')
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(index === 0 || disabled),
 
         new ButtonBuilder()
-            .setCustomId(`note_next_${target}_${index}`)
+            .setCustomId(`note_next`)
             .setLabel('▶️ next')
             .setStyle(ButtonStyle.Secondary)
-            .setDisabled(index === allnotes - 1 || disabled),
+            .setDisabled(index >= allnotes.length - 1 || disabled),
 
         new ButtonBuilder()
-            .setCustomId(`note_delete_${target}_${index}_${currentNote.id}`)
+            .setCustomId(`note_del_${id}`)
             .setLabel('🗑️ delete')
             .setStyle(ButtonStyle.Danger)
             .setDisabled(disabled)
