@@ -1,8 +1,8 @@
 import { LRUCache } from 'lru-cache';
 import Denque from 'denque';
-import { hobbiescatagorey, mediacatagorey, evoadultcatagorey } from '../BotListeners/Extravariables/channelids.js';
+import guildChannelMap from '../BotListeners/Extravariables/channelids.js';
 
- const userMessageTrackers = new LRUCache({
+const userMessageTrackers = new LRUCache({
   max: 500,
   ttl: 5 * 60 * 1000, // 5 minutes
   updateAgeOnGet: true,
@@ -11,13 +11,15 @@ import { hobbiescatagorey, mediacatagorey, evoadultcatagorey } from '../BotListe
 const GENERAL_SPAM_WINDOW = 8 * 1000;
 const GENERAL_SPAM_THRESHOLD = 4;
 const DUPLICATE_SPAM_THRESHOLD = 3;
+const SPAM_PUNISHMENT_COOLDOWN = 750;
+
 
 
 
 export default function updateTracker(userId, message) {
   const now = Date.now();
-
-  const exclusions = [hobbiescatagorey, mediacatagorey, evoadultcatagorey];
+  const guildchannels = guildChannelMap[message.guild.id];
+  const exclusions = guildchannels.exclusions;
   const content = message.content;
   const minLengthForCapsCheck = 10;
   let isCapSpam = false;
@@ -28,14 +30,15 @@ export default function updateTracker(userId, message) {
       total: 0,
       mediaCount: 0,
       timestamps: new Denque(),
-      recentMessages: new Denque()
+      recentMessages: new Denque(),
+      lastSpamPunishment: 0
     };
     userMessageTrackers.set(userId, tracker);
   }
 
   tracker.total += 1;
 
-// cap spam check method
+  // cap spam check method
   if (content.length >= minLengthForCapsCheck) {
     const lettersOnly = content.replace(/[^a-zA-Z]/g, '');
     const upperCaseCount = (lettersOnly.match(/[A-Z]/g) || []).length
@@ -47,7 +50,7 @@ export default function updateTracker(userId, message) {
 
   const hasMediaContent = hasMedia(message);
   //media check for message and flag it if true
-  if (hasMediaContent && !exclusions.includes(message.channel.parentId)) {
+  if (hasMediaContent && !Object.values(exclusions).includes(message.channel.parentId) && !Object.values(exclusions).includes(message.channel.id)) {
     tracker.mediaCount += 1;
   }
 
@@ -77,7 +80,7 @@ export default function updateTracker(userId, message) {
 
   const isMediaViolation = tracker.mediaCount > 1 && tracker.total < 20;
 
-  if(isMediaViolation)
+  if (isMediaViolation)
     tracker.mediaCount = 0;
 
   // clear messages after 20 sent over, resetting all flags
@@ -112,4 +115,21 @@ function hasMedia(message) {
       return urls.some(url => /\.(gif|jpe?g|png|mp4|webm)$/i.test(url));
     })
   );
+}
+
+export function clearSpamFlags(userId) {
+  const tracker = userMessageTrackers.get(userId);
+  if (tracker) {
+    tracker.timestamps.clear();
+    tracker.recentMessages.clear();
+    tracker.lastSpamPunishment = Date.now();
+    userMessageTrackers.set(userId, tracker);
+  }
+}
+
+export function isSpamOnCooldown(userId) {
+  const tracker = userMessageTrackers.get(userId);
+  if (!tracker) return false;
+  console.log(Date.now() - tracker.lastSpamPunishment);
+  return (Date.now() - tracker.lastSpamPunishment) < SPAM_PUNISHMENT_COOLDOWN;
 }

@@ -18,6 +18,9 @@ async function handleReactionChange(reaction, user, action = 'add') {
   //check for bot user
   if (user.bot) return;
 
+  const reactions = emojiRoleMap[reaction.message.guild.id].reactions;
+  const member = await reaction.message.guild.members.fetch(user.id);
+
   //fetch the reaction the user used
   try {
     if (reaction.partial) reaction = await reaction.fetch();
@@ -34,16 +37,13 @@ async function handleReactionChange(reaction, user, action = 'add') {
 
   //assign the emoji id and role
   const emoji = reaction.emoji.id || reaction.emoji.name;
-  const roleID = emojiRoleMap[emoji];
+  const roleID = reactions[emoji];
 
   //error out if role id not found
   if (!roleID) {
     console.log(`⚠️ No role mapped to emoji: ${emoji}`);
     return;
   }
-  //fetch the guild and member objects
-  const guild = reaction.message.guild ?? await reaction.client.guilds.fetch(reaction.message.guildId);
-  const member = await guild.members.fetch(user.id).catch(() => null);
 
   //error out if member not found
   if (!member) {

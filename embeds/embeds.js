@@ -1,5 +1,5 @@
 import { EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle, StringSelectMenuBuilder } from 'discord.js';
-import { guildChannelMap } from '../BotListeners/Extravariables/channelids.js';
+import guildChannelMap from '../BotListeners/Extravariables/channelids.js';
 import { saveMessageIDs, loadMessageIDs } from '../utilities/messageStorage.js';
 
 
@@ -84,9 +84,11 @@ export async function embedsenders(guildId, client) {
     }
 
     await Promise.all(embedTasks);
-
-    saveMessageIDs(messageIDs);
-    console.log('Embed sending process completed (new embeds created/IDs saved to file).');
+    if (embedTasks.length > 0) {
+        saveMessageIDs(messageIDs);
+        console.log('Embed sending process completed (new embeds created/IDs saved to file).');
+    } else
+        console.log('All Embeds already exist.');
 }
 async function sendRulesEmbed(guild, messageIDs, key, guildChannels) {
     const rules = new EmbedBuilder()

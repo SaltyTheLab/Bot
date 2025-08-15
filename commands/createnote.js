@@ -17,12 +17,12 @@ export async function execute(interaction) {
     const moderator = interaction.user;
     const guildId = interaction.guild.id
 
-    addNote({ userId: target.id, moderatorId: moderator.id, note: note, guildId })
+    addNote({ userId: target.id, moderatorId: moderator.id, note: note, guildId: guildId })
 
     const commandembed = new EmbedBuilder()
         .setColor(0x00a900)
         .setDescription([
-            `📝 note created for <@${target.id}>`,
+            `📝 note created for <@${target.id}>\n`,
             ` > ${note}`
         ].join('\n\n'))
 

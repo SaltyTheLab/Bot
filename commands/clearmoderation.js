@@ -12,7 +12,7 @@ export const data = new SlashCommandBuilder()
     )
 
 export async function execute(interaction) {
-    guildId = interaction.guild.id
+    const guildId = interaction.guild.id
     const user = interaction.options.getUser('target')
 
     clearmodlogs(user.id, guildId);

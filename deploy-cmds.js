@@ -12,43 +12,47 @@ const __dirname = path.dirname(__filename);
 // ✅ Utility: Load all commands
 async function loadCommands(commandsPath) {
     const commands = [];
-    let commandFolders;
-    try {
-        // Assuming commands are directly in 'commands' folder, or in subfolders
-        commandFolders = (await fs.stat(commandsPath)).isDirectory() ? await fs.readdir(commandsPath) : [];
-    } catch (error) {
-        console.error(`❌ Error reading commands directory ${commandsPath}:`, error);
+    let filePaths = [];
+
+    // Helper function to find all .js files recursively
+    async function findFiles(dir) {
+        try {
+            const dirents = await fs.readdir(dir, { withFileTypes: true });
+            for (const dirent of dirents) {
+                const fullPath = path.join(dir, dirent.name);
+                if (dirent.isDirectory()) {
+                    await findFiles(fullPath);
+                } else if (dirent.isFile() && dirent.name.endsWith('.js')) {
+                    filePaths.push(fullPath);
+                }
+            }
+        } catch (error) {
+            console.error(`❌ Error reading directory ${dir}:`, error);
+        }
+    }
+
+    await findFiles(commandsPath);
+
+    if (filePaths.length === 0) {
+        console.warn('⚠️ No command files found.');
         return commands;
     }
 
+    for (const filePath of filePaths) {
+        try {
+            // Correctly format the file path as a URL for dynamic import
+            const commandModule = await import(pathToFileURL(filePath).href); 
+            
+            // Check for both 'default' export and direct properties
+            const command = commandModule.default || commandModule;
 
-    for (const folderOrFile of commandFolders) {
-        const fullPath = path.join(commandsPath, folderOrFile);
-        const stat = await fs.stat(fullPath);
-
-        let filesToProcess = [];
-        if (stat.isDirectory()) {
-            // If it's a subfolder, read its contents
-            filesToProcess = (await fs.readdir(fullPath)).filter(file => file.endsWith('.js'));
-        } else if (stat.isFile() && folderOrFile.endsWith('.js')) {
-            // If it's a direct .js file in the commands folder
-            filesToProcess.push(folderOrFile);
-        }
-
-        for (const file of filesToProcess) {
-            const filePath = stat.isDirectory() ? path.join(fullPath, file) : fullPath;
-            try {
-                const commandModule = await import(pathToFileURL(filePath).href);
-
-                if (commandModule?.data?.name && typeof commandModule.execute === 'function') {
-                    commands.push(commandModule.data.toJSON());
-                    console.log(`✅ Loaded: ${commandModule.data.name}`);
-                } else {
-                    console.warn(`⚠️ Skipping invalid command file: ${file} (missing 'data' or 'execute' property).`);
-                }
-            } catch (err) {
-                console.error(`❌ Failed to import ${file}:`, err);
+            if (command?.data?.name && typeof command.execute === 'function') {
+                commands.push(command.data.toJSON());
+            } else {
+                console.warn(`⚠️ Skipping invalid command file: ${path.basename(filePath)} (missing 'data' or 'execute' property).`);
             }
+        } catch (err) {
+            console.error(`❌ Failed to import ${path.basename(filePath)}:`, err);
         }
     }
 
@@ -82,7 +86,7 @@ export default async function register() {
                 Routes.applicationCommands(CLIENT_ID),
                 { body: commands },
             );
-            console.log(`✅ Successfully reloaded ${data.length} global application (/) commands.`);
+            console.log(`✅ Successfully loaded ${data.length} global application (/) commands.`);
         } catch (error) {
             console.error('❌ Error registering global commands with Discord API:', error);
         }
@@ -90,7 +94,7 @@ export default async function register() {
     }
 
     const guildIds = GUILD_ID.split(',').map(id => id.trim());
-
+    //register commands at a per guild basis
     for (const guildId of guildIds) {
         console.log(`🔄 Attempting to register commands for Guild ID: ${guildId}...`);
         try {
@@ -107,6 +111,3 @@ export default async function register() {
     }
     // --- END NEW LOGIC ---
 };
-
-// Call the register function to start the process
-register();

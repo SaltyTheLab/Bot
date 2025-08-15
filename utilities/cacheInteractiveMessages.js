@@ -32,6 +32,7 @@ export default async function cacheInteractiveMessages(client) {
                     }
 
                     const message = await channel.messages.fetch(messageId);
+                    channel.messages.cache.set(messageId, message);
                     console.log(`✅ Successfully cached embed '${name}' (ID: ${message.id}) from channel '${channel.name}' (${channelid}).`);
                 } catch (err) {
                     console.error(`❌ Failed to cache embed '${name}' (ID: ${messageId}) in channel ${channelid}:`, err.message);

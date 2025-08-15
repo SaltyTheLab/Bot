@@ -1,5 +1,5 @@
 import { PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
-import  banUser  from "../utilities/banUser.js";
+import punishUser from "../utilities/punishUser.js";
 
 export const data = new SlashCommandBuilder()
     .setName('ban')
@@ -17,9 +17,8 @@ export const data = new SlashCommandBuilder()
     );
 
 export async function execute(interaction) {
-    const target = interaction.options.getUser('target');
+    const target = await interaction.guild.members.fetch(interaction.options.getUser('target'));
     const reason = interaction.options.getString('reason');
-
     if (!target) {
         return interaction.reply({ content: '⚠️ User not found.', ephemeral: true });
     }
@@ -27,13 +26,16 @@ export async function execute(interaction) {
     if (target.bot)
         return interaction.reply({ content: 'You cannot ban a bot.', ephemeral: true });
 
-    const result = await banUser({
+    const result = await punishUser({
         guild: interaction.guild,
-        targetUserId: target,
+        target: target.id,
         moderatorUser: interaction.user,
-        reason,
+        reason: reason,
         channel: interaction.channel,
-        isAutomated: false
+        isAutomated: false,
+        currentWarnWeight: 1,
+        duration: 0,
+        banflag: true
     });
 
     if (typeof result === 'string') {

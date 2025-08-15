@@ -1,14 +1,14 @@
 import { EmbedBuilder, AuditLogEvent } from "discord.js";
 import { guildModChannelMap } from "./Extravariables/channelids.js";
-import { welcomeChannelId, banlogChannelid, mutelogChannelid } from "./Extravariables/channelids.js";
 
 export async function guildMemberRemove(member) {
     const guildId = member.guild.id
-    const guildChannels = guildModChannelMap[guildId] 
+    const guildChannels = guildModChannelMap[guildId]
     //define welcomechannel and banlog channel
-    const [welcomeChannel, banlogChannel, muteLogChannel] = [member.guild.channels.cache.get(welcomeChannelId),
-    member.guild.channels.cache.get(guildChannels.banlogChannel),
-    member.guild.channels.cache.get(guildChannels.mutelogChannel)
+    const [welcomeChannel, banlogChannel, muteLogChannel] = [
+        member.guild.channels.cache.get(guildChannels.welcomeChannel),
+        member.guild.channels.cache.get(guildChannels.banlogChannel),
+        member.guild.channels.cache.get(guildChannels.mutelogChannel)
     ]
     if (!welcomeChannel) {
         console.warn('⚠️ Welcome channel not found.');
@@ -92,6 +92,10 @@ export async function guildMemberRemove(member) {
     // Customize message by action
     switch (action) {
         case "ban":
+            if (executor && executor.id === member.client.user.id) {
+                console.log(`Bot-initiated ban of ${member.user.tag} detected. Skipping duplicate log in guildMemberRemove.`);
+                break;
+            }
             embed
                 .setColor(0x8b0000)
                 .setTitle(`${executor.tag} banned a member`)
@@ -99,7 +103,7 @@ export async function guildMemberRemove(member) {
                     { name: 'User', value: `${member}`, inline: true },
                     { name: 'Tag:', value: `\`${member.user.tag}\``, inline: true },
                     { name: 'id', value: `\`${member.user.id}\``, inline: true },
-                    { name: 'Reason', value: reason }
+                    { name: 'Reason', value: `\`${reason}\`` }
                 )
                 .setFooter({ text: time })
             await banlogChannel.send({ embeds: [embed] });
@@ -113,7 +117,7 @@ export async function guildMemberRemove(member) {
                     { name: 'User', value: `${member}`, inline: true },
                     { name: 'Tag:', value: `\`${member.user.tag}\``, inline: true },
                     { name: 'Id:', value: `\`${member.user.id}\``, inline: true },
-                    { name: 'Reason', value: reason }
+                    { name: 'Reason', value: `\`${reason}\`` }
                 )
                 .setFooter({ text: time })
             await muteLogChannel.send({ embeds: [embed] });
