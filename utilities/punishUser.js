@@ -21,9 +21,28 @@ const getDurationDisplay = ms => {
   return `${Math.ceil(ms / unitMap.min)} minute(s)`;
 };
 
+/**
+ * Executes a punishment (warn, mute, or ban) on a user.
+ * Handles duration calculation, database logging, DMing the user,
+ * sending log embeds, and applying the Discord API action.
+ *
+ * @param {import('discord.js').Guild} options.guild - The guild where the punishment is applied.
+ * @param {string} options.target - The ID of the target user.
+ * @param {import('discord.js').User} options.moderatorUser - The user who issued the punishment.
+ * @param {string} options.reason - The reason for the punishment.
+ * @param {import('discord.js').TextChannel} options.channel - The channel where the command was executed (for replies).
+ * @param {boolean} [options.isAutomated=true] - Whether the punishment is automated (e.g., by automod).
+ * @param {number} [options.currentWarnWeight=1] - The weight of the current warning (for database logging).
+ * @param {number} [options.duration=0] - The duration for mutes (in units or milliseconds based on isAutomated).
+ * @param {string} [options.unit='min'] - The unit for duration (if isAutomated is true).
+ * @param {number} [options.banflag=0] - Flag to indicate if the action is a ban.
+ * @param {number} [options.buttonflag=0] - Flag to indicate if the action came from a button interaction.
+ * @returns {Promise<object>} returns an embed based on if it is automated or not
+ */
+
 export default async function punishUser({
   guild,
-  targetUser,
+  target,
   moderatorUser,
   reason,
   channel,
@@ -31,32 +50,37 @@ export default async function punishUser({
   currentWarnWeight = 1,
   duration = 0,
   unit = 'min',
-  banflag
+  banflag = false,
+  buttonflag = false
 }) {
-
+  const targetUser = await guild.members.fetch(target);
   let durationStr;
   let effectiveDurationMs;
   let warnType;
-  // --- Database Operations (getUser, getWarnStats, addWarn) ---
+  const multiplier = unitMap[unit]
 
-  // Add the new warning to the DB.
-  if (banflag == 1)
+  // --- Define what type it is ---
+  if (banflag)
     warnType = 'Ban'
   else if (duration > 0) {
     warnType = 'Mute'
-    const multiplier = unitMap[unit];
-    if (!multiplier || duration <= 0) {
+    if (!multiplier || duration <= 0)
       return '❌ Invalid duration or unit specified for mute.';
-    }
-    const calculatedDurationMs = duration * multiplier;
-    effectiveDurationMs = Math.min(calculatedDurationMs, isAutomated ? MAX_TIMEOUT_MS : 100000000000);
+    const calculatedDurationMs = isAutomated ? duration * multiplier : duration;
+    effectiveDurationMs = Math.min(calculatedDurationMs, isAutomated ? MAX_TIMEOUT_MS : 100000000);
     durationStr = getDurationDisplay(effectiveDurationMs);
   }
   else
     warnType = 'Warn'
-  console.log(`warnType: ${warnType}`)
+  if (!targetUser.bot) {
+    try {
+      addPunishment(targetUser.id, moderatorUser.id, reason, effectiveDurationMs, warnType, currentWarnWeight, channel.id, guild.id);
+    } catch (err) {
+      console.warn(err)
+    }
+  } else
+    `${targetUser.tag} is a bot.`
 
-  addPunishment(targetUser.id, moderatorUser.id, reason, effectiveDurationMs, warnType, currentWarnWeight, channel.id, guild.id);
   // Fetch updated active warnings for the user after the new warn has been added.
   const { activeWarnings } = await getWarnStats(targetUser.id, guild.id);
 
@@ -97,6 +121,15 @@ export default async function punishUser({
     )
     .setTimestamp();
 
+  const fields = [
+    { name: 'Target:', value: `${targetUser}`, inline: true },
+    { name: 'Channel:', value: `${channel}`, inline: true },
+    // Use the spread operator to include all fields from commonFields
+    ...commonFields(reason, currentWarnWeight, activeWarnings.length, durationStr, formattedExpiry, warnType),
+    // The conditional field for 'Next Punishment'
+    warnType !== 'Ban' ? { name: 'Next Punishment:', value: `\`${label}\``, inline: false } : null
+  ];
+
   // Embed for moderation log channel
   const logEmbed = new EmbedBuilder()
     .setColor(LOG_COLORS[warnType])
@@ -107,18 +140,13 @@ export default async function punishUser({
       iconURL: moderatorUser.displayAvatarURL({ dynamic: true }),
     })
     .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
-    .addFields(
-      { name: 'Target:', value: `${targetUser}`, inline: true },
-      { name: 'Channel:', value: `${channel}`, inline: true },
-      ...commonFields(reason, currentWarnWeight, activeWarnings.length, durationStr, formattedExpiry, warnType),
-      { name: 'Next Punishment:', value: `\`${label}\``, inline: false },
-    )
+    .setFields(fields.filter(field => field !== null))
     .setTimestamp();
 
   // --- 5. DMing User & Logging ---
   logEmbed.setFooter({ text: 'User was DMed.' })
-  const dmPromise = targetUser.send({ embeds: [dmEmbed] }).catch(dmError => {
-    console.warn(`[WarnUser] Could not DM user ${targetUser.tag}: ${dmError.message}`);
+  await targetUser.send({ embeds: [dmEmbed] }).catch(dmError => {
+    console.warn(`[punishUser] Could not DM user ${targetUser.user.tag}: ${dmError.message}`);
     logEmbed.setFooter({ text: 'User could not be DMed.' });
   })
 
@@ -136,25 +164,17 @@ export default async function punishUser({
     console.error(`[WarnUser] Failed to send warn log to channel ${guildLogChannelConfig?.mutelogChannel || 'unknown'}:`, logSendErr);
   });
 
-  const timeoutPromise = targetUser.timeout(effectiveDurationMs, reason).catch(err => {
-    console.error(`[punishUser] Failed to timeout user ${targetUser.user.tag}:`, err.message);
-    logEmbed.addFields({ name: 'Timeout Status:', value: `❌ Failed: ${err.message}`, inline: false })
-  })
-  if (duration > 0)
-    try {
-      await Promise.all([dmPromise, logPromise, timeoutPromise].filter(Boolean));
-    } catch (err) {
-      console.log(`❌ Failed to timeout user: ${err.message ?? err}`);
-    }
-  else if (warnType == 'Ban') {
-    try {
-      await targetUser.ban({ reason: `Ban command: ${reason}`, deleteMessageSeconds: 604800 })
-    } catch (err) {
-      console.log(`❌ Failed to ban user: ${err.message ?? err}`);
-    }
+
+  const actionPromise = warnType === 'Ban' ?
+    targetUser.ban({ reason: `Ban command: ${reason}`, deleteMessageSeconds: 604800 })
+    : duration > 0 ? targetUser.timeout(effectiveDurationMs, reason) :
+      Promise.resolve();
+
+  try {
+    await Promise.all([logPromise, actionPromise].filter(Boolean));
+  } catch (err) {
+    console.log(`❌ Failed to perform action: ${err.message ?? err}`);
   }
-  else if (duration == 0)
-    await Promise.all([dmPromise, logPromise].filter(Boolean));
 
   // --- Log Command ---
   logRecentCommand(warnType == 'Ban' ? `Ban - ${targetUser.tag} - ${reason} - issuer: ${moderatorUser.tag}`
@@ -171,14 +191,16 @@ export default async function punishUser({
     })
 
   // Send confirmation embed if automated, else return the embed for manual use
-  if (isAutomated) {
-    try {
-      await channel.send({
-        embeds: [commandEmbed]
-      });
-    } catch (sendError) {
-      console.error(`[WarnUser] Failed to send command confirmation to channel ${channel.id}: ${sendError.message}`);
-    }
-  } else
-    return commandEmbed
+  if (!buttonflag) {
+    if (isAutomated) {
+      try {
+        await channel.send({
+          embeds: [commandEmbed]
+        });
+      } catch (sendError) {
+        console.error(`[WarnUser] Failed to send command confirmation to channel ${channel.id}: ${sendError.message}`);
+      }
+    } else
+      return commandEmbed
+  }
 }
