@@ -16,6 +16,7 @@ export async function guildMemberAdd(member) {
         await member.guild.channels.fetch(Channels.generalChannel),
         await member.guild.channels.fetch(guildmodChannels.mutelogChannel),
     ]
+    const DayInMs = 24 * 60 * 60 * 1000;
 
     // Define account creation date and two days in milliseconds
     const twoDaysInMs = 2 * 24 * 60 * 60 * 1000;
@@ -49,27 +50,23 @@ export async function guildMemberAdd(member) {
     let inviter = null;
     let invite = null;
 
-    try {
-        // Find the invite that was just used
+    try {// search old invites first and comapre values of snapshot to new list
         invite = newInvites.find(i => {
             const key = `${guildId}-${i.code}`;
-            // Check if the invite exists in the old cache and its use count has increased
             return oldInvites.has(key) && oldInvites.get(key) < i.uses;
         });
-
-        // If an inviter was not found, it might be a new invite.
-        // We can now iterate through the new invites to add any that are not in our old cache.
+        // if not in list, might be a new invite so search newInvites for
+        // any invites having a use of 1
         if (!invite) {
-            if (!oldInvites.has(key) && i.uses === 1) {
-                invite = i;
-                console.log(`🎉 Found a new invite: ${invite.code}`);
-                // Break the loop once found if necessary, or just rely on the first match
-            }
+            invite = newInvites.find(i => {
+                const key = `${guildId}-${i.code}`;
+                return !oldInvites.has(key) &&  Date.now() - i.createdAt.getTime() < DayInMs && i.uses === 1;
+            });
         };
-
+        //if found set inviter
         if (invite) {
             inviter = invite.inviter;
-            console.log(`✅ Inviter found! User: ${inviter.tag} | Invite Code: ${invite.code}`);
+            console.log(`🎉 Found a new invite: ${invite.code}`);
         } else {
             console.log('❌ No inviter found for this member.');
         }
@@ -77,7 +74,7 @@ export async function guildMemberAdd(member) {
         console.error("Error finding inviter:", error);
     }
 
-    // Now, update the shared invites map with the new invites and their current uses.
+    // update the shared invites map with the new invites and their current uses.
     newInvites.forEach(i => {
         const key = `${guildId}-${i.code}`;
         invites.set(key, i.uses);
@@ -99,16 +96,15 @@ export async function guildMemberAdd(member) {
         .addFields(
             { name: 'Discord Join Date:', value: `<t:${Math.floor(member.joinedAt.getTime() / 1000)}>`, inline: true }
         )
-        .setTimestamp()
     // Add the inviter field to the welcome embed
     if (inviter) {
         console.log(`Inviter found for embed: ${inviter.tag}`);
         welcomeEmbed.setFooter({
-            text: `Invited by ${inviter.tag} | ${invite.code}`,
+            text: `Invited by: ${inviter.tag} | ${invite.code}`,
             iconURL: inviter.displayAvatarURL({ dynamic: true })
         });
     }
-
+    welcomeEmbed.setTimestamp()
     const generalEmbed = new EmbedBuilder()
         .setColor(0x00FF99)
         .setDescription(`Welcome ${member} to the Cave!`)
@@ -127,29 +123,7 @@ export async function guildMemberAdd(member) {
     const actionRow = new ActionRowBuilder()
         .addComponents(banButton);
 
-    // Capture the message object here to use it in the timeout
     await generalChannel.send({ embeds: [generalEmbed] });
-    const welcomeMessage = await welcomeChannel.send({ embeds: [welcomeEmbed], components: [actionRow] });
+    await welcomeChannel.send({ embeds: [welcomeEmbed], components: [actionRow] });
     console.log(`Welcome message sent with inviter data in embed: ${inviter ? 'Yes' : 'No'}`);
-
-    // Schedule the button to be disabled after 5 minutes
-    const fiveMinutesInMs = 5 * 60 * 1000;
-    setTimeout(async () => {
-        try {
-            const fetchedMessage = await welcomeChannel.messages.fetch(welcomeMessage.id);
-            const updatedBanButton = new ButtonBuilder()
-                .setCustomId(`inviter_ban_delete_invite_${member.id}_${inviter ? inviter.id : 'no inviter'}_${invite ? invite.code : 'no invite code'}`)
-                .setLabel('🔨 Ban (Expired)')
-                .setStyle(ButtonStyle.Danger)
-                .setDisabled(true); // Disable the button
-
-            const updatedActionRow = new ActionRowBuilder()
-                .addComponents(updatedBanButton);
-
-            await fetchedMessage.edit({ components: [updatedActionRow] });
-            console.log(`Ban button for ${member.user.tag} disabled after 5 minutes.`);
-        } catch (error) {
-            console.error(`Failed to disable ban button for ${member.user.tag}:`, error);
-        }
-    }, fiveMinutesInMs);
 }
