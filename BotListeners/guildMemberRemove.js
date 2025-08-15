@@ -92,6 +92,10 @@ export async function guildMemberRemove(member) {
     // Customize message by action
     switch (action) {
         case "ban":
+            if (executor && executor.id === member.client.user.id) {
+                console.log(`Bot-initiated ban of ${member.user.tag} detected. Skipping duplicate log in guildMemberRemove.`);
+                break;
+            }
             embed
                 .setColor(0x8b0000)
                 .setTitle(`${executor.tag} banned a member`)
@@ -99,7 +103,7 @@ export async function guildMemberRemove(member) {
                     { name: 'User', value: `${member}`, inline: true },
                     { name: 'Tag:', value: `\`${member.user.tag}\``, inline: true },
                     { name: 'id', value: `\`${member.user.id}\``, inline: true },
-                    { name: 'Reason', value: reason }
+                    { name: 'Reason', value: `\`${reason}\`` }
                 )
                 .setFooter({ text: time })
             await banlogChannel.send({ embeds: [embed] });
@@ -113,7 +117,7 @@ export async function guildMemberRemove(member) {
                     { name: 'User', value: `${member}`, inline: true },
                     { name: 'Tag:', value: `\`${member.user.tag}\``, inline: true },
                     { name: 'Id:', value: `\`${member.user.id}\``, inline: true },
-                    { name: 'Reason', value: reason }
+                    { name: 'Reason', value: `\`${reason}\`` }
                 )
                 .setFooter({ text: time })
             await muteLogChannel.send({ embeds: [embed] });
