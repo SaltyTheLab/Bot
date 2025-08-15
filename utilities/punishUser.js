@@ -178,8 +178,8 @@ export default async function punishUser({
 
   // --- Log Command ---
   logRecentCommand(warnType == 'Ban' ? `Ban - ${targetUser.tag} - ${reason} - issuer: ${moderatorUser.tag}`
-    : duration > 0 ? `Mute- ${targetUser.tag} - ${reason} - issuer: ${moderatorUser.tag} duration: ${durationStr}`
-      : `warn - ${targetUser.tag} - ${reason} - issuer: ${moderatorUser.tag}`);
+    : duration > 0 ? `Mute- ${targetUser.user.tag} - ${reason} - issuer: ${moderatorUser.tag} duration: ${durationStr}`
+      : `warn - ${targetUser.user.tag} - ${reason} - issuer: ${moderatorUser.tag}`);
 
   const commandEmbed = new EmbedBuilder()
     .setColor(LOG_COLORS[warnType])
