@@ -18,12 +18,11 @@ export default async function AutoMod(client, message) {
   const exclusions = guildchannels.exclusions;
   const lowerContent = content.toLowerCase();
 
-  console.log(`[AutoMod] Message from ${author.tag}: ${content}`);
-
   const violationFlags = updateTracker(userId, message);
 
   let matchedWord = null;
-  if (forbiddenWords.size > 0 && !Object.values(exclusions).includes(message.channel.parentId) && !Object.values(exclusions).includes(message.channel.id)) {
+  if (forbiddenWords.size > 0 && !Object.values(exclusions).includes(message.channel.parentId)
+    && !Object.values(exclusions).includes(message.channel.id)) {
     for (const word of forbiddenWords) {
       if (lowerContent.includes(word)) {
         matchedWord = word;
@@ -86,7 +85,6 @@ export default async function AutoMod(client, message) {
 
   // get previous activewarnings and warn weight of new warn
   const { activeWarnings, currentWarnWeight } = await getWarnStats(userId, guild.id, evaluationResult.violations);
-  console.log(`active warns: ${activeWarnings.length}`)
 
   // calculate mute duration and unit
   const { duration, unit } = getNextPunishment(activeWarnings.length + currentWarnWeight);
@@ -95,7 +93,7 @@ export default async function AutoMod(client, message) {
   // common arguments for all commands
   const commonPayload = {
     guild: guild,
-    targetUser: member,
+    target: member.id,
     moderatorUser: client.user,
     reason: reasonText,
     channel: channel,
@@ -104,7 +102,7 @@ export default async function AutoMod(client, message) {
 
   // issue the mute/warn/ban
   if ((activeWarnings.length > 2 || currentWarnWeight >= 4) && isNewUser == true) {
-    punishUser({ ...commonPayload, banflag: 1 });
+    punishUser({ ...commonPayload, banflag: true });
   } else {
     await punishUser({
       ...commonPayload,
