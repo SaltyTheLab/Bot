@@ -64,6 +64,7 @@ export async function execute(interaction) {
                             embeds: [],
                             components: []
                         });
+                        collector.stop();
                         return;
                     }
                     currentIndex = Math.min(currentIndex, allnotes.length - 1)
@@ -80,9 +81,10 @@ export async function execute(interaction) {
         });
     });
     collector.on('end', async () => {
+        const finalButtons = await buildNoteButtons(currentIndex, allnotes, currentnote.id, true);
         try {
-            const finalButtons = await buildNoteButtons(currentIndex, allnotes, currentnote.id, true);
-            await replyMessage.edit({ components: [finalButtons] });
+            if (replyMessage.embeds && replyMessage.embeds.length > 0)
+                await replyMessage.edit({ components: [finalButtons] });
             console.log(`Modlog buttons for ${target.tag} were disabled automatically.`);
         } catch (error) {
             console.error('Failed to disable buttons automatically:', error);

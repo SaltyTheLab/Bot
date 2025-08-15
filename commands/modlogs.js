@@ -76,6 +76,7 @@ export async function execute(interaction) {
                             embeds: [],
                             components: []
                         });
+                        collector.stop();
                         return;
                     }
                     currentIndex = Math.min(currentIndex, allLogs.length - 1)
@@ -92,12 +93,13 @@ export async function execute(interaction) {
         });
     });
     collector.on('end', async () => {
-            try {
-                const finalButtons = await buildButtons(currentIndex, allLogs.length, isAdmin, allLogs[currentIndex].id, true);
+        const finalButtons = await buildButtons(currentIndex, allLogs.length, isAdmin, currentLog.id, true);
+        try {
+            if (replyMessage.embeds && replyMessage.embeds.length > 0)
                 await replyMessage.edit({ components: [finalButtons] });
-                console.log(`Modlog buttons for ${targetUser.tag} were disabled automatically.`);
-            } catch (error) {
-                console.error('Failed to disable buttons automatically:', error);
-            }
+            console.log(`Modlog buttons for ${targetUser.tag} were disabled automatically.`);
+        } catch (error) {
+            console.error('Failed to disable buttons automatically:', error);
+        }
     });
 }

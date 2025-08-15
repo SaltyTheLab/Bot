@@ -22,7 +22,7 @@ export async function execute(interaction) {
     const commandembed = new EmbedBuilder()
         .setColor(0x00a900)
         .setDescription([
-            `📝 note created for <@${target.id}>`,
+            `📝 note created for <@${target.id}>\n`,
             ` > ${note}`
         ].join('\n\n'))
 

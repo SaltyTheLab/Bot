@@ -56,17 +56,17 @@ export async function execute(interaction) {
 
     const output = await punishUser({
         guild,
-        targetUser: target,
+        target: target.id,
         moderatorUser: issuer,
         reason,
         channel: channel,
         isAutomated: false,
-        durationMs,
-        unit
+        duration: durationMs,
+        unit: unit
     });
 
     if (typeof output === 'string') {
-        return interaction.reply({ content: output});
+        return interaction.reply({ content: output });
     } else if (output instanceof EmbedBuilder) {
         return interaction.reply({
             embeds: [output]
