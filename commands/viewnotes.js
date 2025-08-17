@@ -10,12 +10,10 @@ export const data = new SlashCommandBuilder()
     );
 
 export async function execute(interaction) {
-    const userid = interaction.options.getUser('target');
-    const target = await interaction.client.users.fetch(userid);
+    const targetUser = interaction.options.getUser('target');
     const moderatorUser = interaction.user;
     const fiveMinutesInMs = 5 * 60 * 1000;
-    const guildId = interaction.guild.id;
-    let allnotes = await viewNotes(target.id, guildId);
+    let allnotes = await viewNotes(targetUser.id, interaction.guild.id);
 
     if (!allnotes.length) {
         return interaction.reply({
@@ -30,7 +28,7 @@ export async function execute(interaction) {
     let currentIndex = 0;
     let currentnote = allnotes[currentIndex]
 
-    const replyMessage = await interaction.reply({
+    let replyMessage = await interaction.reply({
         embeds: [await buildNoteEmbed(interaction, currentIndex, currentnote, allnotes.length)],
         components: [await buildNoteButtons(currentIndex, allnotes, currentnote.id)]
     });
@@ -55,13 +53,14 @@ export async function execute(interaction) {
             case 'del':
                 try {
                     deleteNote(noteIdToDelete);
-                    allnotes = await viewNotes(target.id, interaction.guild.id);
-                    console.log(allnotes.length);
+                    allnotes = await viewNotes(targetUser.id, interaction.guild.id);
 
                     if (allnotes.length === 0) {
-                        await interaction.editReply({
-                            content: `All notes for ${target.tag} have been deleted`,
-                            embeds: [],
+                        replyMessage = await replyMessage.edit({
+                            embeds: [
+                                new EmbedBuilder()
+                                    .setDescription(`All notes for ${targetUser} have been deleted`)
+                            ],
                             components: []
                         });
                         collector.stop();
@@ -75,7 +74,7 @@ export async function execute(interaction) {
                 break;
         }
         currentnote = allnotes[currentIndex]
-        await i.editReply({
+        replyMessage = await replyMessage.edit({
             embeds: [await buildNoteEmbed(interaction, currentIndex, currentnote, allnotes.length)],
             components: [await buildNoteButtons(currentIndex, allnotes, currentnote.id,)]
         });
@@ -83,9 +82,10 @@ export async function execute(interaction) {
     collector.on('end', async () => {
         const finalButtons = await buildNoteButtons(currentIndex, allnotes, currentnote.id, true);
         try {
-            if (replyMessage.embeds && replyMessage.embeds.length > 0)
+            if (replyMessage.embeds.length > 0 && replyMessage.components[0]) {
                 await replyMessage.edit({ components: [finalButtons] });
-            console.log(`Modlog buttons for ${target.tag} were disabled automatically.`);
+                console.log(`Note buttons for ${targetUser.tag} were disabled automatically.`);
+            }
         } catch (error) {
             console.error('Failed to disable buttons automatically:', error);
         }
