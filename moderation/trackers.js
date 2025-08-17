@@ -8,13 +8,9 @@ const userMessageTrackers = new LRUCache({
   updateAgeOnGet: true,
 });
 
-const GENERAL_SPAM_WINDOW = 8 * 1000;
-const GENERAL_SPAM_THRESHOLD = 4;
+const GENERAL_SPAM_WINDOW = 4 * 1000;
+const GENERAL_SPAM_THRESHOLD = 7;
 const DUPLICATE_SPAM_THRESHOLD = 3;
-const SPAM_PUNISHMENT_COOLDOWN = 750;
-
-
-
 
 export default function updateTracker(userId, message) {
   const now = Date.now();
@@ -30,8 +26,8 @@ export default function updateTracker(userId, message) {
       total: 0,
       mediaCount: 0,
       timestamps: new Denque(),
-      recentMessages: new Denque(),
-      lastSpamPunishment: 0
+      duplicateCounts: new Map(),
+      recentMessages: new Denque()
     };
     userMessageTrackers.set(userId, tracker);
   }
@@ -60,23 +56,23 @@ export default function updateTracker(userId, message) {
     tracker.timestamps.shift();
   }
 
-  const wasGeneralSpam = tracker.timestamps.size() >= GENERAL_SPAM_THRESHOLD;
+  const wasGeneralSpam = tracker.timestamps.size() > GENERAL_SPAM_THRESHOLD;
 
   // Track recent message for duplicates
   tracker.recentMessages.push({ content: message.content, timestamp: now });
+  tracker.duplicateCounts.set(content, (tracker.duplicateCounts.get(content) || 0) + 1);
 
   while (tracker.recentMessages.length && (now - tracker.recentMessages.peekFront().timestamp > GENERAL_SPAM_WINDOW)) {
-    tracker.recentMessages.shift();
-  }
-
-  let duplicateCount = 0;
-  //count messages that are the same
-  for (let i = 0; i < tracker.recentMessages.length; i++) {
-    if (tracker.recentMessages.get(i).content === message.content) {
-      duplicateCount++;
+    const oldMessage = tracker.recentMessages.shift();
+    const count = tracker.duplicateCounts.get(oldMessage.content);
+    if (count > 1) {
+      tracker.duplicateCounts.set(oldMessage.content, count - 1);
+    } else {
+      tracker.duplicateCounts.delete(oldMessage.content);
     }
   }
-  const isDuplicateSpam = duplicateCount >= DUPLICATE_SPAM_THRESHOLD;
+
+  const isDuplicateSpam = (tracker.duplicateCounts.get(content) || 0) > DUPLICATE_SPAM_THRESHOLD;
 
   const isMediaViolation = tracker.mediaCount > 1 && tracker.total < 20;
 
@@ -90,8 +86,11 @@ export default function updateTracker(userId, message) {
     tracker.timestamps.clear();
   }
   //if spam detected, flag it and clear out recentMessages array
-  if (tracker.recentMessages.size() > GENERAL_SPAM_THRESHOLD && isDuplicateSpam) {
+  if (tracker.recentMessages.size() > GENERAL_SPAM_THRESHOLD)
     tracker.recentMessages.clear();
+
+  if (isDuplicateSpam) {
+    tracker.duplicateCounts.clear();
   }
 
   userMessageTrackers.set(userId, tracker);
@@ -122,14 +121,6 @@ export function clearSpamFlags(userId) {
   if (tracker) {
     tracker.timestamps.clear();
     tracker.recentMessages.clear();
-    tracker.lastSpamPunishment = Date.now();
     userMessageTrackers.set(userId, tracker);
   }
-}
-
-export function isSpamOnCooldown(userId) {
-  const tracker = userMessageTrackers.get(userId);
-  if (!tracker) return false;
-  console.log(Date.now() - tracker.lastSpamPunishment);
-  return (Date.now() - tracker.lastSpamPunishment) < SPAM_PUNISHMENT_COOLDOWN;
 }

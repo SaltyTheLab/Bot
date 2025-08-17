@@ -7,8 +7,10 @@ const LOG_COLORS = {
 };
 //define and build embed template
 export async function buildLogEmbed(interaction, log, idx, totalLogs) {
-    const targetUser = await interaction.client.users.fetch(log.userId);
-    const moderator = await interaction.client.users.fetch(log.moderatorId);
+    const [targetUser, moderator] = Promise.all(
+        [await interaction.client.users.fetch(log.userId),
+        await interaction.client.users.fetch(log.moderatorId)
+        ])
     const formattedDate = new Date(log.timestamp).toLocaleString('en-US', {
         dateStyle: 'medium',
         timeStyle: 'short',
@@ -35,7 +37,7 @@ export async function buildLogEmbed(interaction, log, idx, totalLogs) {
         }
         fields.push({ name: 'Duration', value: `\`${durationString}\``, inline: true });
     }
-    fields.push({ name: 'Log Status', value: log.active ? '✅ Active' : '❌ Inactive/cleared', inline: true });
+    fields.push({ name: 'Log Status', value: log.active == 1 ? '✅ Active' : '❌ Inactive/cleared', inline: true });
 
     return new EmbedBuilder()
         .setColor(LOG_COLORS[log.type])
@@ -72,9 +74,10 @@ export async function buildButtons(idx, totalLogs, isDeletable, logId, disabled 
     return new ActionRowBuilder().addComponents(...buttons);
 };
 export async function buildNoteEmbed(interaction, index, currentNote, length) {
-
-    const target = await interaction.client.users.fetch(currentNote.userId);
-    const mod = await interaction.client.users.fetch(currentNote.moderatorId);
+    const [target, mod] = Promise.all(
+        [await interaction.client.users.fetch(currentNote.userId),
+        await interaction.client.users.fetch(currentNote.moderatorId)
+        ])
     const formattedDate = new Date(currentNote.timestamp).toLocaleString('en-US', {
         dateStyle: 'medium',
         timeStyle: 'short',
@@ -94,7 +97,6 @@ export async function buildNoteEmbed(interaction, index, currentNote, length) {
         });
 };
 export async function buildNoteButtons(index, allnotes, id, disabled = false) {
-    console.log(`notebutton index: ${index}`)
     return new ActionRowBuilder().addComponents(
         new ButtonBuilder()
             .setCustomId(`note_prev`)

@@ -60,13 +60,13 @@ export async function guildMemberAdd(member) {
         if (!invite) {
             invite = newInvites.find(i => {
                 const key = `${guildId}-${i.code}`;
-                return !oldInvites.has(key) &&  Date.now() - i.createdAt.getTime() < DayInMs && i.uses === 1;
+                return !oldInvites.has(key) && Date.now() - i.createdAt.getTime() < DayInMs && i.uses === 1;
             });
         };
         //if found set inviter
         if (invite) {
             inviter = invite.inviter;
-            console.log(`🎉 Found a new invite: ${invite.code}`);
+            console.log(`Found inviter: ${inviter} via ${invite.code}`);
         } else {
             console.log('❌ No inviter found for this member.');
         }

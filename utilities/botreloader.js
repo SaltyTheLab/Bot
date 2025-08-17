@@ -7,10 +7,6 @@ import path from 'node:path';
 const currentFileDir = path.dirname(fileURLToPath(import.meta.url)); // C:\Users\micha\Desktop\Bot\utilities
 const botRoot = path.resolve(currentFileDir, '..'); // C:\Users\micha\Desktop\Bot
 
-// ---This map will store the actual function references passed to client.on ---
-// Map: eventName (string) -> Set<function_reference>
-const activeListeners = new Map();
-
 //list events needing client
 const eventsNeedingClient = new Set([
     'messageCreate'
@@ -18,6 +14,7 @@ const eventsNeedingClient = new Set([
 
 export async function loadCommands(client) {
     console.log('loading commands...');
+    client.commands.clear();
     return new Promise((resolve, reject) => {
         const commandsPath = path.join(botRoot, 'commands');
         const worker = new Worker('./utilities/worker.js', { type: 'module' });
@@ -86,13 +83,6 @@ export async function loadListeners(client) {
 
                             // Add the listener
                             client.on(eventName, boundListener);
-
-                            // Store this reference for future removal
-                            if (!activeListeners.has(eventName)) {
-                                activeListeners.set(eventName, new Set());
-                            }
-                            activeListeners.get(eventName).add(boundListener);
-
                             console.log(`✅ Registered listener for event: ${eventName} from ${filePath}`);
                         }
                     }
