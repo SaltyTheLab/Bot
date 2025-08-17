@@ -1,7 +1,7 @@
-
 import { EmbedBuilder } from '@discordjs/builders';
 import { getUser, saveUser } from '../Database/databasefunctions.js';
 import AutoMod from '../moderation/autoMod.js';
+import { MessageType } from 'discord.js';
 //setup constants and common triggers 
 const eyes = '1257522749635563561';
 const keywords = {
@@ -25,7 +25,7 @@ export async function messageCreate(client, message) {
   const userId = message.author.id;
   const content = message.content.toLowerCase();
   const lowerContent = content.replace(/ /g, '');
-  
+
   for (const keyword in keywords) {
     if (lowerContent.includes(keyword)) {
       message.reply(keywords[keyword]);
@@ -38,7 +38,8 @@ export async function messageCreate(client, message) {
   }
 
   //add and update xp to the user
-  saveUser(await applyUserXP(userId, message, guildId));
+  if (message.type === MessageType.Default || message.type === MessageType.Reply)
+    saveUser(await applyUserXP(userId, message, guildId));
 
   await AutoMod(client, message, guildId);
 }
