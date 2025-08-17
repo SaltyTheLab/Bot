@@ -30,11 +30,18 @@ export function getUser(userId, guildId) {
   return { userData };
 }
 
-export function rankUsers(guildId) {
-  const allUsers = db.prepare(`
-    SELECT * FROM users WHERE userId is not null AND guildId = ?
-    ORDER BY level DESC, xp DESC`).all(guildId)
-  return { allUsers }
+export function getRank(userId, guildId) {
+  const User = db.prepare(`
+    SELECT level, xp FROM users WHERE userId = ?  AND guildId = ?
+    ORDER BY level DESC, xp DESC`).get(userId, guildId);
+  if (!User)
+    return null;
+
+  const rank = db.prepare(`SELECT COUNT(*) + 1 AS rank
+     FROM users 
+     WHERE guildId = ? AND (
+    level > ? OR (level = ? AND xp > ?))`).get(guildId, User.level, User.level, User.xp)
+  return rank.rank
 }
 
 // update user stats
