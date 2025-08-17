@@ -12,6 +12,7 @@ import updateExpiredButtons from './utilities/updateExpiredButtons.js';
 
 // Setup dotenv
 config();
+export const { TOKEN, CLIENT_ID, GUILD_ID } = process.env;
 
 // Initialize Discord client
 export const client = new Client({
