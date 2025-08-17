@@ -38,7 +38,7 @@ export async function interactionCreate(interaction) {
             const inviterId = customIdParts[5];
             const inviteCode = customIdParts[6];
 
-            const fiveMinutesInMs = 5 * 60 * 1000;
+            const fiffteenMinutesInMs = 15 * 60 * 1000;
 
             //check permissions for banning, is a valid user and is bannable
             if (!interaction.member.permissions.has('BAN_MEMBERS')) {
@@ -60,8 +60,8 @@ export async function interactionCreate(interaction) {
             // If the member has left (memberToBan is null), the button is
             // still valid.
             if (memberToBan) {
-                if (memberToBan && Date.now() - memberToBan.joinedAt.getTime() > fiveMinutesInMs) {
-                    await interaction.reply({ content: 'This ban button has expired (5 mins have already passed since they joined).', ephemeral: true });
+                if (memberToBan && Date.now() - memberToBan.joinedAt.getTime() > fiffteenMinutesInMs) {
+                    await interaction.reply({ content: 'This ban button has expired (15 mins have already passed since they joined).', ephemeral: true });
 
                     const originalMessage = interaction.message;
                     const updatedBanButton = new ButtonBuilder()
