@@ -40,4 +40,7 @@ CREATE TABLE
     );
 
 CREATE INDEX IF NOT EXISTS idx_userid_levels_xp_coins ON users (level DESC, xp DESC);
-CREATE INDEX IF NOT EXISTS idx_userid_timestamp ON punishments (userId, timestamp DESC);
+
+CREATE INDEX IF NOT EXISTS idx_userid_guildId_timestamp_active_punishments ON punishments (userId, guildId, active, timestamp DESC);
+
+CREATE INDEX IF NOT EXISTS idx_userId_guildId_timestamp_notes ON notes (userId, guildId, timestamp DESC);
