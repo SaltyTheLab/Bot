@@ -19,20 +19,17 @@ export default async function clearExpiredWarns(db) {
             SELECT id FROM punishments
             WHERE active = 1 AND timestamp < ?
         `).all(now - twentyFourHours);
-            console.log(expiredWarns);
         // Step 2: If any expired warns are found, update their 'active' status to 0
         if (expiredWarns.length > 0) {
             const expiredWarnIds = expiredWarns.map(warn => warn.id);
-            
+            const placeHolders = expiredWarnIds.map(() => '?').join(', ');
             const updateStatement = db.prepare(`
                 UPDATE punishments
                 SET active = 0
-                WHERE id IN (${expiredWarnIds.map(() => '?').join(', ')})
+                WHERE id IN (${placeHolders})
             `);
-            
-            updateStatement.run(...expiredWarnIds);
-            
-            console.log(`✅ Successfully expired ${expiredWarns.length} warns.`);
+            updateStatement.run(expiredWarnIds);
+            console.log(`✅ Successfully expired ${expiredWarnIds.length} warns.`);
         } else {
             console.log('No expired warns found.');
         }
