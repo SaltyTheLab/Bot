@@ -1,6 +1,6 @@
 import { LRUCache } from 'lru-cache';
 import Denque from 'denque';
-import guildChannelMap from '../BotListeners/Extravariables/channelids.js';
+import guildChannelMap from '../BotListeners/Extravariables/channelconfiguration.js';
 
 const userMessageTrackers = new LRUCache({
   max: 500,

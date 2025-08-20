@@ -3,7 +3,7 @@ import getWarnStats from '../moderation/simulatedwarn.js';
 import getNextPunishment from '../moderation/punishments.js';
 import { addPunishment } from '../Database/databasefunctions.js';
 import logRecentCommand from '../Logging/recentcommands.js';
-import { guildModChannelMap } from '../BotListeners/Extravariables/channelids.js';
+import { guildModChannelMap } from '../BotListeners/Extravariables/channelconfiguration.js';
 
 const THRESHOLD = 24 * 60 * 60 * 1000; // 24h
 const unitMap = { min: 60000, hour: 3600000, day: 86400000 };
