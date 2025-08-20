@@ -1,5 +1,5 @@
 import { EmbedBuilder } from "discord.js";
-import { guildModChannelMap } from "./Extravariables/channelids.js";
+import { guildModChannelMap } from "./Extravariables/channelconfiguration.js";
 export async function messageDelete(message) {
     const guildId = message.guild.id;
     const guildChannels = guildModChannelMap[guildId]
@@ -47,7 +47,7 @@ export async function messageDelete(message) {
             .setFooter({ text: `ID: ${message.id}` })
             .setTimestamp()
     );
-    
+
     //send embeds
     await logChannel.send({ embeds: [mainEmbed, ...additionalImageEmbeds] });
 };

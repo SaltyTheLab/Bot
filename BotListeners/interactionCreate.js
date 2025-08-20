@@ -1,6 +1,6 @@
 import { ButtonBuilder, ButtonStyle, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, EmbedBuilder } from "discord.js";
 import punishUser from "../utilities/punishUser.js";
-import { stringreactions } from "./Extravariables/rolemap.js";
+import { stringreactions } from "./Extravariables/reactionrolemap.js";
 const maxTitleLength = 45;
 
 // Function to truncate a string with an ellipsis if it exceeds the max length

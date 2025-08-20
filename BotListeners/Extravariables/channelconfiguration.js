@@ -12,7 +12,8 @@ const staffguidesid = '1262533685002113155';
 const getrolesid = '1235323618582466621';
 const hobbiescatagorey = '1262972525642649610';
 const mediacatagorey = '1311485962567548970';
-const adultcatagorey = '1235309784685744308'
+const adultcatagorey = '1235309784685744308';
+const countingchannelid = '1406810924806832218';
 const evodeletedLogsId = "1403065389021270066";
 const evowelcomeChannelId = '1403065196653842604';
 const evoupdatedMessagesChannelId = '1403065299216891985';
@@ -25,7 +26,7 @@ const evogetrolesid = '1347227575998484538';
 const evoadultcatagorey = '1347589981513711656';
 
 export const guildModChannelMap = {
-    "1231453115937587270": { 
+    "1231453115937587270": {
         mutelogChannel: mutelogChannelid,
         deletedlogChannel: deletedLogsId,
         welcomeChannel: welcomeChannelId,
@@ -33,7 +34,7 @@ export const guildModChannelMap = {
         namelogChannel: nameLogChannelId,
         banlogChannel: banlogChannelid,
     },
-    "1347217846991851541": { 
+    "1347217846991851541": {
         mutelogChannel: evomutelogChannelid,
         banlogChannel: evobanlogChannelid,
         welcomeChannel: evowelcomeChannelId,
@@ -50,16 +51,17 @@ export const guildChannelMap = {
             appeal: ticketappealsid,
             staffguide: staffguidesid,
             getroles: getrolesid,
-            generalChannel: generalChannelid
+            generalChannel: generalChannelid,
+            counting: countingchannelid
         },
         exclusions: {
             hobbies: hobbiescatagorey,
             media: mediacatagorey,
-            adult: adultcatagorey
+            adultcatagorey: adultcatagorey
         }
     },
     "1347217846991851541": {
-        channels: { 
+        channels: {
             rules: evoruleschannelid,
             getroles: evogetrolesid,
             generalChannel: evogeneralChannelid

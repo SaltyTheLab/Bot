@@ -1,8 +1,8 @@
 import { EmbedBuilder } from "discord.js";
-import { guildModChannelMap } from "./Extravariables/channelids.js";
+import { guildModChannelMap } from "./Extravariables/channelconfiguration.js";
 export async function messageUpdate(oldMessage, newMessage) {
     const guildId = oldMessage.guild.id;
-    
+
     const guildChannels = guildModChannelMap[guildId]
     /**
      * return early if no message change detected, is created by bot, or

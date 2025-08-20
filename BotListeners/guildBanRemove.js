@@ -1,5 +1,5 @@
 import { EmbedBuilder } from "discord.js";
-import { guildModChannelMap } from "./Extravariables/channelids.js";
+import { guildModChannelMap } from "./Extravariables/channelconfiguration.js";
 import { getPunishments } from "../Database/databasefunctions.js";
 
 /**
@@ -21,7 +21,7 @@ export async function guildBanRemove(ban) {
     try {
         const punishments = await getPunishments(ban.user.id, ban.guild.id);
         const bans = punishments.filter(punishment => punishment.warnType === 'Ban');
-        
+
         console.log(`Total bans: ${bans}`)
         // Create an embed for the unban
         const embed = new EmbedBuilder()
