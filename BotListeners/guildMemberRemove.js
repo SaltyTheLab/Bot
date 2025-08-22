@@ -1,93 +1,52 @@
 import { EmbedBuilder, AuditLogEvent } from "discord.js";
-import { guildModChannelMap } from "./Extravariables/channelconfiguration.js";
+import guildChannelMap from "./Extravariables/channelconfiguration.js";
 
 export async function guildMemberRemove(member) {
     const guildId = member.guild.id
-    const guildChannels = guildModChannelMap[guildId]
+    const modChannels = guildChannelMap[guildId].modChannels
     //define welcomechannel and banlog channel
     const [welcomeChannel, banlogChannel, muteLogChannel] = [
-        member.guild.channels.cache.get(guildChannels.welcomeChannel),
-        member.guild.channels.cache.get(guildChannels.banlogChannel),
-        member.guild.channels.cache.get(guildChannels.mutelogChannel)
+        member.guild.channels.cache.get(modChannels.welcomeChannel),
+        member.guild.channels.cache.get(modChannels.banlogChannel),
+        member.guild.channels.cache.get(modChannels.mutelogChannel)
     ]
     if (!welcomeChannel) {
         console.warn('⚠️ Welcome channel not found.');
         return;
     }
 
-    const now = Date.now();
-    const isRecent = (timestamp) => now - timestamp < 5000;
-
     //set default actions and leave executor null
     let action = "leave";
     let executor = null;
     let reason = ``;
-    let time = now;
 
-    // Check for ban/kick in audit
-    const banLogs = await member.guild.fetchAuditLogs({
-        type: AuditLogEvent.MemberBanAdd
-    });
-    const banLog = banLogs.entries.find((entry) =>
-        entry.target.id === member.id && isRecent(entry.createdTimestamp)
-    );
-    const kickLogs = await member.guild.fetchAuditLogs({
-        type: AuditLogEvent.MemberKick,
-        limit: 5,
-    });
-
-    const kickLog = kickLogs.entries.find((entry) =>
-        entry.target.id === member.id && isRecent(entry.createdTimestamp)
+    const auditLogTypes = [AuditLogEvent.MemberBanAdd, AuditLogEvent.MemberKick];
+    const auditLogs = await Promise.all(
+        auditLogTypes.map(type => member.guild.fetchAuditLogs({ type, limit: 1 }))
     );
 
-    //determine variables based on action
-    if (banLog) {
-        action = "ban";
-        executor = banLog.executor;
-        reason = banLog.reason ?? "No reason provided.";
-        time = new Date(banLog.createdTimestamp).toLocaleString()
-    }
-    // Check for kick if not banned
-    if (kickLog) {
-        action = "kick";
-        executor = kickLog.executor;
-        reason = kickLog.reason ?? "No reason provided.";
-        time = new Date(kickLog.createdTimestamp).toLocaleString()
-    }
+    const recentEntry = auditLogs.flatMap(log => log.entries).find(entry => entry.id === member.user.id && Date.now() - entry.createdTimestamp < 5000);
 
-    // Heuristic for prune detection
-    if (action === "leave") {
-        const accountAgeMs = Date.now() - member.user.createdTimestamp;
-        const joinAgeMs = member.joinedAt ? Date.now() - member.joinedAt.getTime() : null;
-
-        if (joinAgeMs !== null && joinAgeMs < 7 * 24 * 60 * 60 * 1000 && accountAgeMs > 30 * 24 * 60 * 60 * 1000) {
-            // Joined less than 7 days ago, but account older than 30 days → likely prune
-            action = "prune";
-        }
-
+    if (recentEntry) {
+        action = recentEntry.action === AuditLogEvent.MemberBanAdd ? 'ban' : 'kick';
+        executor = recentEntry.executor;
+        reason = recentEntry.reason ?? "no reason provieded"
+    } else if (member.joinedAt) {
+        const joinAgeMs = Date.now() - member.joinedAt.getTime();
+        const accountAgeMs = Date.now() - member.user.createdeTimestamp;
+        const isPrune = joinAgeMs < 7 * 24 * 60 * 60 * 1000 && accountAgeMs > 30 * 24 * 60 * 60 * 1000;
+        if (isPrune) action = "prune";
     }
-    const leaveembed = new EmbedBuilder()
-        .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
-        .setDescription(`<@${member.id}> left the cave.`)
-        .addFields({
-            name: 'Joined the cave on:',
-            value: member.joinedAt
-                ? `<t:${Math.floor(member.joinedAt.getTime() / 1000)}:F>`
-                : 'Unknown',
-            inline: true,
-        })
 
     // Create leave message embed
     const embed = new EmbedBuilder()
         .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
         .addFields({
             name: 'Joined the cave on:',
-            value: member.joinedAt
-                ? `<t:${Math.floor(member.joinedAt.getTime() / 1000)}:F>`
-                : 'Unknown',
-            inline: true,
+            value: member.joinedAt ? `<t:${Math.floor(member.joinedAt.getTime() / 1000)}:F>` : 'Unknown',
+            inline: true
         })
-        .setFooter({ text: time });
+        .setFooter({ text: new Date(recentEntry?.createdTimestamp || Date.now()).toLocaleString() })
 
     // Customize message by action
     switch (action) {
@@ -105,30 +64,15 @@ export async function guildMemberRemove(member) {
                     { name: 'id', value: `\`${member.user.id}\``, inline: true },
                     { name: 'Reason', value: `\`${reason}\`` }
                 )
-                .setFooter({ text: time })
             await banlogChannel.send({ embeds: [embed] });
             break;
 
         case "kick":
-            embed
-                .setColor(0xff5555)
-                .setTitle(`${executor.tag} kicked a member`)
-                .addFields(
-                    { name: 'User', value: `${member}`, inline: true },
-                    { name: 'Tag:', value: `\`${member.user.tag}\``, inline: true },
-                    { name: 'Id:', value: `\`${member.user.id}\``, inline: true },
-                    { name: 'Reason', value: `\`${reason}\`` }
-                )
-                .setFooter({ text: time })
-            await muteLogChannel.send({ embeds: [embed] });
-            break;
-
         case "prune":
             embed
-                .setColor(0xffaa00)
-                .setTitle('A member was likely pruned')
-                .setDescription(`${member} was probably removed in a server prune.`)
-                .setFooter({ text: time });
+                .setColor(action === "kick" ? 0xff5555 : 0xffaa00)
+                .setTitle(action === "kick" ? `${executor.tag} kicked a member` : `A member was likely pruned`)
+                .setDescription(action === "prune" ? `${member} was probably removed in a prune.` : null)
             await muteLogChannel.send({ embeds: [embed] });
             break;
 
@@ -146,5 +90,15 @@ export async function guildMemberRemove(member) {
                 .setTimestamp()
             break;
     }
+    const leaveembed = new EmbedBuilder()
+        .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+        .setDescription(`<@${member.id}> left the cave.`)
+        .addFields({
+            name: 'Joined the cave on:',
+            value: member.joinedAt
+                ? `<t:${Math.floor(member.joinedAt.getTime() / 1000)}:F>`
+                : 'Unknown',
+            inline: true,
+        })
     await welcomeChannel.send({ embeds: [leaveembed] });
 }
