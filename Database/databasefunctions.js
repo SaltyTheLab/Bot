@@ -2,12 +2,12 @@ import db from './database.js';
 
 // ───── USER XP/LEVEL SYSTEM ─────
 //fetch or create the user in the data base
-export function getUser(userId, guildId) {
+export function getUser(userId, guildId, modflag = false) {
   let userData = db.prepare(`
     SELECT * FROM users WHERE userId = ? AND guildId = ?
   `).get(userId, guildId);
 
-  if (!userData) {
+  if (!userData && !modflag) {
     console.log(`[getUser] User ${userId} in guild ${guildId} not found. Attempting to insert new user.`);
     try {
       db.prepare(`
@@ -27,13 +27,11 @@ export function getUser(userId, guildId) {
     }
   };
 
-  return { userData };
+  return userData ? { userData } : null;
 }
 
 export function getRank(userId, guildId) {
-  const User = db.prepare(`
-    SELECT level, xp FROM users WHERE userId = ?  AND guildId = ?
-    ORDER BY level DESC, xp DESC`).get(userId, guildId);
+  const User = db.prepare(`SELECT level, xp FROM users WHERE userId = ?  AND guildId = ?`).get(userId, guildId);
   if (!User)
     return null;
 

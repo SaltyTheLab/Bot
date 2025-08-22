@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
-import { deletePunishment, getPunishments } from '../Database/databasefunctions.js';
+import { deletePunishment, getPunishments, getUser } from '../Database/databasefunctions.js';
 import { buildLogEmbed, buildButtons } from '../utilities/buildmodlogembeds.js';
 import logRecentCommand from '../Logging/recentcommands.js';
 export const data = new SlashCommandBuilder()
@@ -15,13 +15,22 @@ export async function execute(interaction) {
     const moderatorUser = interaction.user;
     const fiveMinutesInMs = 5 * 60 * 1000;
     const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
+    const usercheck = getUser(targetUser.id, interaction.guild.id, true);
     let allLogs = await getPunishments(targetUser.id, interaction.guild.id);
-
-    if (!allLogs.length) {//return early with no modlogs found
+    if (!usercheck) {
         return interaction.reply({
             embeds: [
                 new EmbedBuilder()
-                    .setColor(0x888888)
+                    .setColor(0x8d0b0b)
+                    .setAuthor({ name: `❌ ${targetUser.tag} does not exist in Database!` })
+            ],
+        });
+    } else if (!allLogs.length) {
+        //return early with no modlogs found
+        return interaction.reply({
+            embeds: [
+                new EmbedBuilder()
+                    .setColor(0xf58931)
                     .setAuthor({ name: `⚠️ No modlogs found for ${targetUser.tag}.` })
             ],
         });

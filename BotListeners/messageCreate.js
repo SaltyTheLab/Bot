@@ -2,7 +2,14 @@ import { EmbedBuilder } from '@discordjs/builders';
 import { getUser, saveUser } from '../Database/databasefunctions.js';
 import AutoMod from '../moderation/autoMod.js';
 import { MessageType } from 'discord.js';
+import guildChannelMap from './Extravariables/channelconfiguration.js';
 //setup constants and common triggers 
+let counting = 0;
+let lastuser;
+let lastmessages;
+let guildId;
+let CountingObject;
+let countingChannel
 const eyes = '1257522749635563561';
 const keywords = {
   cute: "You're Cute",
@@ -18,9 +25,19 @@ const reactions = {
   bad: '😡'
 }
 export async function messageCreate(client, message) {
+
+  guildId = message.guild.id;
+  const publicChannels = guildChannelMap[guildId].publicChannels
+
   //skip if message creator is bot or not in the server
   if (message.author.bot || !message.guild || !message.member) return;
-  const guildId = message.guild.id;
+  //check for counting channel
+  if (publicChannels?.countingChannel) {
+    countingChannel = publicChannels.countingChannel;
+    CountingObject = await message.guild.channels.fetch(countingChannel)
+    lastmessages = await CountingObject.messages.fetch({ limit: 5 });
+  }
+
   //convert message to all lowercase and remove all spaces 
   const userId = message.author.id;
   const content = message.content.toLowerCase();
@@ -38,9 +55,51 @@ export async function messageCreate(client, message) {
   }
 
   //add and update xp to the user
-  if (message.type === MessageType.Default || message.type === MessageType.Reply)
+  if ((message.type === MessageType.Default || message.type === MessageType.Reply) && message.channel.id != countingChannel)
     saveUser(await applyUserXP(userId, message, guildId));
 
+
+
+  if (countingChannel && message.channel.id === countingChannel) {// check for a counting channel and if exists fetch the last valid message
+    if (counting == 0) {
+      for (const message of lastmessages.values()) {
+        console.log(message.content);
+        counting = parseInt(message.content) - 1;
+        if (!isNaN(counting) && !message.embeds.length > 0) {
+          lastmessages = [];
+          break;
+        }
+      }
+    }
+    //check messages that are sent and compare them to the next number with a failsafe that tells the user that this channel is only for counting
+    const number = parseInt(message.content);
+    if (!number) {
+      message.reply({
+        embeds: [new EmbedBuilder()
+          .setDescription(`This channel is only for counting ${message.author}(number not reset)`)
+        ]
+      })
+      return;
+    }
+    if (number == counting + 1 && lastuser != message.author) {
+      message.react('✅')
+      counting += 1;
+      lastuser = message.author;
+      return;
+    }
+    else {
+      message.react('❌')
+      message.reply({
+        embeds: [new EmbedBuilder()
+          .setDescription(lastuser == message.author ? `you already put a number down ${message.author}!(number reset)`
+            : `${message.author} missed the count, it was supposed to be ${counting + 1}`)
+        ]
+      })
+      counting = 0;
+      lastuser = null;
+      return;
+    }
+  }
   await AutoMod(client, message, guildId);
 }
 

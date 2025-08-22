@@ -12,12 +12,6 @@ export const data = new SlashCommandBuilder()
     );
 
 function roundRect(ctx, x, y, width, height, radius) {
-    if (typeof radius !== 'number') {
-        const defaultRadius = { tl: 0, tr: 0, br: 0, bl: 0 };
-        for (let side in defaultRadius) {
-            radius[side] = radius[side] || 0;
-        }
-    }
     ctx.beginPath();
     ctx.moveTo(x + radius, y);
     ctx.lineTo(x + width - radius, y);
@@ -138,7 +132,8 @@ export async function generateRankCard(userData, targetUser, xpNeeded, rank) {
     // Fill of progress bar
     if (xpPercent > 0) {
         ctx.fillStyle = '#3ba55d';
-        roundRect(ctx, barX, barY, barWidth * xpPercent, barHeight, radius);
+        const filledWidith = Math.max(barWidth * xpPercent, 20)
+        roundRect(ctx, barX, barY, filledWidith, barHeight, radius);
         ctx.fill();
     }
 

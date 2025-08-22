@@ -3,7 +3,7 @@ import getNextPunishment from './punishments.js';
 import getWarnStats from './simulatedwarn.js';
 import updateTracker, { clearSpamFlags } from './trackers.js';
 import evaluateViolations from './evaluateViolations.js';
-import guildChannelMap from '../BotListeners/Extravariables/channelids.js';
+import guildChannelMap from '../BotListeners/Extravariables/channelconfiguration.js';
 import forbbidenWordsData from '../moderation/forbiddenwords.json' with {type: 'json'};
 
 const forbiddenWords = new Set(forbbidenWordsData.forbiddenWords.map(w => w.toLowerCase()));
@@ -14,8 +14,7 @@ export default async function AutoMod(client, message) {
 
   const { author, content, member, guild, channel } = message;
   const userId = author.id;
-  const guildchannels = guildChannelMap[guild.id];
-  const exclusions = guildchannels.exclusions;
+  const exclusions = guildChannelMap[guild.id].exclusions;
   const messageWords = content.toLowerCase().split(/\s+/);
   const violationFlags = updateTracker(userId, message);
 
@@ -46,11 +45,11 @@ export default async function AutoMod(client, message) {
   //delete violating message and generate reason
   const shouldDelete = matchedWord || hasInvite || everyonePing
   const [evaluationResult] = await Promise.all([
-    evaluateViolations({ hasInvite, matchedWord, everyonePing, ...violationFlags, isNewUser }),
     shouldDelete ? message.delete().catch(err => {
       console.error(`Failed to delete message message: ${err.message}`);
       return null;
-    }) : Promise.resolve(null)
+    }) : Promise.resolve(null),
+    evaluateViolations({ hasInvite, matchedWord, everyonePing, ...violationFlags, isNewUser }),
   ]);
 
   if (!evaluationResult || !evaluationResult.violations.length) return;

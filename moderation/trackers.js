@@ -1,6 +1,6 @@
 import { LRUCache } from 'lru-cache';
 import Denque from 'denque';
-import guildChannelMap from '../BotListeners/Extravariables/channelids.js';
+import guildChannelMap from '../BotListeners/Extravariables/channelconfiguration.js';
 
 const userMessageTrackers = new LRUCache({
   max: 500,
@@ -14,8 +14,7 @@ const DUPLICATE_SPAM_THRESHOLD = 3;
 
 export default function updateTracker(userId, message) {
   const now = Date.now();
-  const guildchannels = guildChannelMap[message.guild.id];
-  const exclusions = guildchannels.exclusions;
+  const exclusions = guildChannelMap[message.guild.id].exclusions;
   const content = message.content;
   const minLengthForCapsCheck = 10;
   let isCapSpam = false;

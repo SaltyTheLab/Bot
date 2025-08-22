@@ -1,5 +1,5 @@
 import { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } from "discord.js";
-import { guildChannelMap, guildModChannelMap } from "./Extravariables/channelids.js";
+import guildChannelMap from "./Extravariables/channelconfiguration.js";
 import invites from "./Extravariables/invites.js";
 
 /**
@@ -8,15 +8,14 @@ import invites from "./Extravariables/invites.js";
  */
 export async function guildMemberAdd(member) {
     const guildId = member.guild.id
-    const guildmodChannels = guildModChannelMap[guildId]
-    const guildChannels = guildChannelMap[guildId];
-    const Channels = guildChannels.channels
+    const modChannels = guildChannelMap[guildId].modChannels;
+    const publicChannels = guildChannelMap[guildId].publicChannels;
     const [welcomeChannel, generalChannel, mutechannel] = [
-        await member.guild.channels.fetch(guildmodChannels.welcomeChannel),
-        await member.guild.channels.fetch(Channels.generalChannel),
-        await member.guild.channels.fetch(guildmodChannels.mutelogChannel),
+        await member.guild.channels.fetch(modChannels.welcomeChannel),
+        await member.guild.channels.fetch(publicChannels.generalChannel),
+        await member.guild.channels.fetch(modChannels.mutelogChannel),
     ]
-    const DayInMs = 24 * 60 * 60 * 1000;
+
 
     // Define account creation date and two days in milliseconds
     const twoDaysInMs = 2 * 24 * 60 * 60 * 1000;
@@ -49,27 +48,34 @@ export async function guildMemberAdd(member) {
 
     let inviter = null;
     let invite = null;
+    let isPersistentInvite = false;
 
     try {// search old invites first and comapre values of snapshot to new list
         invite = newInvites.find(i => {
             const key = `${guildId}-${i.code}`;
             return oldInvites.has(key) && oldInvites.get(key) < i.uses;
         });
-        // if not in list, might be a new invite so search newInvites for
-        // any invites having a use of 1
-        if (!invite) {
-            invite = newInvites.find(i => {
-                const key = `${guildId}-${i.code}`;
-                return !oldInvites.has(key) && Date.now() - i.createdAt.getTime() < DayInMs && i.uses === 1;
-            });
-        };
-        //if found set inviter
         if (invite) {
             inviter = invite.inviter;
-            console.log(`Found inviter: ${inviter} via ${invite.code}`);
+            isPersistentInvite = true;
+            console.log(`Found persistent inviter: ${inviter ? inviter.tag : 'Unknown'} via ${invite.code}`);
         } else {
-            console.log('❌ No inviter found for this member.');
-        }
+            // check for one time use invites and ones already deleted
+            let usedInviteCode = Array.from(oldInvites.keys()).find(key => {
+                const code = key.split('-')[1];
+                return !newInvites.some(i => i.code === code);
+            });
+            if (usedInviteCode) {
+                const allInvites = await member.guild.invites.fetch();
+                invite = allInvites.find(i => i.code === usedInviteCode.split('-')[1]);
+                if (invite) {
+                    inviter = invite.inviter;
+                    console.log(`Found one-time invite: ${invite.code} and inviter: ${inviter ? inviter.tag : 'Unknown'}`);
+                }
+            } else {
+                console.log('No invite found.')
+            }
+        };
     } catch (error) {
         console.error("Error finding inviter:", error);
     }
@@ -79,14 +85,6 @@ export async function guildMemberAdd(member) {
         const key = `${guildId}-${i.code}`;
         invites.set(key, i.uses);
     });
-
-
-    // Debugging log for updated invite cache state
-    console.log('--- Updated Invites Cache State ---');
-    for (const [key, uses] of invites) {
-        console.log(`${key}, Uses: ${uses}`);
-    }
-    console.log('-----------------------------------');
 
     // Build and send embeds
     const welcomeEmbed = new EmbedBuilder()
@@ -115,8 +113,8 @@ export async function guildMemberAdd(member) {
 
     // Create the ban button with the inviter's ID included
     const banButton = new ButtonBuilder()
-        .setCustomId(`inviter_ban_delete_invite_${member.id}_${inviter ? inviter.id : 'no inviter'}_${invite ? invite.code : 'no invite code'}`)
-        .setLabel(inviter ? '🔨 Ban User & Delete Invite' : '🔨 Ban')
+        .setCustomId(isPersistentInvite ? `inviter_ban_delete_invite_${member.id}_${inviter.id}_${invite.code}` : `inviter_ban_delete_invite_${member.id}_no inviter_no invite code`)
+        .setLabel(isPersistentInvite ? '🔨 Ban User & Delete Invite' : '🔨 Ban')
         .setStyle(ButtonStyle.Danger)
         .setDisabled(false);
 
@@ -125,5 +123,4 @@ export async function guildMemberAdd(member) {
 
     await generalChannel.send({ embeds: [generalEmbed] });
     await welcomeChannel.send({ embeds: [welcomeEmbed], components: [actionRow] });
-    console.log(`Welcome message sent with inviter data in embed: ${inviter ? 'Yes' : 'No'}`);
 }

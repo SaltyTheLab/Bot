@@ -1,16 +1,5 @@
 import embedIDs from '../embeds/EmbedIDs.json' with {type: 'json'}
-import { emojiRoleMap } from "./Extravariables/rolemap.js";
-
-const messageIDs = embedIDs;
-
-
-// Common role message IDs to react to
-const validKeys = ['colors', 'pronouns', 'continent', 'stream', 'dividers', 'consoles', 'EvoContent', 'EvoRules', 'EvoGames', 'Evocolors'];
-const validRoleMessageIds = messageIDs
-  .filter(embedInfo => validKeys.includes(embedInfo.name)) // Filter for only the relevant embed names
-  .map(embedInfo => embedInfo.messageId) // Get the messageId for each filtered embed
-  .filter(Boolean); // Remove any potential undefined or null entries (though shouldn't happen if structure is consistent)
-
+import { emojiRoleMap } from "./Extravariables/reactionrolemap.js";
 /**
  * Handle reaction-based role assignment or removal
  */
@@ -20,12 +9,10 @@ async function handleReactionChange(reaction, user, action = 'add') {
 
   const reactions = emojiRoleMap[reaction.message.guild.id].reactions;
   const member = await reaction.message.guild.members.fetch(user.id);
-
   //fetch the reaction the user used
   try {
     if (reaction.partial) reaction = await reaction.fetch();
     if (reaction.message && reaction.message.partial) await reaction.message.fetch();
-
     if (user.partial) user = await user.fetch();
   } catch (err) {
     console.error(`❌ Failed to fetch reaction or user (${action}):`, err);
@@ -33,7 +20,10 @@ async function handleReactionChange(reaction, user, action = 'add') {
   }
 
   //return if not a vaild message or message id isn't in the messageIDs array
-  if (!reaction.message || !validRoleMessageIds.includes(reaction.message.id)) return;
+  const isValidMessageId = embedIDs.some(embedInfo => embedInfo.messageId === reaction.message.id);
+
+  if (!isValidMessageId)
+    return;
 
   //assign the emoji id and role
   const emoji = reaction.emoji.id || reaction.emoji.name;
@@ -51,7 +41,7 @@ async function handleReactionChange(reaction, user, action = 'add') {
     return;
   }
 
-// attempt to modify the users roles
+  // attempt to modify the users roles
   try {
     const rolesToModify = Array.isArray(roleID) ? roleID : [roleID];
     await member.roles[action](rolesToModify);

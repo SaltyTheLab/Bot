@@ -1,5 +1,5 @@
 import { EmbedBuilder } from "discord.js";
-import { guildModChannelMap } from "./Extravariables/channelids.js";
+import guildChannelMap from "./Extravariables/channelconfiguration.js";
 import { getPunishments } from "../Database/databasefunctions.js";
 
 /**
@@ -8,10 +8,10 @@ import { getPunishments } from "../Database/databasefunctions.js";
  */
 export async function guildBanRemove(ban) {
     const guildId = ban.guild.id
-    const guildChannels = guildModChannelMap[guildId]
+    const modChannels = guildChannelMap[guildId].modChannels
 
     // Get the ban log channel
-    const banlogChannel = await ban.guild.channels.fetch(guildChannels.banlogChannel);
+    const banlogChannel = await ban.guild.channels.fetch(modChannels.banlogChannel);
 
     if (!banlogChannel) {
         console.warn('⚠️ Ban log channel not found for unban.');
@@ -21,7 +21,7 @@ export async function guildBanRemove(ban) {
     try {
         const punishments = await getPunishments(ban.user.id, ban.guild.id);
         const bans = punishments.filter(punishment => punishment.warnType === 'Ban');
-        
+
         console.log(`Total bans: ${bans}`)
         // Create an embed for the unban
         const embed = new EmbedBuilder()

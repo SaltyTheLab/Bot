@@ -19,14 +19,13 @@ export function loadMessageIDs() {
             const rawData = fs.readFileSync(filePath, 'utf-8');
             const parsedData = JSON.parse(rawData);
 
-            if (Array.isArray(parsedData)) {
-                return parsedData; // Return the raw array directly as parsed
-            } else {
-                // If the file content is not an array (e.g., empty object, or malformed JSON),
-                // log a warning and return an empty array to prevent further errors.
+            if (!Array.isArray(parsedData)) {
+                // If the file content is not an array (e.g., empty object,
+                // or malformed JSON),
                 console.warn(`[WARN] EmbedIDs.json content is not a valid array. Found type: ${typeof parsedData}. Returning empty array.`);
                 return [];
-            }
+            } else
+                return parsedData; // Return the raw array directly as parsed
         } catch (error) {
             // Catch JSON parsing errors or file read errors
             console.error(`[ERROR] Failed to parse EmbedIDs.json or read file: ${error.message}. Returning empty array.`);

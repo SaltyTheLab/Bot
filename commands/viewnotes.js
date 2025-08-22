@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
-import { deleteNote, viewNotes } from '../Database/databasefunctions.js';
+import { deleteNote, getUser, viewNotes } from '../Database/databasefunctions.js';
 import { buildNoteButtons, buildNoteEmbed } from '../utilities/buildmodlogembeds.js';
 export const data = new SlashCommandBuilder()
     .setName('note_show')
@@ -13,9 +13,12 @@ export async function execute(interaction) {
     const targetUser = interaction.options.getUser('target');
     const moderatorUser = interaction.user;
     const fiveMinutesInMs = 5 * 60 * 1000;
+    const usercheck = getUser(targetUser.id, interaction.guild.id, true)
     let allnotes = await viewNotes(targetUser.id, interaction.guild.id);
 
-    if (!allnotes.length) {
+    if (!usercheck)
+        return interaction.reply({ content: `❌ ${targetUser.tag} does not exist in the User Database.` })
+    else if (!allnotes.length) {
         return interaction.reply({
             embeds: [
                 new EmbedBuilder()

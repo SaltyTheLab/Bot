@@ -6,7 +6,7 @@ import path from 'node:path'
 // Read and parse logos JSON correctly
 const info = fs.readFileSync('./Database/logos.json', 'utf-8');
 const logos = JSON.parse(info);
-
+let updatedButtons;
 function shuffle(array) {
     for (let i = array.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -61,7 +61,7 @@ export async function execute(interaction) {
     const collector = interaction.channel.createMessageComponentCollector({ filter, time: 15000 });
 
     collector.on('collect', async i => {
-        const updatedButtons = new ActionRowBuilder();
+        let updatedButtons = new ActionRowBuilder();
 
         options.forEach(option => {
             const isCorrect = option.brand === logo.brand;
@@ -93,4 +93,22 @@ export async function execute(interaction) {
 
         collector.stop();
     });
+
+    collector.on('end', async (collected, reason) => {
+        if (collected.size === 0 && reason == 'time') {
+            updatedButtons = new ActionRowBuilder()
+
+            options.forEach(option => {
+                updatedButtons.addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`disabled_${option.brand}`)
+                        .setLabel(option.brand)
+                        .setStyle(ButtonStyle.Primary)
+                        .setDisabled(true)
+                )
+            })
+
+            await interaction.editReply({ components: [updatedButtons] })
+        }
+    })
 }

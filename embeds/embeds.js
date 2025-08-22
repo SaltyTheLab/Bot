@@ -1,96 +1,51 @@
 import { EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle, StringSelectMenuBuilder } from 'discord.js';
-import guildChannelMap from '../BotListeners/Extravariables/channelids.js';
+import guildChannelMap from '../BotListeners/Extravariables/channelconfiguration.js';
 import { saveMessageIDs, loadMessageIDs } from '../utilities/messageStorage.js';
-
-
 const guildEmbedConfig = {
     "1231453115937587270": [ // Salty's Guild ID
-        "rules", "mental", "appeal", "staffguide", "consoles",
-        "colors", "pronouns", "continent", "stream", "dividers"
+        "rules", "mental", "appeal", "staffguide", "getroles"
     ],
     "1347217846991851541": [ // Evo's Guild ID
-        "EvoRules", "EvoContent",
-        "EvoGames", "Evocolors"
-    ]
-    // Add more guild configurations here
+        "EvoRules", "EvoContent", "EvoGames", "Evocolors"
+    ],
+    "1342845801059192913": []
 };
-
-export async function embedsenders(guildId, client) {
-    if (!guildId) {
-        console.log(`Error: guild not found for ${guildId}`);
-        return;
-    }
-    const guild = client.guilds.cache.get(guildId);
-    console.log(`Successfully retrieved guild: ${guildId}`);
-    const guildChannels = guildChannelMap[guildId];
-    if (!guildChannels) {
-        console.error(`❌ No channel mapping found for guild ID: ${guildId}. Please check guildChannelMap.`);
-        return;
-    }
-    // 1. Load the existing message IDs from the file
-    // This will be the array that we modify in memory
-    const messageIDs = loadMessageIDs(); // Call the function to load the array
-
-    // Define your embed sending functions as an OBJECT
-    const embedSendersMap = {
-        "rules": sendRulesEmbed,
-        "mental": sendMentalHealthEmbed,
-        "appeal": sendAppealEmbed,
-        "staffguide": sendStaffGuideEmbed,
-        "consoles": sendConsoleRoleEmbed,
-        "colors": sendColorsRoleEmbed,
-        "pronouns": sendPronounsRoleEmbed,
-        "continent": sendContinentRoleEmbed,
-        "stream": sendStreamRoleEmbed,
-        "dividers": sendDividersRoleEmbed,
-        "EvoRules": EvosendRulesEmbed,
-        "EvoContent": EvosendContentRoleEmbed,
-        "EvoGames": EvosendGameRoleEmbed,
-        "Evocolors": EvosendColorsRoleEmbed
-    };
-
-    const guildSpecificEmbedNames = guildEmbedConfig[guildId];
-    if (!guildSpecificEmbedNames) {
-        console.warn(`No embed configuration found for guild ID: ${guildId}. Skipping embeds for this guild.`);
+// New function to handle the common tasks of sending and saving embed info
+async function sendEmbedAndSave(guild, messageIDs, embedName, embedData, guildChannels) {
+    const targetChannelId = guildChannels[embedName];
+    console.log(embedData);
+    if (!targetChannelId) {
+        console.error(`❌ No channel ID found for embed name: '${embedName}' in guild ${guild.id}.`);
         return;
     }
 
-    const embedTasks = [];
-    // Iterate directly over the object's entries
-    for (const embedName of guildSpecificEmbedNames) {
-        const senderFunc = embedSendersMap[embedName];
-        if (!senderFunc) {
-            console.error(`❌ No sender function found for embed name: '${embedName}' in embedSendersMap. Check guildEmbedConfig.`);
-            continue; // Skip if a function isn't defined for the specified name
-        }
+    const channel = await guild.channels.fetch(targetChannelId);
+    if (!channel?.isTextBased()) {
+        console.error(`Channel ${targetChannelId} for '${embedName}' embed is not text-based.`);
+        return;
+    }
+    const { embeds, components } = embedData;
+    const msg = await channel.send({ embeds, components });
 
-        // Find the entry in the *current in-memory messageIDs array*
-        console.log(`Checking embed for name: '${embedName}'`);
-
-        const existingEmbedInfo = messageIDs.find(item => item.name === embedName);
-
-        // Condition to send a new embed:
-        // 1. If no entry exists for this embedName in the loaded data, OR
-        // 2. If an entry exists, but it's missing either messageId or channelid
-        if (!existingEmbedInfo || !existingEmbedInfo.messageId || !existingEmbedInfo.channelid) {
-            console.log(`Attempting to send new embed for: '${embedName}' (ID missing or incomplete).`);
-            // Pass guild, the *modifiable messageIDs array*, and the current embedName
-            embedTasks.push(senderFunc(guild, messageIDs, embedName, guildChannels));
-        } else {
-            // Log with both IDs for clarity
-            console.log(`Message '${embedName}' already exists: Message ID: ${existingEmbedInfo.messageId}, Channel ID: ${existingEmbedInfo.channelid}. Skipping creation.`);
-            // Optional: Add logic here to UPDATE existing embeds if their content changes.
+    if (embedData.reactions && embedData.reactions.length > 0) {
+        for (const reaction of embedData.reactions) {
+            try {
+                await msg.react(reaction);
+            } catch (error) {
+                console.error(`Failed to react with ${reaction}:`, error);
+            }
         }
     }
 
-    await Promise.all(embedTasks);
-    if (embedTasks.length > 0) {
-        saveMessageIDs(messageIDs);
-        console.log('Embed sending process completed (new embeds created/IDs saved to file).');
-    } else
-        console.log('All Embeds already exist.');
+    console.log(`📝 Sent '${embedName}' embed. Message ID:`, msg.id);
+
+    messageIDs.push({
+        name: embedName,
+        messageId: msg.id,
+        channelid: channel.id
+    });
 }
-async function sendRulesEmbed(guild, messageIDs, key, guildChannels) {
+async function createRulesEmbed(guild) {
     const rules = new EmbedBuilder()
         .setTitle('**__Rules__**')
         .setAuthor({
@@ -148,30 +103,11 @@ async function sendRulesEmbed(guild, messageIDs, key, guildChannels) {
         .setTitle('Roles')
         .setDescription('Feel free to grab some roles in <#1235323618582466621> channel.');
 
-    const targetChannelId = guildChannels.rules;
-    if (!targetChannelId) {
-        console.error(`❌ No rules channel ID found for guild ${guild.id}.`);
-        return;
-    }
-    const channel = await guild.channels.fetch(targetChannelId);
-    if (!channel?.isTextBased()) {
-        console.error(`Channel ${targetChannelId} for '${key}' embed is not text-based.`);
-        return;
-    }
-    const msg = await channel.send({ embeds: [rules, roles] });
-
-    console.log(`📝 Sent '${key}' embed. Message ID:`, msg.id);
-
-    // Add a new entry to the array if it didn't exist
-    messageIDs.push({
-        name: key,
-        messageId: msg.id,
-        channelid: channel.id
-    });
-
+    return {
+        embeds: [rules, roles]
+    };
 }
-
-async function sendMentalHealthEmbed(guild, messageIDs, key, guildChannels) {
+async function createMentalHealthEmbed(guild) {
     const mentalhealth = new EmbedBuilder()
         .setTitle('Mental Health')
         .setAuthor({
@@ -243,31 +179,11 @@ async function sendMentalHealthEmbed(guild, messageIDs, key, guildChannels) {
                     ].join('\n'),
 
             })
-
-    const targetChannelId = guildChannels.mental;
-    if (!targetChannelId) {
-        console.error(`❌ No mental health channel ID found for guild ${guild.id}.`);
-        return;
+    return {
+        embeds: [mentalhealth]
     }
-    const channel = await guild.channels.fetch(targetChannelId);
-    if (!channel?.isTextBased()) {
-        console.error(`Channel ${targetChannelId} for '${key}' embed is not text-based.`);
-        return;
-    }
-    const msg = await channel.send({ embeds: [mentalhealth] });
-
-    console.log(`📝 Sent '${key}' embed. Message ID:`, msg.id);
-
-    // Add a new entry to the array if it didn't exist
-    messageIDs.push({
-        name: key,
-        messageId: msg.id,
-        channelid: channel.id
-    });
-
 }
-
-async function sendAppealEmbed(guild, messageIDs, key, guildChannels) {
+async function createAppealEmbed() {
     const appealsembed = new EmbedBuilder()
         .setTitle('Ticket Appeal Form')
         .setDescription([
@@ -285,33 +201,12 @@ async function sendAppealEmbed(guild, messageIDs, key, guildChannels) {
 
     const row = new ActionRowBuilder().addComponents(appealbutton);
 
-    const targetChannelId = guildChannels.appeal;
-    if (!targetChannelId) {
-        console.error(`❌ No appeal channel ID found for guild ${guild.id}.`);
-        return;
-    }
-    const channel = await guild.channels.fetch(targetChannelId);
-    if (!channel?.isTextBased()) {
-        console.error(`Channel ${targetChannelId} for '${key}' embed is not text-based.`);
-        return;
-    }
-    const msg = await channel.send({
-        name: "appeal",
+    return {
         embeds: [appealsembed],
         components: [row]
-    });
-
-    console.log(`📝 Sent '${key}' embed. Message ID:`, msg.id);
-
-    // Add a new entry to the array if it didn't exist
-    messageIDs.push({
-        name: key,
-        messageId: msg.id,
-        channelid: channel.id
-    });
+    }
 }
-
-async function sendStaffGuideEmbed(guild, messageIDs, key, guildChannels) {
+async function createStaffGuideEmbed(guild) {
     const staffguides = new EmbedBuilder()
         .setTitle('Staff Guidelines')
         .setAuthor({
@@ -346,30 +241,11 @@ async function sendStaffGuideEmbed(guild, messageIDs, key, guildChannels) {
         }
         )
 
-    const targetChannelId = guildChannels.staffguide;
-    if (!targetChannelId) {
-        console.error(`❌ No staff guide channel ID found for guild ${guild.id}.`);
-        return;
+    return {
+        embeds: [staffguides]
     }
-    const channel = await guild.channels.fetch(targetChannelId);
-    if (!channel?.isTextBased()) {
-        console.error(`Channel ${targetChannelId} for '${key}' embed is not text-based.`);
-        return;
-    }
-    const msg = await channel.send({ embeds: [staffguides] });
-
-    console.log(`📝 Sent '${key}' embed. Message ID:`, msg.id);
-
-    // Add a new entry to the array if it didn't exist
-    messageIDs.push({
-        name: key,
-        messageId: msg.id,
-        channelid: channel.id
-    });
-
 }
-
-async function sendConsoleRoleEmbed(guild, messageIDs, key, guildChannels) {
+async function createConsoleRoleEmbed() {
     const consoles = new EmbedBuilder()
         .setTitle('What do you play on?')
         .setDescription(['💻:<@&1235323729936908379>',
@@ -378,34 +254,13 @@ async function sendConsoleRoleEmbed(guild, messageIDs, key, guildChannels) {
             '🟥: <@&1235323733246476329>',
             '📱: <@&1235323733795799154>',
             '🎧: <@&1272280467940573296>'].join('\n'))
-    const targetChannelId = guildChannels.getroles;
-    if (!targetChannelId) {
-        console.error(`❌ No getroles channel ID found for guild ${guild.id}.`);
-        return;
-    }
-    const channel = await guild.channels.fetch(targetChannelId);
-    if (!channel?.isTextBased()) {
-        console.error(`Channel ${targetChannelId} for '${key}' embed is not text-based.`);
-        return;
-    }
-    const msg = await channel.send({ embeds: [consoles] });
     const consoleemotes = ['💻', '📦', '🚉', '🟥', '📱', '🎧']
-    for (const console of consoleemotes) {
-        msg.react(console)
+    return {
+        embeds: [consoles],
+        reactions: consoleemotes
     }
-
-    console.log(`📝 Sent '${key}' embed. Message ID:`, msg.id);
-
-
-    // Add a new entry to the array if it didn't exist
-    messageIDs.push({
-        name: key,
-        messageId: msg.id,
-        channelid: channel.id
-    });
 }
-
-async function sendColorsRoleEmbed(guild, messageIDs, key, guildChannels) {
+async function createColorsRoleEmbed() {
     const color = new EmbedBuilder()
         .setTitle('Get Your Colors here!')
         .setDescription([
@@ -417,34 +272,13 @@ async function sendColorsRoleEmbed(guild, messageIDs, key, guildChannels) {
             '🟡: <@&1235323625037500466>',
             '🔵: <@&1235323625452601437>'
         ].join('\n'))
-    const targetChannelId = guildChannels.getroles;
-    if (!targetChannelId) {
-        console.error(`❌ No getroles channel ID found for guild ${guild.id}.`);
-        return;
+    const colors = ['🔴', '🟣', '🟢', '🩷', '🟠', '🟡', '🔵'];
+    return {
+        embeds: [color],
+        reactions: colors
     }
-    const channel = await guild.channels.fetch(targetChannelId);
-    if (!channel?.isTextBased()) {
-        console.error(`Channel ${targetChannelId} for '${key}' embed is not text-based.`);
-        return;
-    }
-    const msg = await channel.send({ embeds: [color] });
-    const colors = ['🔴', '🟣', '🟢', '🩷', '🟠', '🟡', '🔵']
-    for (const color of colors) {
-        msg.react(color)
-    }
-
-    console.log(`📝 Sent '${key}' embed. Message ID:`, msg.id);
-
-    // Add a new entry to the array if it didn't exist
-    messageIDs.push({
-        name: key,
-        messageId: msg.id,
-        channelid: channel.id
-    });
-
 }
-
-async function sendPronounsRoleEmbed(guild, messageIDs, key, guildChannels) {
+async function createPronounsRoleEmbed() {
     const pronouns = new EmbedBuilder()
         .setTitle('Identity?')
         .setDescription([
@@ -453,34 +287,13 @@ async function sendPronounsRoleEmbed(guild, messageIDs, key, guildChannels) {
             '💜: <@&1235323774505582634>',
             '💚: <@&1235323775772528766>'
         ].join('\n'))
-    const targetChannelId = guildChannels.getroles;
-    if (!targetChannelId) {
-        console.error(`❌ No getroles channel ID found for guild ${guild.id}.`);
-        return;
-    }
-    const channel = await guild.channels.fetch(targetChannelId);
-    if (!channel?.isTextBased()) {
-        console.error(`Channel ${targetChannelId} for '${key}' embed is not text-based.`);
-        return;
-    }
-    const msg = await channel.send({ embeds: [pronouns] });
     const nouns = ['🧡', '💛', '💜', '💚',]
-    for (const pronoun of nouns) {
-        msg.react(pronoun)
+    return {
+        embeds: [pronouns],
+        reactions: nouns
     }
-
-    console.log(`📝 Sent '${key}' embed. Message ID:`, msg.id);
-
-    // Add a new entry to the array if it didn't exist
-    messageIDs.push({
-        name: key,
-        messageId: msg.id,
-        channelid: channel.id
-    });
-
 }
-
-async function sendContinentRoleEmbed(guild, messageIDs, key, guildChannels) {
+async function createContinentRoleEmbed() {
     const continent = new EmbedBuilder()
         .setTitle('Where you on the earth?')
         .setDescription([
@@ -491,97 +304,43 @@ async function sendContinentRoleEmbed(guild, messageIDs, key, guildChannels) {
             '🐨: <@&1235335167560912927>',
             '🦒: <@&1235335168458231951>'
         ].join('\n'))
-    const targetChannelId = guildChannels.getroles;
-    if (!targetChannelId) {
-        console.error(`❌ No getroles channel ID found for guild ${guild.id}.`);
-        return;
-    }
-    const channel = await guild.channels.fetch(targetChannelId);
-    if (!channel?.isTextBased()) {
-        console.error(`Channel ${targetChannelId} for '${key}' embed is not text-based.`);
-        return;
-    }
-    const msg = await channel.send({ embeds: [continent] });
 
     const location = [
         '🇪🇺', '🦅', '🌄', '🐼', '🐨', '🦒'
     ];
-    for (const continent of location) {
-        try {
-            await msg.react(continent);
 
-        } catch (err) {
-            console.error(`❌ Failed to react with ${continent}:`, err);
-        }
+    return {
+        embeds: [continent],
+        reactions: location
     }
-
-    console.log(`📝 Sent '${key}' embed. Message ID:`, msg.id);
-    // Add a new entry to the array if it didn't exist
-    messageIDs.push({
-        name: key,
-        messageId: msg.id,
-        channelid: channel.id
-    });
-
 }
-
-async function sendStreamRoleEmbed(guild, messageIDs, key, guildChannels) {
+async function createStreamRoleEmbed() {
     const twitch = new EmbedBuilder()
         .setTitle('Twitch Pings')
         .setDescription('React here to get notified of when <@857445139416088647> is live!')
-    const targetChannelId = guildChannels.getroles;
-    if (!targetChannelId) {
-        console.error(`❌ No getroles channel ID found for guild ${guild.id}.`);
-        return;
-    }
-    const channel = await guild.channels.fetch(targetChannelId);
-    if (!channel?.isTextBased()) {
-        console.error(`Channel ${targetChannelId} for '${key}' embed is not text-based.`);
-        return;
-    }
-    const msg = await channel.send({ embeds: [twitch] });
-    msg.react('▶️')
 
-    console.log(`📝 Sent '${key}' embed. Message ID:`, msg.id);
+    const react = ['▶️'];
 
-    // Add a new entry to the array if it didn't exist
-    messageIDs.push({
-        name: key,
-        messageId: msg.id,
-        channelid: channel.id
-    });
+    return {
+        embeds: [twitch],
+        reactions: react
+    }
 }
-
-async function sendDividersRoleEmbed(guild, messageIDs, key, guildChannels) {
+async function createDividersRoleEmbed() {
     const dividers = new EmbedBuilder()
         .setTitle('Divders')
         .setDescription(
             'React here to get the Divider roles for easy viewing'
         )
-    const targetChannelId = guildChannels.getroles;
-    if (!targetChannelId) {
-        console.error(`❌ No getroles channel ID found for guild ${guild.id}.`);
-        return;
-    }
-    const channel = await guild.channels.fetch(targetChannelId);
-    if (!channel?.isTextBased()) {
-        console.error(`Channel ${targetChannelId} for '${key}' embed is not text-based.`);
-        return;
-    }
-    const msg = await channel.send({ embeds: [dividers] });
-    msg.react('🚧')
+    const react = ['🚧'];
 
-    console.log(`📝 Sent '${key}' embed. Message ID:`, msg.id);
+    return {
+        embeds: [dividers],
+        reactions: react
+    }
 
-    // Add a new entry to the array if it didn't exist
-    messageIDs.push({
-        name: key,
-        messageId: msg.id,
-        channelid: channel.id
-    });
 }
-
-async function EvosendColorsRoleEmbed(guild, messageIDs, key, guildChannels) {
+async function EvocreateColorsRoleEmbed() {
     const Evocolor = new EmbedBuilder()
         .setTitle('Pick your color')
         .setDescription(['It\'s a small but fun way to express yourself and stand out from the crowd.',
@@ -593,48 +352,19 @@ async function EvosendColorsRoleEmbed(guild, messageIDs, key, guildChannels) {
             '🔵: <@&1347447594690805933>',
             '🟤: <@&1347447591901859882>'
         ].join('\n'))
-    const targetChannelId = guildChannels.getroles;
-    if (!targetChannelId) {
-        console.error(`❌ No getroles channel ID found for guild ${guild.id}.`);
-        return;
-    }
-    const channel = await guild.channels.fetch(targetChannelId);
-    if (!channel?.isTextBased()) {
-        console.error(`Channel ${targetChannelId} for '${key}' embed is not text-based.`);
-        return;
-    }
-    const msg = await channel.send({ embeds: [Evocolor] });
+
     const colors = ['🔴', '🟣', '🟢', '🔵', '🟤']
-    for (const color of colors) {
-        msg.react(color)
+
+    return {
+        embeds: [Evocolor],
+        reactions: colors
     }
-
-    console.log(`📝 Sent '${key}' embed. Message ID:`, msg.id);
-
-    // Add a new entry to the array if it didn't exist
-    messageIDs.push({
-        name: key,
-        messageId: msg.id,
-        channelid: channel.id
-    });
-
 }
-
-async function EvosendContentRoleEmbed(guild, messageIDs, key, guildChannels) {
+async function EvocreateContentRoleEmbed() {
     const content = new EmbedBuilder()
         .setTitle('Want some content updates????')
         .setDescription('React to this message to get your roles!')
         .setColor(0x9900ff)
-    const targetChannelId = guildChannels.getroles;
-    if (!targetChannelId) {
-        console.error(`❌ No getroles channel ID found for guild ${guild.id}.`);
-        return;
-    }
-    const channel = await guild.channels.fetch(targetChannelId);
-    if (!channel?.isTextBased()) {
-        console.error(`Channel ${targetChannelId} for '${key}' embed is not text-based.`);
-        return;
-    }
     const selectMenu = new StringSelectMenuBuilder()
         .setCustomId('stream_role_select')
         .setPlaceholder('Select some content')
@@ -694,34 +424,15 @@ async function EvosendContentRoleEmbed(guild, messageIDs, key, guildChannels) {
     const actionRow = new ActionRowBuilder()
         .addComponents(selectMenu)
 
-    const msg = await channel.send({
+    return {
         embeds: [content],
         components: [actionRow]
-    });
-    console.log(`📝 Sent '${key}' embed. Message ID:`, msg.id);
-
-    // Add a new entry to the array if it didn't exist
-    messageIDs.push({
-        name: key,
-        messageId: msg.id,
-        channelid: channel.id
-    });
+    }
 }
-
-async function EvosendGameRoleEmbed(guild, messageIDs, key, guildChannels) {
+async function EvocreateGameRoleEmbed() {
     const gameRole = new EmbedBuilder()
         .setTitle('Games')
         .setDescription('Pick the games you play. Don\'t pick games if you don\'t play them.')
-    const targetChannelId = guildChannels.getroles;
-    if (!targetChannelId) {
-        console.error(`❌ No getroles channel ID found for guild ${guild.id}.`);
-        return;
-    }
-    const channel = await guild.channels.fetch(targetChannelId);
-    if (!channel?.isTextBased()) {
-        console.error(`Channel ${targetChannelId} for '${key}' embed is not text-based.`);
-        return;
-    }
     const gameMenu = new StringSelectMenuBuilder()
         .setCustomId('Game_role_Select')
         .setPlaceholder('Select your games')
@@ -833,22 +544,12 @@ async function EvosendGameRoleEmbed(guild, messageIDs, key, guildChannels) {
         )
     const actionRow = new ActionRowBuilder()
         .addComponents(gameMenu)
-
-    const msg = await channel.send({
+    return {
         embeds: [gameRole],
-        components: [actionRow]
-    });
-
-    console.log(`📝 Sent '${key}' embed. Message ID:`, msg.id);
-    messageIDs.push({
-        name: key,
-        messageId: msg.id,
-        channelid: channel.id
-    });
-
+        components: actionRow
+    }
 }
-
-async function EvosendRulesEmbed(guild, messageIDs, key, guildChannels) {
+async function EvocreateRulesEmbed(guild) {
     const rules = new EmbedBuilder()
         .setAuthor({
             name: 'EvoNightWolf\'s Server',
@@ -890,25 +591,77 @@ async function EvosendRulesEmbed(guild, messageIDs, key, guildChannels) {
             }
         )
 
-    const targetChannelId = guildChannels.rules;
-    if (!targetChannelId) {
-        console.error(`❌ No rules channel ID found for guild ${guild.id}.`);
+    return {
+        embeds: [rules]
+    }
+}
+export async function embedsenders(guild) {
+    const guildChannels = guildChannelMap[guild.id].publicChannels;
+    if (!guildChannels) {
+        console.error(`❌ No channel mapping found for guild ID: ${guild.id}. Please check guildChannelMap.`);
         return;
     }
-    const channel = await guild.channels.fetch(targetChannelId);
-    if (!channel?.isTextBased()) {
-        console.error(`Channel ${targetChannelId} for '${key}' embed is not text-based.`);
+    // 1. Load the existing message IDs from the file
+    // This will be the array that we modify in memory
+    const messageIDs = loadMessageIDs(); // Call the function to load the array
+
+    // Define your embed sending functions as an OBJECT
+    const embedSendersMap = {
+        "rules": createRulesEmbed,
+        "mental": createMentalHealthEmbed,
+        "appeal": createAppealEmbed,
+        "staffguide": createStaffGuideEmbed,
+        "getroles": [createConsoleRoleEmbed,
+            createColorsRoleEmbed,
+            createPronounsRoleEmbed,
+            createContinentRoleEmbed,
+            createStreamRoleEmbed,
+            createDividersRoleEmbed
+        ],
+        "EvoRules": EvocreateRulesEmbed,
+        "EvoContent": EvocreateContentRoleEmbed,
+        "EvoGames": EvocreateGameRoleEmbed,
+        "Evocolors": EvocreateColorsRoleEmbed
+    };
+
+    const guildSpecificEmbedNames = guildEmbedConfig[guild.id];
+    if (!guildSpecificEmbedNames) {
+        console.warn(`No embed configuration found for guild ID: ${guild.id}. Skipping embeds for this guild.`);
         return;
     }
-    const msg = await channel.send({ embeds: [rules] });
 
-    console.log(`📝 Sent '${key}' embed. Message ID:`, msg.id);
+    const embedTasks = [];
+    // Iterate directly over the object's entries
+    for (const embedName of guildSpecificEmbedNames) {
+        const senderFunc = embedSendersMap[embedName];
+        if (!senderFunc) {
+            console.error(`❌ No sender function found for embed name: '${embedName}' in embedSendersMap. Check guildEmbedConfig.`);
+            continue; // Skip if a function isn't defined for the specified name
+        }
 
-    // Add a new entry to the array if it didn't exist
-    messageIDs.push({
-        name: key,
-        messageId: msg.id,
-        channelid: channel.id
-    });
+        const senderFuncsArray = Array.isArray(senderFunc) ? senderFunc : [senderFunc]
+        // Find the entry in the *current in-memory messageIDs array*
+        for (const senderFunc of senderFuncsArray) {
+            console.log(`Checking embed for name: '${embedName}'`);
 
+            const existingEmbedInfo = messageIDs.find(item => item.name === embedName);
+
+            if (!existingEmbedInfo || !existingEmbedInfo.messageId || !existingEmbedInfo.channelid) {
+                console.log(`Attempting to send new embed for: '${embedName}' (ID missing or incomplete).`);
+                const embedData = await senderFunc(guild)
+                embedTasks.push(sendEmbedAndSave(guild, messageIDs, embedName, embedData, guildChannels));
+            } else {
+                // Log with both IDs for clarity
+                console.log(`Message '${embedName}' already exists: Message ID: ${existingEmbedInfo.messageId}, Channel ID: ${existingEmbedInfo.channelid}. Skipping creation.`);
+                // Optional: Add logic here to UPDATE existing embeds if their content changes.
+            }
+        }
+    }
+
+    await Promise.all(embedTasks);
+    if (embedTasks.length > 0) {
+        saveMessageIDs(messageIDs);
+        console.log('Embed sending process completed (new embeds created/IDs saved to file).');
+    } else
+        console.log('All Embeds already exist.');
 }

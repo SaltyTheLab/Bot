@@ -1,9 +1,9 @@
 import { EmbedBuilder } from "discord.js";
-import { guildModChannelMap } from "./Extravariables/channelids.js";
+import guildChannelMap from "./Extravariables/channelconfiguration.js";
 export async function messageUpdate(oldMessage, newMessage) {
     const guildId = oldMessage.guild.id;
-    
-    const guildChannels = guildModChannelMap[guildId]
+
+    const modChannels = guildChannelMap[guildId].modChannels
     /**
      * return early if no message change detected, is created by bot, or
      * isn't in the server
@@ -11,7 +11,7 @@ export async function messageUpdate(oldMessage, newMessage) {
     if (!oldMessage.guild || oldMessage.author?.bot || oldMessage.content === newMessage.content) return;
 
     //get log channel
-    const logChannel = await oldMessage.guild.channels.fetch(guildChannels.updatedlogChannel);
+    const logChannel = await oldMessage.guild.channels.fetch(modChannels.updatedlogChannel);
     if (!logChannel) return;
     //created masked link of the message link
     const messageLink = `https://discord.com/channels/${oldMessage.guild.id}/${oldMessage.channel.id}/${oldMessage.id}`;
