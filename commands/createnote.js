@@ -16,8 +16,12 @@ export async function execute(interaction) {
     const note = interaction.options.getString('note')
     const moderator = interaction.user;
     const guildId = interaction.guild.id
-
-    addNote({ userId: target.id, moderatorId: moderator.id, note: note, guildId: guildId })
+    try {
+        addNote({ userId: target.id, moderatorId: moderator.id, note: note, guildId: guildId })
+    } catch (err) {
+        console.warn(`is not in the user database.`, err)
+        interaction.reply({ content: `${target.tag} is not in the User Database` })
+    }
 
     const commandembed = new EmbedBuilder()
         .setColor(0x00a900)
