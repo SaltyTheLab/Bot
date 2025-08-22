@@ -24,15 +24,47 @@
     "image": "Database\\images\\starbucks.png"
   },
   {
-    "brand" : "Newgrounds",
-    "image" : "Database\\images\\NewGrounds.png"
+    "brand": "Newgrounds",
+    "image": "Database\\images\\NewGrounds.png"
   },
   {
-    "brand" : "Nine Inch Nails",
-    "image" : "Database\\images\\nine inch nails.png"
+    "brand": "Nine Inch Nails",
+    "image": "Database\\images\\nine inch nails.png"
   },
   {
-    "brand" : "Target",
-    "image" : "Database\\images\\Target.png"
+    "brand": "Target",
+    "image": "Database\\images\\Target.png"
+  },
+  {
+    "brand": "Amazon",
+    "image": "Database\\images\\amazon.png"
+  },
+  {
+    "brand": "bic",
+    "image": "Database\\images\\bic.png"
+  },
+  {
+    "brand": "Buffalo Wild Wings",
+    "image": "Database\\images\\Buffalo WIld Wings.png"
+  },
+  {
+    "brand": "Corsair",
+    "image": "Database\\images\\corsair.png"
+  },
+  {
+    "brand": "Cubs",
+    "image": "Database\\images\\Cubs.png"
+  },
+  {
+    "brand": "Toyota",
+    "image": "Database\\images\\toyota.png"
+  },
+  {
+    "brand": "Volks Wagon",
+    "image": "Database\\images\\Volks Wagon.png"
+  },
+  {
+    "brand": "Reddit",
+    "image": "Database\\images\\reddit.png"
   }
 ]
