@@ -1,75 +1,63 @@
-const deletedLogsId = "1353555735614849044";
-const welcomeChannelId = '1262950864889319434';
-const updatedMessagesChannelId = '1353558675855376384';
-const nameLogChannelId = '1394761880366616657';
-const banlogChannelid = '1256029364768997406';
-const mutelogChannelid = '1311483105206472745';
-const generalChannelid = '1231453115937587273';
-const ruleschannelid = '1235295566356025354';
-const mentalhealthid = '1390128922712342659';
-const ticketappealsid = '1272261219805298729';
-const staffguidesid = '1262533685002113155';
-const getrolesid = '1235323618582466621';
-const hobbiescatagorey = '1262972525642649610';
-const mediacatagorey = '1311485962567548970';
-const adultcatagorey = '1235309784685744308';
-const countingchannelid = '1406810924806832218';
-const evodeletedLogsId = "1403065389021270066";
-const evowelcomeChannelId = '1403065196653842604';
-const evoupdatedMessagesChannelId = '1403065299216891985';
-const evonameLogChannelId = '1403065343202693181';
-const evobanlogChannelid = '1403065225472643174';
-const evomutelogChannelid = '1403065255126503537';
-const evogeneralChannelid = '1347403115573542942';
-const evoruleschannelid = '1347399775951257704';
-const evogetrolesid = '1347227575998484538';
-const evoadultcatagorey = '1347589981513711656';
-
-export const guildModChannelMap = {
+const guildChannelMap = {
     "1231453115937587270": {
-        mutelogChannel: mutelogChannelid,
-        deletedlogChannel: deletedLogsId,
-        welcomeChannel: welcomeChannelId,
-        updatedlogChannel: updatedMessagesChannelId,
-        namelogChannel: nameLogChannelId,
-        banlogChannel: banlogChannelid,
+        modChannels: {
+            mutelogChannel: '1311483105206472745',
+            deletedlogChannel: "1353555735614849044",
+            welcomeChannel: '1262950864889319434',
+            updatedlogChannel: '1353558675855376384',
+            namelogChannel: '1394761880366616657',
+            banlogChannel: '1256029364768997406',
+        },
+        publicChannels: {
+            rules: '1235295566356025354',
+            mental: '1390128922712342659',
+            appeal: '1272261219805298729',
+            staffguide: '1262533685002113155',
+            getroles: '1235323618582466621',
+            generalChannel: '1231453115937587273',
+            countingChannel: '1406810924806832218'
+        },
+        exclusions: {
+            hobbies: '1262972525642649610',
+            media: '1311485962567548970',
+            adultcatagorey: '1235309784685744308'
+        }
     },
     "1347217846991851541": {
-        mutelogChannel: evomutelogChannelid,
-        banlogChannel: evobanlogChannelid,
-        welcomeChannel: evowelcomeChannelId,
-        deletedlogChannel: evodeletedLogsId,
-        updatedlogChannel: evoupdatedMessagesChannelId,
-        namelogChannel: evonameLogChannelId,
-    }
+        modChannels: {
+            mutelogChannel: '1403065255126503537',
+            banlogChannel: '1403065225472643174',
+            welcomeChannel: '1403065196653842604',
+            deletedlogChannel: '1403065389021270066',
+            updatedlogChannel: '1403065299216891985',
+            namelogChannel: '1403065343202693181'
+        },
+        publicChannels: {
+            rules: '1347399775951257704',
+            getroles: '1347227575998484538',
+            generalChannel: '1347403115573542942'
+        },
+        exclusions: {
+            adultcatagorey: '1347589981513711656'
+        }
+    },
+    "1342845801059192913": {
+        modChannels: {
+            mutelogChannel: '1408174384342106234',
+            banlogChannel: '1408174241559482379',
+            welcomeChannel: '1408174219665211402',
+            deletedlogChannel: '1408174271066407022',
+            updatedlogChannel: '1408174346345910282',
+            namelogChannel: '1408174310903910420'
+        },
+        channels: {
+            generalChannel: '1342845802980048939'
+        },
+        exclusions: {
+            adultcatagorey: '1388114900118667366',
+            petschannel: '1408128548924821514',
+            dirtycatagorey: '1388116196406071296'
+        }
+    },
 };
-export const guildChannelMap = {
-    "1231453115937587270": {
-        channels: {
-            rules: ruleschannelid,
-            mental: mentalhealthid,
-            appeal: ticketappealsid,
-            staffguide: staffguidesid,
-            getroles: getrolesid,
-            generalChannel: generalChannelid,
-            counting: countingchannelid
-        },
-        exclusions: {
-            hobbies: hobbiescatagorey,
-            media: mediacatagorey,
-            adultcatagorey: adultcatagorey
-        }
-    },
-    "1347217846991851541": {
-        channels: {
-            rules: evoruleschannelid,
-            getroles: evogetrolesid,
-            generalChannel: evogeneralChannelid
-        },
-        exclusions: {
-            adultcatagorey: evoadultcatagorey
-        }
-    }
-}
-
 export default guildChannelMap;
