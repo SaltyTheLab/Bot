@@ -7,10 +7,10 @@ const LOG_COLORS = {
 };
 //define and build embed template
 export async function buildLogEmbed(interaction, log, idx, totalLogs) {
-    const [targetUser, moderator] = Promise.all(
-        [await interaction.client.users.fetch(log.userId),
-        await interaction.client.users.fetch(log.moderatorId)
-        ])
+    const [targetUser, moderator] = await Promise.all(
+        [interaction.client.users.fetch(log.userId),
+        interaction.client.users.fetch(log.moderatorId)
+        ]);
     const formattedDate = new Date(log.timestamp).toLocaleString('en-US', {
         dateStyle: 'medium',
         timeStyle: 'short',
@@ -74,9 +74,9 @@ export async function buildButtons(idx, totalLogs, isDeletable, logId, disabled 
     return new ActionRowBuilder().addComponents(...buttons);
 };
 export async function buildNoteEmbed(interaction, index, currentNote, length) {
-    const [target, mod] = Promise.all(
-        [await interaction.client.users.fetch(currentNote.userId),
-        await interaction.client.users.fetch(currentNote.moderatorId)
+    const [target, mod] = await Promise.all(
+        [interaction.client.users.fetch(currentNote.userId),
+        interaction.client.users.fetch(currentNote.moderatorId)
         ])
     const formattedDate = new Date(currentNote.timestamp).toLocaleString('en-US', {
         dateStyle: 'medium',
