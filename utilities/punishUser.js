@@ -1,9 +1,10 @@
-import { EmbedBuilder } from 'discord.js';
+import { EmbedBuilder, GuildMember } from 'discord.js';
 import getWarnStats from '../moderation/simulatedwarn.js';
 import getNextPunishment from '../moderation/punishments.js';
 import { addPunishment } from '../Database/databasefunctions.js';
 import logRecentCommand from '../Logging/recentcommands.js';
-import { guildModChannelMap } from '../BotListeners/Extravariables/channelconfiguration.js';
+import guildChannelMap from '../BotListeners/Extravariables/channelconfiguration.js';
+
 
 const THRESHOLD = 24 * 60 * 60 * 1000; // 24h
 const unitMap = { min: 60000, hour: 3600000, day: 86400000 };
@@ -39,7 +40,6 @@ const getDurationDisplay = ms => {
  * @param {number} [options.buttonflag=0] - Flag to indicate if the action came from a button interaction.
  * @returns {Promise<object>} returns an embed based on if it is automated or not
  */
-
 export default async function punishUser({
   guild,
   target,
@@ -53,154 +53,154 @@ export default async function punishUser({
   banflag = false,
   buttonflag = false
 }) {
-  const targetUser = await guild.members.fetch(target);
-  let durationStr;
-  let effectiveDurationMs;
-  let warnType;
-  const multiplier = unitMap[unit]
+  const modChannels = guildChannelMap[guild.id].modChannels
+  try {
+    const targetUser = await guild.members.fetch(target).catch(() => null) ?? await guild.client.users.fetch(target).catch(() => null);
+    let durationStr;
+    let effectiveDurationMs;
+    let warnType;
 
-  // --- Define what type it is ---
-  if (banflag)
-    warnType = 'Ban'
-  else if (duration > 0) {
-    warnType = 'Mute'
-    if (!multiplier || duration <= 0)
-      return '❌ Invalid duration or unit specified for mute.';
-    const calculatedDurationMs = isAutomated ? duration * multiplier : duration;
-    effectiveDurationMs = Math.min(calculatedDurationMs, isAutomated ? MAX_TIMEOUT_MS : 100000000);
-    durationStr = getDurationDisplay(effectiveDurationMs);
-  }
-  else
-    warnType = 'Warn'
-  if (!targetUser.bot) {
+
+    // --- Define what type it is ---
+    if (banflag)
+      warnType = 'Ban'
+    else if (duration > 0) {
+      warnType = 'Mute'
+      const multiplier = unitMap[unit]
+      if (!multiplier || duration <= 0)
+        return '❌ Invalid duration or unit specified for mute.';
+      const calculatedDurationMs = isAutomated ? duration * multiplier : duration;
+      effectiveDurationMs = Math.min(calculatedDurationMs, isAutomated ? MAX_TIMEOUT_MS : 100000000);
+      durationStr = getDurationDisplay(effectiveDurationMs);
+    }
+    else
+      warnType = 'Warn'
     try {
       addPunishment(targetUser.id, moderatorUser.id, reason, effectiveDurationMs, warnType, currentWarnWeight, channel.id, guild.id);
     } catch (err) {
       console.warn(err)
+      return `${targetUser} does not exist in User database(SQLITE error).`;
     }
-  } else
-    `${targetUser.tag} is a bot.`
+    // Fetch updated active warnings for the user after the new warn has been added.
+    const { activeWarnings } = await getWarnStats(targetUser.id, guild.id);
 
-  // Fetch updated active warnings for the user after the new warn has been added.
-  const { activeWarnings } = await getWarnStats(targetUser.id, guild.id);
+    // Get label for the next punishment stage based on the *total* active warnings.
+    const { label } = getNextPunishment(activeWarnings.length);
 
-  // Get label for the next punishment stage based on the *total* active warnings.
-  const { label } = getNextPunishment(activeWarnings.length);
+    // --- 3. Calculating Expiry Time ---
+    const expiresAt = new Date(Date.now() + THRESHOLD);
+    const formattedExpiry = `<t:${Math.floor(expiresAt.getTime() / 1000)}:F>`;
 
-  // --- 3. Calculating Expiry Time ---
-  const expiresAt = new Date(Date.now() + THRESHOLD);
-  const formattedExpiry = `<t:${Math.floor(expiresAt.getTime() / 1000)}:F>`;
-
-  // --- Common fields for Embed Building ---
-  const commonFields = (warnReason, warnWeight, activeWarnsCount, durationStr = '', formattedExpiry, warnType) => {
-    if (warnType == 'Ban')
-      return [{ name: 'Reason:', value: `\`${warnReason}\``, inline: false }]
-    else
-      return [
+    // --- Common fields for Embed Building ---
+    const commonFields = (warnReason, warnWeight, activeWarnsCount, durationStr = '', formattedExpiry, warnType) => {
+      if (warnType == 'Ban')
+        return [{ name: 'Reason:', value: `\`${warnReason}\``, inline: false }]
+      else return [
         { name: 'Reason:', value: `\`${warnReason}\``, inline: false },
         { name: 'Punishments:', value: `\`${warnWeight} warn${durationStr ? `, ${durationStr}` : ''}\``, inline: false },
         { name: 'Active Warnings:', value: `\`${activeWarnsCount}\``, inline: false },
         { name: duration > 0 ? 'Mute expires:' : 'Warn expires:', value: `${formattedExpiry}` },
       ];
-  };
+    };
 
-  // Build DM embed to notify the user
-  const dmEmbed = new EmbedBuilder()
-    .setColor(LOG_COLORS[warnType])
-    .setAuthor({
-      name: `${targetUser.user.tag}`,
-      iconURL: targetUser.displayAvatarURL({ dynamic: true }),
-    })
-    .setThumbnail(guild.iconURL())
-    .setDescription(warnType == 'Ban' ? `${targetUser}, you have been **banned** from **${guild.name}**.\n\n` +
-      `Please [click here](https://dyno.gg/form/9dd2f880) to appeal your ban.`
-      : duration > 0 ? `<@${targetUser.id}>, you were given a \`${durationStr} mute\` in ${guild.name}.`
-        : `<@${targetUser.id}>, you were given a \`warning\` in ${guild.name}.`)
-    .addFields(
+    // Build DM embed to notify the user
+    const dmEmbed = new EmbedBuilder()
+      .setColor(LOG_COLORS[warnType])
+      .setAuthor({
+        name: `${targetUser instanceof GuildMember ? targetUser.user.tag : targetUser.tag}`,
+        iconURL: targetUser.displayAvatarURL({ dynamic: true }),
+      })
+      .setThumbnail(guild.iconURL())
+      .setDescription(warnType == 'Ban' ? `${targetUser}, you have been **banned** from **${guild.name}**.\n\n` +
+        `Please [click here](https://dyno.gg/form/9dd2f880) to appeal your ban.`
+        : duration > 0 ? `<@${targetUser.id}>, you were given a \`${durationStr} mute\` in ${guild.name}.`
+          : `<@${targetUser.id}>, you were given a \`warning\` in ${guild.name}.`)
+      .addFields(
+        ...commonFields(reason, currentWarnWeight, activeWarnings.length, durationStr, formattedExpiry, warnType),
+      )
+      .setTimestamp();
+
+    const fields = [
+      { name: 'Target:', value: `${targetUser}`, inline: true },
+      { name: 'Channel:', value: `${channel}`, inline: true },
+      // Use the spread operator to include all fields from commonFields
       ...commonFields(reason, currentWarnWeight, activeWarnings.length, durationStr, formattedExpiry, warnType),
-    )
-    .setTimestamp();
+      // The conditional field for 'Next Punishment'
+      warnType !== 'Ban' ? { name: 'Next Punishment:', value: `\`${label}\``, inline: false } : null
+    ];
 
-  const fields = [
-    { name: 'Target:', value: `${targetUser}`, inline: true },
-    { name: 'Channel:', value: `${channel}`, inline: true },
-    // Use the spread operator to include all fields from commonFields
-    ...commonFields(reason, currentWarnWeight, activeWarnings.length, durationStr, formattedExpiry, warnType),
-    // The conditional field for 'Next Punishment'
-    warnType !== 'Ban' ? { name: 'Next Punishment:', value: `\`${label}\``, inline: false } : null
-  ];
+    // Embed for moderation log channel
+    const logEmbed = new EmbedBuilder()
+      .setColor(LOG_COLORS[warnType])
+      .setAuthor({
+        name: warnType == 'Ban' ? `${moderatorUser.tag} banned a member`
+          : duration > 0 ? `${moderatorUser.tag} muted a member`
+            : `${moderatorUser.tag} warned a member`,
+        iconURL: moderatorUser.displayAvatarURL({ dynamic: true }),
+      })
+      .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
+      .setFields(fields.filter(field => field !== null))
+      .setTimestamp();
 
-  // Embed for moderation log channel
-  const logEmbed = new EmbedBuilder()
-    .setColor(LOG_COLORS[warnType])
-    .setAuthor({
-      name: warnType == 'Ban' ? `${moderatorUser.tag} banned a member`
-        : duration > 0 ? `${moderatorUser.tag} muted a member`
-          : `${moderatorUser.tag} warned a member`,
-      iconURL: moderatorUser.displayAvatarURL({ dynamic: true }),
+    // --- 5. DMing User & Logging ---
+    logEmbed.setFooter({ text: 'User was DMed.' })
+    await targetUser.send({ embeds: [dmEmbed] }).catch(dmError => {
+      console.warn(`[punishUser] Could not DM user ${targetUser instanceof GuildMember ? targetUser.user.tag : targetUser.tag}: ${dmError.message}`);
+      logEmbed.setFooter({ text: 'User could not be DMed.' });
     })
-    .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
-    .setFields(fields.filter(field => field !== null))
-    .setTimestamp();
 
-  // --- 5. DMing User & Logging ---
-  logEmbed.setFooter({ text: 'User was DMed.' })
-  await targetUser.send({ embeds: [dmEmbed] }).catch(dmError => {
-    console.warn(`[punishUser] Could not DM user ${targetUser.user.tag}: ${dmError.message}`);
-    logEmbed.setFooter({ text: 'User could not be DMed.' });
-  })
+    let logChannel = guild.channels.cache.get(warnType == 'Ban' ? modChannels.banlogChannel
+      : modChannels.mutelogChannel);
 
-  let logChannel;
-  const guildLogChannelConfig = warnType == 'Ban' ? guildModChannelMap[guild.id].banlogChannel
-    : guildModChannelMap[guild.id].mutelogChannel
+    if (!logChannel)
+      console.warn(`❌ No log channel configured for guild: ${guild.name} (${guild.id}). Mute log will not be sent.`);
 
-  if (guildLogChannelConfig) {
-    logChannel = guild.channels.cache.get(guildLogChannelConfig);
-  } else {
-    console.warn(`❌ No log channel configured for guild: ${guild.name} (${guild.id}). Mute log will not be sent.`);
-  }
-
-  const logPromise = logChannel?.send({ embeds: [logEmbed] }).catch(logSendErr => {
-    console.error(`[WarnUser] Failed to send warn log to channel ${guildLogChannelConfig?.mutelogChannel || 'unknown'}:`, logSendErr);
-  });
+    const logPromise = logChannel?.send({ embeds: [logEmbed] }).catch(logSendErr => {
+      console.error(`[WarnUser] Failed to send warn log to channel ${logChannel || 'unknown'}:`, logSendErr);
+    });
 
 
-  const actionPromise = warnType === 'Ban' ?
-    targetUser.ban({ reason: `Ban command: ${reason}`, deleteMessageSeconds: 604800 })
-    : duration > 0 ? targetUser.timeout(effectiveDurationMs, reason) :
-      Promise.resolve();
+    const actionPromise = warnType === 'Ban' ?
+      (targetUser instanceof GuildMember ? targetUser.ban({ reason: `Ban command: ${reason}`, deleteMessageSeconds: 604800 })
+        : await guild.bans.create(targetUser.id, { reason: `Ban command: ${reason}`, deleteMessageSeconds: 604800 }))
+      : duration > 0 ? targetUser.timeout(effectiveDurationMs, reason) :
+        Promise.resolve();
 
-  try {
-    await Promise.all([logPromise, actionPromise].filter(Boolean));
+    try {
+      await Promise.all([logPromise, actionPromise].filter(Boolean));
+    } catch (err) {
+      console.log(`❌ Failed to perform action: ${err.message ?? err}`);
+    }
+
+    // --- Log Command ---
+    logRecentCommand(warnType == 'Ban' ? `Ban - ${targetUser instanceof GuildMember ? targetUser.user.tag : targetUser.tag} - ${reason} - issuer: ${moderatorUser.tag}`
+      : duration > 0 ? `Mute- ${targetUser.tag} - ${reason} - issuer: ${moderatorUser.tag} duration: ${durationStr}`
+        : `warn - ${targetUser.tag} - ${reason} - issuer: ${moderatorUser.tag}`);
+
+    const commandEmbed = new EmbedBuilder()
+      .setColor(LOG_COLORS[warnType])
+      .setAuthor({
+        name: warnType == 'Ban' ? `${targetUser instanceof GuildMember ? targetUser.user.tag : targetUser.tag} was banned`
+          : duration > 0 ? `${targetUser.user.tag} was issued a ${durationStr} mute`
+            : `${targetUser.user.tag} was issued a warning`,
+        iconURL: targetUser.displayAvatarURL({ dynamic: true })
+      })
+
+    // Send confirmation embed if automated, else return the embed for manual use
+    if (!buttonflag) {
+      if (isAutomated) {
+        try {
+          await channel.send({
+            embeds: [commandEmbed]
+          });
+        } catch (sendError) {
+          console.error(`[WarnUser] Failed to send command confirmation to channel ${channel.id}: ${sendError.message}`);
+        }
+      } else
+        return commandEmbed
+    }
   } catch (err) {
-    console.log(`❌ Failed to perform action: ${err.message ?? err}`);
-  }
-
-  // --- Log Command ---
-  logRecentCommand(warnType == 'Ban' ? `Ban - ${targetUser.tag} - ${reason} - issuer: ${moderatorUser.tag}`
-    : duration > 0 ? `Mute- ${targetUser.tag} - ${reason} - issuer: ${moderatorUser.tag} duration: ${durationStr}`
-      : `warn - ${targetUser.tag} - ${reason} - issuer: ${moderatorUser.tag}`);
-
-  const commandEmbed = new EmbedBuilder()
-    .setColor(LOG_COLORS[warnType])
-    .setAuthor({
-      name: warnType == 'Ban' ? `${targetUser.user.tag} was banned`
-        : duration > 0 ? `${targetUser.user.tag} was issued a ${durationStr} mute`
-          : `${targetUser.user.tag} was issued a warning`,
-      iconURL: targetUser.displayAvatarURL({ dynamic: true })
-    })
-
-  // Send confirmation embed if automated, else return the embed for manual use
-  if (!buttonflag) {
-    if (isAutomated) {
-      try {
-        await channel.send({
-          embeds: [commandEmbed]
-        });
-      } catch (sendError) {
-        console.error(`[WarnUser] Failed to send command confirmation to channel ${channel.id}: ${sendError.message}`);
-      }
-    } else
-      return commandEmbed
+    console.warn(err)
+    return `User is not found in User Table, likely bot.(SQlite Error)`
   }
 }

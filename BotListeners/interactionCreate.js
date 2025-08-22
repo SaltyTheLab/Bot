@@ -1,4 +1,4 @@
-import { ButtonBuilder, ButtonStyle, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, EmbedBuilder } from "discord.js";
+import { ButtonBuilder, ButtonStyle, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, EmbedBuilder, GuildMember } from "discord.js";
 import punishUser from "../utilities/punishUser.js";
 import { stringreactions } from "./Extravariables/reactionrolemap.js";
 const maxTitleLength = 45;
@@ -34,11 +34,13 @@ export async function interactionCreate(interaction) {
         if (interaction.customId.startsWith('inviter_ban_delete_invite_')) {
             //split the customId into an array
             const customIdParts = interaction.customId.split('_');
-            const memberToBan = await interaction.guild.members.fetch(customIdParts[4]).catch(() => null);
+            const memberToBan = await interaction.guild.members.fetch(customIdParts[4]).catch(() => null)
+                ?? await interaction.client.users.fetch(customIdParts[4]).catch(() => null);
             const inviterId = customIdParts[5];
             const inviteCode = customIdParts[6];
 
             const fiffteenMinutesInMs = 15 * 60 * 1000;
+            const messageAge = Date.now() - interaction.message.createdTimestamp
 
             //check permissions for banning, is a valid user and is bannable
             if (!interaction.member.permissions.has('BAN_MEMBERS')) {
@@ -46,54 +48,29 @@ export async function interactionCreate(interaction) {
                 return;
             }
 
-            if (!memberToBan) {
-                await interaction.reply({ content: 'Could not find the user to ban.', ephemeral: true });
-                return;
-            }
+            if (messageAge > fiffteenMinutesInMs) {
+                await interaction.reply({ content: 'This ban button has expired (15 mins have already passed since they joined).', ephemeral: true });
 
-            if (!memberToBan.bannable) {
-                await interaction.reply({ content: 'I cannot ban this user (they may have a higher role or I lack the permissions).', ephemeral: true });
-                return;
-            }
-
-            // The ban button should only expire if the member is still in the guild.
-            // If the member has left (memberToBan is null), the button is
-            // still valid.
-            if (memberToBan) {
-                if (memberToBan && Date.now() - memberToBan.joinedAt.getTime() > fiffteenMinutesInMs) {
-                    await interaction.reply({ content: 'This ban button has expired (15 mins have already passed since they joined).', ephemeral: true });
-
-                    const originalMessage = interaction.message;
-                    const updatedBanButton = new ButtonBuilder()
-                        .setCustomId(interaction.customId)
-                        .setLabel('🔨 Ban (Expired)')
-                        .setStyle(ButtonStyle.Danger)
-                        .setDisabled(true);
-
-                    const updatedActionRow = new ActionRowBuilder()
-                        .addComponents(updatedBanButton);
-
-                    await originalMessage.edit({ components: [updatedActionRow] });
-                    return;
-                }
-            } else {
-                await interaction.reply({ content: 'The user associated ith this ban button has left the server, so the button is now expired.', ephemeral: true })
                 const originalMessage = interaction.message;
                 const updatedBanButton = new ButtonBuilder()
-                    .setLabel('🔨 User Left (Expired)')
-                    .setStyle(ButtonStyle.Secondary) // Change style as it's not a ban failure, but user left
+                    .setCustomId(interaction.customId)
+                    .setLabel('🔨 Ban (Expired)')
+                    .setStyle(ButtonStyle.Danger)
                     .setDisabled(true);
+
                 const updatedActionRow = new ActionRowBuilder()
                     .addComponents(updatedBanButton);
+
                 await originalMessage.edit({ components: [updatedActionRow] });
                 return;
             }
+
             let inviter = null;
             if (inviterId != 'no inviter') {
                 inviter = await interaction.guild.members.fetch(inviterId).catch(() => null)
             }
 
-            let memberTag = memberToBan ? memberToBan.user.tag : 'User has left the server';
+            let memberTag = memberToBan instanceof GuildMember ? memberToBan.user.tag : memberToBan.tag;
             let inviterTag = inviterId && inviterId !== 'no inviter' ? inviter.user.tag : '';
 
             // Calculate available space for inviter tag
@@ -132,8 +109,8 @@ export async function interactionCreate(interaction) {
             const userIdToBan = customIdParts[2];
             const inviterId = customIdParts[3];
             const inviteCode = customIdParts[4];
-            const userToBan = await interaction.guild.members.fetch(userIdToBan).catch(() => null);
-
+            const userToBan = await interaction.guild.members.fetch(userIdToBan).catch(() => null)
+                ?? await interaction.client.users.fetch(userIdToBan);
 
             console.log(`Modal submitted for user ID: ${userIdToBan}, Inviter ID: ${inviterId}`);
 
@@ -167,7 +144,7 @@ export async function interactionCreate(interaction) {
                     buttonflag: true
                 });
                 banSuccess = true
-                finalMessage = `Successfully banned ${userToBan.user.tag}. `;
+                finalMessage = `Successfully banned ${userToBan instanceof GuildMember ? userToBan.user.tag : userToBan.tag}. `;
             } catch (error) {
                 console.error(`Error banning user ${userToBan.user.tag}:`, error);
                 return;
