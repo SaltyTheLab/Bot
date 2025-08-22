@@ -1,13 +1,9 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
-import { guildModChannelMap } from "../BotListeners/Extravariables/channelids.js";
+import guildChannelMap from "../BotListeners/Extravariables/channelconfiguration.js";
 export default async function updateExpiredButtons(client, guildIds) {
-    const guildIdarray = guildIds.split(',').map(id => id.trim());
-    const guildFetchPromises = guildIdarray.map(id => client.guilds.fetch(id));
-    const guilds = await Promise.all(guildFetchPromises);
-
-    for (const guild of guilds) {
-
-        const Channels = guildModChannelMap[guild.id];
+    for (const id of guildIds) {
+        const guild = await client.guilds.cache.get(id);
+        const Channels = guildChannelMap[id].modChannels;
         const welcomeChannel = await guild.channels.fetch(Channels.welcomeChannel);
         if (!welcomeChannel) {
             console.log(`Welcome Channel not found for ${guild.name} (${guild.id})`);
