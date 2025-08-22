@@ -5,49 +5,14 @@
         "channelid": "1272261219805298729"
     },
     {
-        "name": "rules",
-        "messageId": "1403151791801110701",
-        "channelid": "1235295566356025354"
-    },
-    {
         "name": "mental",
         "messageId": "1403151791708704780",
         "channelid": "1390128922712342659"
     },
     {
-        "name": "consoles",
-        "messageId": "1403151791914483873",
-        "channelid": "1235323618582466621"
-    },
-    {
         "name": "staffguide",
         "messageId": "1403151792216473670",
         "channelid": "1262533685002113155"
-    },
-    {
-        "name": "colors",
-        "messageId": "1403151793088630885",
-        "channelid": "1235323618582466621"
-    },
-    {
-        "name": "pronouns",
-        "messageId": "1403151795173199964",
-        "channelid": "1235323618582466621"
-    },
-    {
-        "name": "stream",
-        "messageId": "1403151797308100703",
-        "channelid": "1235323618582466621"
-    },
-    {
-        "name": "dividers",
-        "messageId": "1403151798843347012",
-        "channelid": "1235323618582466621"
-    },
-    {
-        "name": "continent",
-        "messageId": "1403151796188483584",
-        "channelid": "1235323618582466621"
     },
     {
         "name": "EvoRules",
@@ -68,5 +33,40 @@
         "name": "Evocolors",
         "messageId": "1403161856629014618",
         "channelid": "1347227575998484538"
+    },
+    {
+        "name": "rules",
+        "messageId": "1407523833543393417",
+        "channelid": "1235295566356025354"
+    },
+    {
+        "name": "getroles",
+        "messageId": "1407528825465864242",
+        "channelid": "1235323618582466621"
+    },
+    {
+        "name": "getroles",
+        "messageId": "1407528843664818228",
+        "channelid": "1235323618582466621"
+    },
+    {
+        "name": "getroles",
+        "messageId": "1407528823058337964",
+        "channelid": "1235323618582466621"
+    },
+    {
+        "name": "getroles",
+        "messageId": "1407528821292269568",
+        "channelid": "1235323618582466621"
+    },
+    {
+        "name": "getroles",
+        "messageId": "1407528823771238403",
+        "channelid": "1235323618582466621"
+    },
+    {
+        "name": "getroles",
+        "messageId": "1407528822089322547",
+        "channelid": "1235323618582466621"
     }
 ]
