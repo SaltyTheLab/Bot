@@ -52,17 +52,20 @@ export async function interactionCreate(interaction) {
                 await interaction.reply({ content: 'This ban button has expired (15 mins have already passed since they joined).', ephemeral: true });
 
                 const originalMessage = interaction.message;
-                const updatedBanButton = new ButtonBuilder()
-                    .setCustomId(interaction.customId)
-                    .setLabel('🔨 Ban (Expired)')
-                    .setStyle(ButtonStyle.Danger)
-                    .setDisabled(true);
+                const banbuttonLabel = originalMessage.components[0].components[0].label;
+                if (banbuttonLabel == '🔨 Ban User & Delete Invite' || banbuttonLabel === '🔨 Ban') {
+                    const updatedBanButton = new ButtonBuilder()
+                        .setCustomId(interaction.customId)
+                        .setLabel(banbuttonLabel == '🔨 Ban User & Delete Invite' ? '🔨 Ban User & Delete Invite (Expired)' : '🔨 Ban (Expired)')
+                        .setStyle(ButtonStyle.Danger)
+                        .setDisabled(true);
 
-                const updatedActionRow = new ActionRowBuilder()
-                    .addComponents(updatedBanButton);
+                    const updatedActionRow = new ActionRowBuilder()
+                        .addComponents(updatedBanButton);
 
-                await originalMessage.edit({ components: [updatedActionRow] });
-                return;
+                    await originalMessage.edit({ components: [updatedActionRow] });
+                    return;
+                }
             }
 
             let inviter = null;
@@ -210,15 +213,17 @@ export async function interactionCreate(interaction) {
         if (interaction.customId === 'stream_role_select' || interaction.customId === 'Game_role_Select') {
             await interaction.deferReply({ ephemeral: true })
             const member = interaction.member;
+            const guildid = interaction.guild.id;
+            const reactions = stringreactions[guildid].roles
             const rolesAdded = [];
             const rolesRemoved = [];
 
-            const allPossibleSelectValues = Object.keys(stringreactions).filter(() => {
+            const allPossibleSelectValues = Object.keys(stringreactions[guildid].roles).filter(() => {
                 return true;
             });
 
             for (const roleValue of allPossibleSelectValues) {
-                const roleID = stringreactions[roleValue];
+                const roleID = reactions[roleValue];
 
                 if (!roleID) {
                     console.warn(`⚠️ No role mapped for select menu value: ${roleValue}. Skipping.`);
