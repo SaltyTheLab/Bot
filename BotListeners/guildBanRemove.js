@@ -22,7 +22,6 @@ export async function guildBanRemove(ban) {
         const punishments = await getPunishments(ban.user.id, ban.guild.id);
         const bans = punishments.filter(punishment => punishment.warnType === 'Ban');
 
-        console.log(`Total bans: ${bans}`)
         // Create an embed for the unban
         const embed = new EmbedBuilder()
             .setColor(0x309eff) // A distinct color for unbans
@@ -32,7 +31,7 @@ export async function guildBanRemove(ban) {
                 `**User**: ${ban.user}`,
                 `**Tag**: \`${ban.user.tag}\``,
                 `**Id**: \`${ban.user.id}\`\n\n`,
-                `**Reason**: \`${bans.reason ? bans.reason : 'No reasons provided'}\``
+                `**Reason**: \`${bans.reason ? `${bans.reason}` : 'No reasons provided'}\``
             ].join('\n'))
             .setTimestamp()
 

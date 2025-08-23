@@ -2,7 +2,7 @@ import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.
 import { deleteNote, getUser, viewNotes } from '../Database/databasefunctions.js';
 import { buildNoteButtons, buildNoteEmbed } from '../utilities/buildmodlogembeds.js';
 export const data = new SlashCommandBuilder()
-    .setName('note_show')
+    .setName('noteshow')
     .setDescription('View the notes of a user')
     .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
     .addUserOption(opt =>

@@ -45,11 +45,11 @@ export default async function AutoMod(client, message) {
   //delete violating message and generate reason
   const shouldDelete = matchedWord || hasInvite || everyonePing
   const [evaluationResult] = await Promise.all([
+    evaluateViolations({ hasInvite, matchedWord, everyonePing, ...violationFlags, isNewUser }),
     shouldDelete ? message.delete().catch(err => {
       console.error(`Failed to delete message message: ${err.message}`);
       return null;
     }) : Promise.resolve(null),
-    evaluateViolations({ hasInvite, matchedWord, everyonePing, ...violationFlags, isNewUser }),
   ]);
 
   if (!evaluationResult || !evaluationResult.violations.length) return;

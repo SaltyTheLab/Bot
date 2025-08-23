@@ -5,7 +5,6 @@ import { addPunishment } from '../Database/databasefunctions.js';
 import logRecentCommand from '../Logging/recentcommands.js';
 import guildChannelMap from '../BotListeners/Extravariables/channelconfiguration.js';
 
-
 const THRESHOLD = 24 * 60 * 60 * 1000; // 24h
 const unitMap = { min: 60000, hour: 3600000, day: 86400000 };
 const MAX_TIMEOUT_MS = 21600000; // 6 hours max timeout for automated timeouts
@@ -159,10 +158,8 @@ export default async function punishUser({
       console.error(`[WarnUser] Failed to send warn log to channel ${logChannel || 'unknown'}:`, logSendErr);
     });
 
-
     const actionPromise = warnType === 'Ban' ?
-      (targetUser instanceof GuildMember ? targetUser.ban({ reason: `Ban command: ${reason}`, deleteMessageSeconds: 604800 })
-        : await guild.bans.create(targetUser.id, { reason: `Ban command: ${reason}`, deleteMessageSeconds: 604800 }))
+      await guild.bans.create(targetUser.id, { reason: `Ban command: ${reason}`, deleteMessageSeconds: 604800 })
       : duration > 0 ? targetUser.timeout(effectiveDurationMs, reason) :
         Promise.resolve();
 
