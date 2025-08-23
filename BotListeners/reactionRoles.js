@@ -18,9 +18,9 @@ async function handleReactionChange(reaction, user, action = 'add') {
     console.error(`❌ Failed to fetch reaction or user (${action}):`, err);
     return;
   }
-
+  const guildEmbeds = embedIDs[reaction.message.guild.id];
   //return if not a vaild message or message id isn't in the messageIDs array
-  const isValidMessageId = embedIDs.some(embedInfo => embedInfo.messageId === reaction.message.id);
+  const isValidMessageId = guildEmbeds.some(embedInfo => embedInfo.messageId === reaction.message.id);
 
   if (!isValidMessageId)
     return;
