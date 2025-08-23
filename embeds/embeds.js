@@ -2,18 +2,31 @@ import { EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle, StringSelec
 import guildChannelMap from '../BotListeners/Extravariables/channelconfiguration.js';
 import { saveMessageIDs, loadMessageIDs } from '../utilities/messageStorage.js';
 const guildEmbedConfig = {
-    "1231453115937587270": [ // Salty's Guild ID
-        "rules", "mental", "appeal", "staffguide", "getroles"
+    "1231453115937587270": [
+        { name: "rules", senderFunc: createRulesEmbed },
+        { name: "mental", senderFunc: createMentalHealthEmbed },
+        { name: "appeal", senderFunc: createAppealEmbed },
+        { name: "staffguide", senderFunc: createStaffGuideEmbed },
+        { name: "getstream", senderFunc: createStreamRoleEmbed },
+        { name: "getdividers", senderFunc: createDividersRoleEmbed },
+        { name: "getpronouns", senderFunc: createPronounsRoleEmbed },
+        { name: "getconsole", senderFunc: createConsoleRoleEmbed },
+        { name: "getlocation", senderFunc: createContinentRoleEmbed },
+        { name: "getcolor", senderFunc: createColorsRoleEmbed }
     ],
-    "1347217846991851541": [ // Evo's Guild ID
-        "EvoRules", "EvoContent", "EvoGames", "Evocolors"
+    "1347217846991851541": [
+        { name: "rules", senderFunc: EvocreateRulesEmbed },
+        { name: "Getcontent", senderFunc: EvocreateContentRoleEmbed },
+        { name: "Getgames", senderFunc: EvocreateGameRoleEmbed },
+        { name: "Getcolor", senderFunc: EvocreateColorsRoleEmbed }
     ],
-    "1342845801059192913": []
+    "1342845801059192913": [
+        { name: "rules", senderFunc: BarkCreateRulesEmbed }
+    ]
 };
 // New function to handle the common tasks of sending and saving embed info
 async function sendEmbedAndSave(guild, messageIDs, embedName, embedData, guildChannels) {
     const targetChannelId = guildChannels[embedName];
-    console.log(embedData);
     if (!targetChannelId) {
         console.error(`❌ No channel ID found for embed name: '${embedName}' in guild ${guild.id}.`);
         return;
@@ -39,10 +52,16 @@ async function sendEmbedAndSave(guild, messageIDs, embedName, embedData, guildCh
 
     console.log(`📝 Sent '${embedName}' embed. Message ID:`, msg.id);
 
-    messageIDs.push({
+    // In your loop for each embed:
+    if (!messageIDs[guild.id]) {
+        // If the guild doesn't exist in our object, create an entry for it
+        messageIDs[guild.id] = [];
+    }
+
+    messageIDs[guild.id].push({
         name: embedName,
         messageId: msg.id,
-        channelid: channel.id
+        channelid: channel.id,
     });
 }
 async function createRulesEmbed(guild) {
@@ -546,7 +565,7 @@ async function EvocreateGameRoleEmbed() {
         .addComponents(gameMenu)
     return {
         embeds: [gameRole],
-        components: actionRow
+        components: [actionRow]
     }
 }
 async function EvocreateRulesEmbed(guild) {
@@ -595,73 +614,89 @@ async function EvocreateRulesEmbed(guild) {
         embeds: [rules]
     }
 }
-export async function embedsenders(guild) {
-    const guildChannels = guildChannelMap[guild.id].publicChannels;
-    if (!guildChannels) {
-        console.error(`❌ No channel mapping found for guild ID: ${guild.id}. Please check guildChannelMap.`);
-        return;
+async function BarkCreateRulesEmbed(guild) {
+    const rules = new EmbedBuilder()
+        .setAuthor({
+            name: 'Bark',
+            iconURL: guild.iconURL({ size: 1024, extension: 'png' }) || undefined
+        })
+        .setDescription([`How automod works:`,
+            `things that are tracked:`,
+            '* Caps',
+            '* everyone ping',
+            '* bad words(will tell you what is caught)',
+            '* Discord Invites',
+            '* General Spam',
+            '* Duplicate messeages',
+            '* media(more on this in a bit\n\n',
+            'for each warn you get from automod or manual, this becomes an Active warn meaning that the next punishment will compound and extend the mute if automod is triggered. After 24 hours, the warn that was issued will expire\n',
+            '**For media**:',
+            'Media has a limit of 1 per 20 messages, this is at a individual level so if someone else send media, you will not get penalized'
+        ].join('\n')
+        )
+        .setFooter({ text: 'Bark', iconURL: guild.iconURL({ size: 1024, extension: 'png' }) });
+    return {
+        embeds: [rules]
     }
-    // 1. Load the existing message IDs from the file
-    // This will be the array that we modify in memory
-    const messageIDs = loadMessageIDs(); // Call the function to load the array
+}
+export async function embedsenders(client, guildIds) {
+    let embedTasks = [];
+    let messageIDs = loadMessageIDs();
+    let newMessageIds = {};
+    for (const id of guildIds) {
+        const guild = client.guilds.cache.get(id)
+        const guildChannels = guildChannelMap[guild.id].publicChannels;
+        if (!guildChannels) {
+            console.error(`❌ No channel mapping found for guild ID: ${guild.id}. Please check guildChannelMap.`);
+            return;
+        }
+        // 1. Load the existing message IDs from the file
+        // This will be the array that we modify in memory
+        // Call the function to load the array
 
-    // Define your embed sending functions as an OBJECT
-    const embedSendersMap = {
-        "rules": createRulesEmbed,
-        "mental": createMentalHealthEmbed,
-        "appeal": createAppealEmbed,
-        "staffguide": createStaffGuideEmbed,
-        "getroles": [createConsoleRoleEmbed,
-            createColorsRoleEmbed,
-            createPronounsRoleEmbed,
-            createContinentRoleEmbed,
-            createStreamRoleEmbed,
-            createDividersRoleEmbed
-        ],
-        "EvoRules": EvocreateRulesEmbed,
-        "EvoContent": EvocreateContentRoleEmbed,
-        "EvoGames": EvocreateGameRoleEmbed,
-        "Evocolors": EvocreateColorsRoleEmbed
-    };
-
-    const guildSpecificEmbedNames = guildEmbedConfig[guild.id];
-    if (!guildSpecificEmbedNames) {
-        console.warn(`No embed configuration found for guild ID: ${guild.id}. Skipping embeds for this guild.`);
-        return;
-    }
-
-    const embedTasks = [];
-    // Iterate directly over the object's entries
-    for (const embedName of guildSpecificEmbedNames) {
-        const senderFunc = embedSendersMap[embedName];
-        if (!senderFunc) {
-            console.error(`❌ No sender function found for embed name: '${embedName}' in embedSendersMap. Check guildEmbedConfig.`);
-            continue; // Skip if a function isn't defined for the specified name
+        const guildConfigs = guildEmbedConfig[guild.id];
+        if (!guildConfigs) {
+            console.log(`No embed configuration found for guild ID: ${guild.id}`);
+            return;
         }
 
-        const senderFuncsArray = Array.isArray(senderFunc) ? senderFunc : [senderFunc]
-        // Find the entry in the *current in-memory messageIDs array*
-        for (const senderFunc of senderFuncsArray) {
-            console.log(`Checking embed for name: '${embedName}'`);
 
-            const existingEmbedInfo = messageIDs.find(item => item.name === embedName);
+        // Iterate directly over the object's entries
+        for (const embedConfig of guildConfigs) {
+            const { name: embedName, senderFunc } = embedConfig;
 
-            if (!existingEmbedInfo || !existingEmbedInfo.messageId || !existingEmbedInfo.channelid) {
-                console.log(`Attempting to send new embed for: '${embedName}' (ID missing or incomplete).`);
-                const embedData = await senderFunc(guild)
-                embedTasks.push(sendEmbedAndSave(guild, messageIDs, embedName, embedData, guildChannels));
-            } else {
-                // Log with both IDs for clarity
-                console.log(`Message '${embedName}' already exists: Message ID: ${existingEmbedInfo.messageId}, Channel ID: ${existingEmbedInfo.channelid}. Skipping creation.`);
-                // Optional: Add logic here to UPDATE existing embeds if their content changes.
+            const existingEmbedInfo = messageIDs[guild.id]?.find((embed) => embed.name === embedName);
+            if (!existingEmbedInfo) {
+                const embedData = await senderFunc(guild);
+                embedTasks.push(sendEmbedAndSave(guild, newMessageIds, embedName, embedData, guildChannels));
+            }
+            else {
+                try {
+                    // Fetch the message from the channel using its ID
+                    const channel = await guild.client.channels.fetch(existingEmbedInfo.channelid);
+                    const message = await channel.messages.fetch(existingEmbedInfo.messageId);
+                    const embedData = await senderFunc(guild);
+
+                    // Edit the message with the new embed content
+                    await message.edit({
+                        embeds: embedData.embeds,
+                        ...(embedData.components && { components: embedData.components }),
+                    });
+                    if (embedData.reactions && embedData.reactions.length > 0) {
+                        for (const reaction of embedData.reactions) {
+                            await message.react(reaction);
+                        }
+                    }
+
+                    console.log(`✅ Message '${embedName}' updated successfully.`);
+                } catch (error) {
+                    console.error(`❌ Failed to update message '${embedName}':`, error);
+                }
             }
         }
+        await Promise.all(embedTasks);
     }
-
-    await Promise.all(embedTasks);
-    if (embedTasks.length > 0) {
-        saveMessageIDs(messageIDs);
-        console.log('Embed sending process completed (new embeds created/IDs saved to file).');
-    } else
-        console.log('All Embeds already exist.');
+    if (Object.keys(newMessageIds).length > 0)
+        saveMessageIDs(newMessageIds)
+    console.log('Embed sending process completed (new embeds created/IDs saved to file).');
 }

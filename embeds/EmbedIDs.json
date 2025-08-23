@@ -1,72 +1,83 @@
-[
-    {
-        "name": "appeal",
-        "messageId": "1403151792090382478",
-        "channelid": "1272261219805298729"
-    },
-    {
-        "name": "rules",
-        "messageId": "1403151791801110701",
-        "channelid": "1235295566356025354"
-    },
-    {
-        "name": "mental",
-        "messageId": "1403151791708704780",
-        "channelid": "1390128922712342659"
-    },
-    {
-        "name": "consoles",
-        "messageId": "1403151791914483873",
-        "channelid": "1235323618582466621"
-    },
-    {
-        "name": "staffguide",
-        "messageId": "1403151792216473670",
-        "channelid": "1262533685002113155"
-    },
-    {
-        "name": "colors",
-        "messageId": "1403151793088630885",
-        "channelid": "1235323618582466621"
-    },
-    {
-        "name": "pronouns",
-        "messageId": "1403151795173199964",
-        "channelid": "1235323618582466621"
-    },
-    {
-        "name": "stream",
-        "messageId": "1403151797308100703",
-        "channelid": "1235323618582466621"
-    },
-    {
-        "name": "dividers",
-        "messageId": "1403151798843347012",
-        "channelid": "1235323618582466621"
-    },
-    {
-        "name": "continent",
-        "messageId": "1403151796188483584",
-        "channelid": "1235323618582466621"
-    },
-    {
-        "name": "EvoRules",
-        "messageId": "1403161854200778863",
-        "channelid": "1347399775951257704"
-    },
-    {
-        "name": "EvoContent",
-        "messageId": "1403161854661890319",
-        "channelid": "1347227575998484538"
-    },
-    {
-        "name": "EvoGames",
-        "messageId": "1403161855647809701",
-        "channelid": "1347227575998484538"
-    },
-    {
-        "name": "Evocolors",
-        "messageId": "1403161856629014618",
-        "channelid": "1347227575998484538"
-    }
-]
+{
+    "1231453115937587270": [
+        {
+            "name": "rules",
+            "messageId": "1408653443609923736",
+            "channelid": "1235295566356025354"
+        },
+        {
+            "name": "staffguide",
+            "messageId": "1408653443941535845",
+            "channelid": "1262533685002113155"
+        },
+        {
+            "name": "mental",
+            "messageId": "1408653443513450538",
+            "channelid": "1390128922712342659"
+        },
+        {
+            "name": "appeal",
+            "messageId": "1408653443958046853",
+            "channelid": "1272261219805298729"
+        },
+        {
+            "name": "getstream",
+            "messageId": "1408653443995930735",
+            "channelid": "1235323618582466621"
+        },
+        {
+            "name": "getdividers",
+            "messageId": "1408653444654567456",
+            "channelid": "1235323618582466621"
+        },
+        {
+            "name": "getpronouns",
+            "messageId": "1408653445900013588",
+            "channelid": "1235323618582466621"
+        },
+        {
+            "name": "getconsole",
+            "messageId": "1408653446910967900",
+            "channelid": "1235323618582466621"
+        },
+        {
+            "name": "getlocation",
+            "messageId": "1408653448261537914",
+            "channelid": "1235323618582466621"
+        },
+        {
+            "name": "getcolor",
+            "messageId": "1408653449427554375",
+            "channelid": "1235323618582466621"
+        }
+    ],
+    "1347217846991851541": [
+        {
+            "name": "rules",
+            "messageId": "1408653504054038578",
+            "channelid": "1347399775951257704"
+        },
+        {
+            "name": "Getcontent",
+            "messageId": "1408653504666407042",
+            "channelid": "1347227575998484538"
+        },
+        {
+            "name": "Getgames",
+            "messageId": "1408653506457636925",
+            "channelid": "1347227575998484538"
+        },
+        {
+            "name": "Getcolor",
+            "messageId": "1408653507673985195",
+            "channelid": "1347227575998484538"
+        }
+    ],
+    "1342845801059192913": [
+        {
+            "name": "rules",
+            "messageId": "1408653522421022921",
+            "channelid": "1388104789514129468"
+        }
+    ]
+}

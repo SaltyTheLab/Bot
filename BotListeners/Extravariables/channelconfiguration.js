@@ -14,6 +14,12 @@ const guildChannelMap = {
             appeal: '1272261219805298729',
             staffguide: '1262533685002113155',
             getroles: '1235323618582466621',
+            getstream: '1235323618582466621',
+            getdividers: '1235323618582466621',
+            getpronouns: '1235323618582466621',
+            getconsole: '1235323618582466621',
+            getlocation: '1235323618582466621',
+            getcolor: '1235323618582466621',
             generalChannel: '1231453115937587273',
             countingChannel: '1406810924806832218'
         },
@@ -34,7 +40,9 @@ const guildChannelMap = {
         },
         publicChannels: {
             rules: '1347399775951257704',
-            getroles: '1347227575998484538',
+            Getcontent: '1347227575998484538',
+            Getgames: '1347227575998484538',
+            Getcolor: '1347227575998484538',
             generalChannel: '1347403115573542942'
         },
         exclusions: {
@@ -50,7 +58,8 @@ const guildChannelMap = {
             updatedlogChannel: '1408174346345910282',
             namelogChannel: '1408174310903910420'
         },
-        channels: {
+        publicChannels: {
+            rules: '1388104789514129468',
             generalChannel: '1342845802980048939'
         },
         exclusions: {
