@@ -20,10 +20,6 @@ const keywords = {
   hellothere: "general Kenobi",
   barkatyou: "woof woof bark bark\nwoof woof woof bark bark\nwoof woof woof\nwoof woof woof\nbark bark bark"
 };
-const reactions = {
-  "857445139416088647": eyes,
-  bad: '😡'
-}
 export async function messageCreate(client, message) {
 
   guildId = message.guild.id;
@@ -40,25 +36,23 @@ export async function messageCreate(client, message) {
 
   //convert message to all lowercase and remove all spaces 
   const userId = message.author.id;
-  const content = message.content.toLowerCase();
-  const lowerContent = content.replace(/ /g, '');
+  const lowerContent = message.content.toLowerCase().split(/\s/);
 
-  for (const keyword in keywords) {
-    if (lowerContent.includes(keyword)) {
-      message.reply(keywords[keyword]);
+  for (const word of lowerContent) {
+    if (word in keywords) {
+      message.reply(keywords[word]);
     }
   }
 
-  for (const reaction in reactions) {
-    if (lowerContent.includes(reaction))
-      message.react(reactions[reaction])
-  }
+  if (lowerContent.includes('<@857445139416088647>'))
+    message.react(eyes)
+
+  if (lowerContent.includes('bad') && lowerContent.includes('bot'))
+    message.react('😡');
 
   //add and update xp to the user
   if ((message.type === MessageType.Default || message.type === MessageType.Reply) && message.channel.id != countingChannel)
     saveUser(await applyUserXP(userId, message, guildId));
-
-
 
   if (countingChannel && message.channel.id === countingChannel) {// check for a counting channel and if exists fetch the last valid message
     if (counting == 0) {
