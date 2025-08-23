@@ -16,7 +16,7 @@ export default async function updateExpiredButtons(client, guildIds) {
         for (const message of messages.values()) {
             const messageTimestamp = message.createdTimestamp;
 
-            if (messageTimestamp > fiffteenMinutesAgo) {
+            if (messageTimestamp <= fiffteenMinutesAgo) {
                 const buttonComponent = message.components[0];
                 if (buttonComponent && !buttonComponent.disabled) {
                     const updatedBanButton = new ButtonBuilder()

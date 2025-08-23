@@ -146,4 +146,6 @@ vite.config.ts.timestamp-*
 .vscode/settings.json
 embeds/EmbedIDs.json
 Logging/recentCommandslog.json
-Database/database.sqlite
+
+
+.vscode/settings.json

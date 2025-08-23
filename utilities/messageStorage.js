@@ -19,21 +19,21 @@ export function loadMessageIDs() {
             const rawData = fs.readFileSync(filePath, 'utf-8');
             const parsedData = JSON.parse(rawData);
 
-            if (!Array.isArray(parsedData)) {
+            if (typeof parsedData !== 'object') {
                 // If the file content is not an array (e.g., empty object,
                 // or malformed JSON),
-                console.warn(`[WARN] EmbedIDs.json content is not a valid array. Found type: ${typeof parsedData}. Returning empty array.`);
-                return [];
+                console.warn(`[WARN] EmbedIDs.json content is not a valid Object. Found type: ${typeof parsedData}. Returning empty object.`);
+                return {};
             } else
                 return parsedData; // Return the raw array directly as parsed
         } catch (error) {
             // Catch JSON parsing errors or file read errors
             console.error(`[ERROR] Failed to parse EmbedIDs.json or read file: ${error.message}. Returning empty array.`);
-            return [];
+            return {};
         }
     }
     // If the file does not exist, return an empty array.
-    return [];
+    return {};
 }
 
 /**
@@ -41,11 +41,11 @@ export function loadMessageIDs() {
  * This function now expects and saves a raw array.
  * @param {Array<{name: string, messageId: string, channelid: string}>} configArray The array of embed configurations to save.
  */
-export function saveMessageIDs(configArray) {
-    if (!Array.isArray(configArray)) {
-        console.error("[ERROR] Attempted to save non-array data to EmbedIDs.json. Skipping save.");
+export function saveMessageIDs(configObject) {
+    if (!configObject || typeof configObject !== 'object') {
+        console.error("[ERROR] Attempted to save non-object data to EmbedIDs.json. Skipping save.");
         return;
     }
-    fs.writeFileSync(filePath, JSON.stringify(configArray, null, 4), 'utf-8');
-    console.log(`[INFO] Saved ${configArray.length} embed entries to EmbedIDs.json.`);
+    fs.writeFileSync(filePath, JSON.stringify(configObject, null, 4));
+    console.log(`[INFO] Saved embed entries for ${Object.keys(configObject).length} guilds to EmbedIDs.json.`);
 }

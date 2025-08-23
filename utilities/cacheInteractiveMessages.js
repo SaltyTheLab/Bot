@@ -1,14 +1,18 @@
 import EmbedIDs from '../embeds/embedIDs.json' with {type: 'json'}
-export default async function cacheInteractiveMessages(client) {
+export default async function cacheInteractiveMessages(guild) {
     console.log('Attempting to cache all stored embeds...'); // Updated log
 
     // Iterate directly through the main array from the imported JSON config
-    if (!Array.isArray(EmbedIDs) || EmbedIDs.length === 0) {
-        console.log("ℹ️ EmbedIDs.json is not an array or is empty. No embeds to cache.");
+    if (typeof EmbedIDs !== 'object' || EmbedIDs.length === 0) {
+        console.log("ℹ️ EmbedIDs.json is not an object. No embeds to cache.");
         return;
     }
-
-    const cachePromises = EmbedIDs.map(async (embedInfo) => {
+    const guildEmbeds = EmbedIDs[guild.id];
+    if (!guildEmbeds || guildEmbeds.length === 0) {
+        console.log(`ℹ️ No embeds found for guild ${guild.id}. Skipping cache.`);
+        return;
+    }
+    const cachePromises = guildEmbeds.map(async (embedInfo) => {
         const { name, messageId, channelid } = embedInfo;
         if (!messageId || !channelid) {
             console.warn(`⚠️ Skipping caching for embed '${name}': Missing messageId or channelid.`);
@@ -16,7 +20,7 @@ export default async function cacheInteractiveMessages(client) {
         }
 
         try {
-            const channel = await client.channels.fetch(channelid); // Use the channelid from JSON
+            const channel = await guild.channels.fetch(channelid); // Use the channelid from JSON
 
             if (!channel) {
                 console.warn(`⚠️ Channel with ID ${channelid} (for '${name}') not found. Skipping caching for this message.`);
@@ -29,8 +33,10 @@ export default async function cacheInteractiveMessages(client) {
             }
 
             const message = await channel.messages.fetch(messageId);
-            channel.messages.cache.set(messageId, message);
-            console.log(`✅ Successfully cached embed '${name}' (ID: ${message.id}) from channel '${channel.name}' (${channelid}).`);
+            if (message.reactions.length > 0) {
+                channel.messages.cache.set(messageId, message);
+                console.log(`✅ Successfully cached embed '${name}' (ID: ${message.id}) from channel '${channel.name}' (${channelid}).`);
+            }
             return { status: 'fullfilled' }
         } catch (err) {
             const reason = err.code === 10003 ? "Discord API Error: Unknown Channel"
