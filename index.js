@@ -43,11 +43,11 @@ async function main() {
   client.once('ready', async () => {
     cron.schedule('0 0 * * *', async () => { await clearExpiredWarns(db) });
     cron.schedule('16,32,48,04 * * * *', async () => { await updateExpiredButtons(client, guildIDs) });
-    await cacheInteractiveMessages(client);
+    await embedsenders(client, guildIDs);
     for (const guildId of guildIDs) {
       const guild = client.guilds.cache.get(guildId);
       await initializeInvites(guild);
-      await embedsenders(guild)
+      await cacheInteractiveMessages(guild);
     }
     console.log('--- Initial Invites Cache State ---');
     for (const [key, uses] of invites) {
