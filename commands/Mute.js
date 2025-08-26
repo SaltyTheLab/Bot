@@ -1,4 +1,4 @@
-import { EmbedBuilder, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
+import { PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import punishUser from '../utilities/punishUser.js';
 
 const unitMap = { min: 60000, hour: 3600000, day: 86400000 };
@@ -54,8 +54,9 @@ export async function execute(interaction) {
         return interaction.reply({ content: '⚠️ User is already muted.', ephemeral: true });
     }
 
-    const output = await punishUser({
-        guild,
+    await punishUser({
+        interaction: interaction,
+        guild: guild,
         target: target.id,
         moderatorUser: issuer,
         reason,
@@ -64,14 +65,4 @@ export async function execute(interaction) {
         duration: durationMs,
         unit: unit
     });
-
-    if (typeof output === 'string') {
-        return interaction.reply({ content: output });
-    } else if (output instanceof EmbedBuilder) {
-        return interaction.reply({
-            embeds: [output]
-        });
-    } else {
-        return interaction.reply({ content: '❌ Unknown response format.', ephemeral: true });
-    }
 }

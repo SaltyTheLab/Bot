@@ -26,7 +26,8 @@ export async function execute(interaction) {
     if (target.bot)
         return interaction.reply({ content: 'You cannot ban a bot.', ephemeral: true });
 
-    const result = await punishUser({
+    await punishUser({
+        interaction: interaction,
         guild: interaction.guild,
         target: target.id,
         moderatorUser: interaction.user,
@@ -37,13 +38,5 @@ export async function execute(interaction) {
         duration: 0,
         banflag: true
     });
-
-    if (typeof result === 'string') {
-        // If banUser returns a string, assume it's a message for user
-        return interaction.reply({ content: result });
-    }
-
-    // fallback reply in case banUser returns undefined or null
-    return interaction.reply({ embeds: [result] });
 
 }

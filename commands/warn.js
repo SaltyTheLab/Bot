@@ -51,7 +51,8 @@ export async function execute(interaction) {
     }
 
     //run through relevent helper command function
-    const output = await punishUser({
+    await punishUser({
+        interaction: interaction,
         guild: interaction.guild,
         target: target.id,
         moderatorUser: issuer,
@@ -61,10 +62,4 @@ export async function execute(interaction) {
         duration: effectiveDurationMs,
         unit: unit
     });
-
-    if (typeof output === 'string') {
-        return interaction.reply({ content: output });
-    } else
-        return interaction.reply({ embeds: [output] });
-
 }
