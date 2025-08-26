@@ -66,7 +66,7 @@ export async function saveUser({ userData }) {
 //add a note to the notes table
 export async function addNote({ userId, moderatorId, note, guildId }) {
   const newNote = {
-    _id: new ObjectId(), moderatorId: moderatorId, note: note, timestamp: Date.now(), guildId: guildId
+    _id: new ObjectId(), userId: userId, moderatorId: moderatorId, note: note, timestamp: Date.now(), guildId: guildId
   };
   await usersCollection.updateOne(
     { userId, guildId },
@@ -100,7 +100,7 @@ export async function getActiveWarns(userId, guildId) {
 }
 export async function addPunishment(userId, moderatorId, reason, durationMs, warnType, weight, channel, guildId, messagelink) {
   const newPunishment = {
-    _id: new ObjectId(), moderatorId: moderatorId, reason: reason, duration: durationMs, timestamp: Date.now(), active: 1, weight: weight, type: warnType, channel: channel, guildId: guildId, refrence: messagelink
+    _id: new ObjectId(), UserId: userId, moderatorId: moderatorId, reason: reason, duration: durationMs, timestamp: Date.now(), active: 1, weight: weight, type: warnType, channel: channel, guildId: guildId, refrence: messagelink
   }
   await usersCollection.updateOne(
     { userId, guildId },
