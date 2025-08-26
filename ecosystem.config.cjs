@@ -1,5 +1,5 @@
 module.exports = {
-  apps : [{
+  apps: [{
     name: "Febot",
     script: "index.js", // The main script of your application
     watch: false,
@@ -10,7 +10,6 @@ module.exports = {
     env_production: {
       NODE_ENV: "production",
     },
-    // This is the important part for increasing heap size
-    node_args: "--max-old-space-size=32" 
+    exec_mode: "fork"
   }]
 };

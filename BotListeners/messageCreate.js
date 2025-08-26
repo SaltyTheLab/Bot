@@ -15,10 +15,11 @@ const keywords = {
   cute: "You're Cute",
   adorable: "You're Adorable",
   ping: "pong!",
-  saytheline: 'stay frosty :3',
   bork: "bark",
-  hellothere: "general Kenobi",
-  barkatyou: "woof woof bark bark\nwoof woof woof bark bark\nwoof woof woof\nwoof woof woof\nbark bark bark"
+  borderlands: "there ain't no rest for the wicked",
+  potato: "tomato, potato, potato, patato",
+  grr: "dont you growl at me",
+  '<@364089951660408843>': 'Awooooooooo'
 };
 export async function messageCreate(client, message) {
 
@@ -50,9 +51,18 @@ export async function messageCreate(client, message) {
   if (lowerContent.includes('bad') && lowerContent.includes('bot'))
     message.react('😡');
 
-  //add and update xp to the user
+  if (lowerContent.includes('hello') && lowerContent.includes('there')) {
+    message.reply({ content: "general Kenobi" })
+  }
+  if (lowerContent.includes('bark') && lowerContent.includes('at') && lowerContent.includes('you')) {
+    message.reply({ content: "woof woof bark bark\nwoof woof woof bark bark\nwoof woof woof\nwoof woof woof\nbark bark bark" });
+  }
+  if (lowerContent.includes('say') && lowerContent.includes('the') && lowerContent.includes('line')) {
+    message.reply('stay frosty :3')
+  }
+
   if ((message.type === MessageType.Default || message.type === MessageType.Reply) && message.channel.id != countingChannel)
-    saveUser(await applyUserXP(userId, message, guildId));
+    await applyUserXP(userId, message, guildId);
 
   if (countingChannel && message.channel.id === countingChannel) {// check for a counting channel and if exists fetch the last valid message
     if (counting == 0) {
@@ -98,11 +108,11 @@ export async function messageCreate(client, message) {
 }
 
 async function applyUserXP(userId, message, guildId) {
-  let { userData } = getUser(userId, guildId);
-  if (userData.userId === null) {
+  let userData = await getUser(userId, guildId);
+  if (!userData) {
     console.warn(`Corrupt user data found for userId: ${userId}. Initializing with defaults.`);
     const newUserData = { userId: userId, xp: 0, level: 1, coins: 100, guildId: guildId };
-    saveUser(newUserData, guildId); // Save the clean data immediately
+    await saveUser(newUserData, guildId); // Save the clean data immediately
     userData = getUser(userId, guildId); // Re-fetch the now-clean data
   }
   userData.xp += 20;
@@ -132,5 +142,5 @@ async function applyUserXP(userId, message, guildId) {
       }
     }
   }
-  return userData;
+  await saveUser({ userData });
 }

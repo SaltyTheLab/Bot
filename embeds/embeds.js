@@ -682,12 +682,6 @@ export async function embedsenders(client, guildIds) {
                         embeds: embedData.embeds,
                         ...(embedData.components && { components: embedData.components }),
                     });
-                    if (embedData.reactions && embedData.reactions.length > 0) {
-                        for (const reaction of embedData.reactions) {
-                            await message.react(reaction);
-                        }
-                    }
-
                     console.log(`✅ Message '${embedName}' updated successfully.`);
                 } catch (error) {
                     console.error(`❌ Failed to update message '${embedName}':`, error);
