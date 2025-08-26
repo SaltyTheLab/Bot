@@ -32,7 +32,7 @@ export async function execute(interaction) {
     let currentnote = allnotes[currentIndex]
 
     let replyMessage = await interaction.reply({
-        embeds: [await buildNoteEmbed(interaction, targetUser, currentIndex, currentnote, allnotes.length)],
+        embeds: [await buildNoteEmbed(interaction, currentIndex, currentnote, allnotes.length)],
         components: [await buildNoteButtons(currentIndex, allnotes, currentnote._id)]
     });
 

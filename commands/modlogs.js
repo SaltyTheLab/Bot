@@ -41,7 +41,7 @@ export async function execute(interaction) {
     let currentLog = allLogs[currentIndex];
 
     replyMessage = await interaction.reply({
-        embeds: [await buildLogEmbed(interaction, targetUser, currentLog, currentIndex, allLogs.length)],
+        embeds: [await buildLogEmbed(interaction, currentLog, currentIndex, allLogs.length)],
         components: [await buildButtons(currentIndex, allLogs.length, isAdmin, currentLog._id)], fetchReply: true
     });
 
@@ -85,7 +85,7 @@ export async function execute(interaction) {
         }
         currentLog = allLogs[currentIndex];
         replyMessage = await replyMessage.edit({
-            embeds: [await buildLogEmbed(interaction, targetUser, currentLog, currentIndex, allLogs.length)],
+            embeds: [await buildLogEmbed(interaction, currentLog, currentIndex, allLogs.length)],
             components: [await buildButtons(currentIndex, allLogs.length, isAdmin, currentLog._id)],
             fetchReply: true
         });
