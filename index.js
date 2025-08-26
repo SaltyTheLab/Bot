@@ -3,7 +3,7 @@ import { config } from 'dotenv';
 import { embedsenders } from './embeds/embeds.js';
 import { loadCommands, loadListeners } from './utilities/botreloader.js';
 import cacheInteractiveMessages from './utilities/cacheInteractiveMessages.js';
-import db from './Database/database.js';
+import connectToMongoDB from './Database/database.js';
 import initializeInvites from './utilities/initializeInvites.js';
 import register from './deploy-cmds.js';
 import cron from 'node-cron';
@@ -13,6 +13,7 @@ import invites from './BotListeners/Extravariables/invites.js';
 
 config();// Setup dotenv
 export const { TOKEN, CLIENT_ID, GUILD_ID } = process.env;
+const db = connectToMongoDB();
 export const client = new Client({ // Initialize Discord client
   intents: [
     GatewayIntentBits.Guilds,

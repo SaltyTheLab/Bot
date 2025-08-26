@@ -1,23 +1,26 @@
-import Database from 'better-sqlite3';
-import fs from 'node:fs'
-import path from 'node:path'
-// Open database
-export const db = new Database('./Database/database.sqlite', {
-  fileMustExist: true,
-});
+import { MongoClient } from 'mongodb';
 
-//load and execute schema from seperate sql file
-const schemaPath = path.resolve('./Database/Schema.sql');
-const schema = fs.readFileSync(schemaPath, 'utf-8');
-const statements = schema.split(';').filter(stmt => stmt.trim() !== '');
-//run the schema of the database
-for (const stmt of statements) {
+const uri = "mongodb://localhost:27017";
+
+const dbName = "Database";
+
+let db;
+let client;
+
+async function connectToMongoDB() {
+  if (db) {
+    return db
+  }
+
   try {
-    db.exec(stmt + ';');
+    client = new MongoClient(uri);
+    await client.connect();
+    console.log("Connected to MongoDB successfully!");
+    db = client.db(dbName);
+    return db;
   } catch (error) {
-    console.error(`error exectuing schema statement: ${stmt.trim()}`);
-    console.error(error);
-    throw error;
+    console.error("Failed to connect to MongoDB:", error);
+    process.exit(1);
   }
 }
-export default db;
+export default connectToMongoDB;
