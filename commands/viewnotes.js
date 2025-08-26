@@ -32,8 +32,8 @@ export async function execute(interaction) {
     let currentnote = allnotes[currentIndex]
 
     let replyMessage = await interaction.reply({
-        embeds: [await buildNoteEmbed(interaction, currentIndex, currentnote, allnotes.length)],
-        components: [await buildNoteButtons(currentIndex, allnotes, currentnote.id)]
+        embeds: [await buildNoteEmbed(interaction, targetUser, currentIndex, currentnote, allnotes.length)],
+        components: [await buildNoteButtons(currentIndex, allnotes, currentnote._id)]
     });
 
 
@@ -43,7 +43,7 @@ export async function execute(interaction) {
     })
 
     collector.on('collect', async i => {
-        const customIdParts = i.customId.split('_');
+        const customIdParts = i.customId.split('-');
         const action = customIdParts[1];
         const noteIdToDelete = customIdParts[2];
         await i.deferUpdate();
@@ -55,7 +55,7 @@ export async function execute(interaction) {
                 break;
             case 'del':
                 try {
-                    deleteNote(noteIdToDelete);
+                    await deleteNote(targetUser.id, interaction.guild.id, noteIdToDelete);
                     allnotes = await viewNotes(targetUser.id, interaction.guild.id);
 
                     if (allnotes.length === 0) {
@@ -79,11 +79,11 @@ export async function execute(interaction) {
         currentnote = allnotes[currentIndex]
         replyMessage = await replyMessage.edit({
             embeds: [await buildNoteEmbed(interaction, currentIndex, currentnote, allnotes.length)],
-            components: [await buildNoteButtons(currentIndex, allnotes, currentnote.id,)]
+            components: [await buildNoteButtons(currentIndex, allnotes, currentnote._id,)]
         });
     });
     collector.on('end', async () => {
-        const finalButtons = await buildNoteButtons(currentIndex, allnotes, currentnote.id, true);
+        const finalButtons = await buildNoteButtons(currentIndex, allnotes, currentnote._id, true);
         try {
             if (replyMessage.embeds.length > 0 && replyMessage.components[0]) {
                 await replyMessage.edit({ components: [finalButtons] });

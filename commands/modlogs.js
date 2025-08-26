@@ -15,8 +15,9 @@ export async function execute(interaction) {
     const moderatorUser = interaction.user;
     const fiveMinutesInMs = 5 * 60 * 1000;
     const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
-    const usercheck = getUser(targetUser.id, interaction.guild.id, true);
+    const usercheck = await getUser(targetUser.id, interaction.guild.id, true);
     let allLogs = await getPunishments(targetUser.id, interaction.guild.id);
+    let replyMessage;
     if (!usercheck) {
         return interaction.reply({
             embeds: [
@@ -39,9 +40,9 @@ export async function execute(interaction) {
     let currentIndex = 0;
     let currentLog = allLogs[currentIndex];
 
-    let replyMessage = await interaction.reply({
-        embeds: [await buildLogEmbed(interaction, currentLog, currentIndex, allLogs.length)],
-        components: [await buildButtons(currentIndex, allLogs.length, isAdmin, currentLog.id)]
+    replyMessage = await interaction.reply({
+        embeds: [await buildLogEmbed(interaction, targetUser, currentLog, currentIndex, allLogs.length)],
+        components: [await buildButtons(currentIndex, allLogs.length, isAdmin, currentLog._id)], fetchReply: true
     });
 
     const collector = replyMessage.createMessageComponentCollector({
@@ -50,7 +51,7 @@ export async function execute(interaction) {
     });
 
     collector.on('collect', async i => {
-        const customIdParts = i.customId.split('_')
+        const customIdParts = i.customId.split('-')
         const action = customIdParts[1];
         const logIdToDelete = customIdParts[2];
         await i.deferUpdate();
@@ -62,7 +63,7 @@ export async function execute(interaction) {
                 break;
             case 'del':
                 try {
-                    deletePunishment(logIdToDelete);
+                    await deletePunishment(targetUser.id, interaction.guild.id, logIdToDelete);
                     logRecentCommand(`log deleted for User ID: ${targetUser.id} | Admin: ${i.user.tag} | Log ID: ${logIdToDelete}`);
                     allLogs = await getPunishments(targetUser.id, interaction.guild.id);
 
@@ -84,14 +85,15 @@ export async function execute(interaction) {
         }
         currentLog = allLogs[currentIndex];
         replyMessage = await replyMessage.edit({
-            embeds: [await buildLogEmbed(interaction, currentLog, currentIndex, allLogs.length)],
-            components: [await buildButtons(currentIndex, allLogs.length, isAdmin, currentLog.id)]
+            embeds: [await buildLogEmbed(interaction, targetUser, currentLog, currentIndex, allLogs.length)],
+            components: [await buildButtons(currentIndex, allLogs.length, isAdmin, currentLog._id)],
+            fetchReply: true
         });
     });
     collector.on('end', async () => {
         try {
-            if (replyMessage.embeds.length > 0 && replyMessage.components[0]) {
-                await replyMessage.edit({ components: [await buildButtons(currentIndex, allLogs.length, isAdmin, currentLog.id, true)] });
+            if (replyMessage.Message.embeds.length > 0 && replyMessage.Message.components[0]) {
+                await replyMessage.edit({ components: [await buildButtons(currentIndex, allLogs.length, isAdmin, currentLog._id, true)] });
                 console.log(`Modlog buttons for ${targetUser.tag} were disabled automatically.`);
             }
         } catch (error) {
