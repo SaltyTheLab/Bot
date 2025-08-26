@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, InteractionContextType } from 'discord.js';
 import { deletePunishment, getPunishments, getUser } from '../Database/databasefunctions.js';
 import { buildLogEmbed, buildButtons } from '../utilities/buildmodlogembeds.js';
 import logRecentCommand from '../Logging/recentcommands.js';
@@ -6,6 +6,7 @@ export const data = new SlashCommandBuilder()
     .setName('modlogs')
     .setDescription('View a user’s moderation history.')
     .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+    .setContexts([InteractionContextType.Guild])
     .addUserOption(option =>
         option.setName('user').setDescription('The user to view').setRequired(true)
     );

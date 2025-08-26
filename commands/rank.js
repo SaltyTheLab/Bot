@@ -1,10 +1,11 @@
-import { SlashCommandBuilder, AttachmentBuilder } from 'discord.js';
+import { SlashCommandBuilder, AttachmentBuilder, InteractionContextType } from 'discord.js';
 import { getRank, getUser } from '../Database/databasefunctions.js';
 import Canvas from 'canvas';
 
 export const data = new SlashCommandBuilder()
     .setName('rank')
     .setDescription('Check your current XP and level')
+    .setContexts([InteractionContextType.Guild])
     .addUserOption(option =>
         option.setName('user')
             .setDescription('The user to check')

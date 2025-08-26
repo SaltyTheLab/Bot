@@ -1,16 +1,17 @@
-import { EmbedBuilder, SlashCommandBuilder } from "discord.js";
+import { EmbedBuilder, SlashCommandBuilder, InteractionContextType } from "discord.js";
 import { getUser, saveUser } from "../Database/databasefunctions.js";
 
 export const data = new SlashCommandBuilder()
     .setName('bet')
     .setDescription('bet coins')
+    .setContexts([InteractionContextType.Guild])
     .addIntegerOption(opt =>
         opt.setName('amount').setDescription('how many coins').setRequired(true)
     )
 
 export async function execute(interaction) {
     const user = await interaction.user;
-    const { userData } = getUser(user.id, interaction.guild.id );
+    const { userData } = getUser(user.id, interaction.guild.id);
     const coincount = interaction.options.getInteger('amount')
     const bet = Math.random()
     const win = Math.ceil(coincount * 1.5);

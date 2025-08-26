@@ -1,7 +1,8 @@
-import { EmbedBuilder, SlashCommandBuilder, PermissionFlagsBits } from "discord.js";
+import { EmbedBuilder, SlashCommandBuilder, PermissionFlagsBits, InteractionContextType } from "discord.js";
 
 export const data = new SlashCommandBuilder()
     .setName('botstats')
+    .setContexts([InteractionContextType.Guild])
     .setDescription('Get the bots stats in real time')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
 
@@ -21,5 +22,5 @@ export async function execute(interaction) {
             `- Channels in this guild: ${guildChannels}`
         ].join('\n'))
 
-    interaction.reply({embeds: [stats]});
+    interaction.reply({ embeds: [stats] });
 } 

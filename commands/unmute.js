@@ -1,9 +1,10 @@
-import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from "discord.js";
+import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, InteractionContextType } from "discord.js";
 
 export const data = new SlashCommandBuilder()
     .setName('unmute')
     .setDescription('Unmutes a member')
     .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+    .setContexts([InteractionContextType.Guild])
     .addUserOption(opt =>
         opt.setName('target').setDescription('User to unmute').setRequired(true))
 

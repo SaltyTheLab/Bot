@@ -1,10 +1,11 @@
-import { EmbedBuilder, SlashCommandBuilder, PermissionFlagsBits } from "discord.js";
+import { EmbedBuilder, SlashCommandBuilder, PermissionFlagsBits, InteractionContextType } from "discord.js";
 import { addNote } from "../Database/databasefunctions.js";
 
 export const data = new SlashCommandBuilder()
     .setName('addnote')
     .setDescription('Adds a note to a user')
     .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+    .setContexts([InteractionContextType.Guild])
     .addUserOption(opt =>
         opt.setName('target').setDescription('Target user to add note to').setRequired(true)
     )

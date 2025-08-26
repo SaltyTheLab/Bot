@@ -1,4 +1,4 @@
-import { PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
+import { PermissionFlagsBits, SlashCommandBuilder, InteractionContextType } from 'discord.js';
 import punishUser from '../utilities/punishUser.js';
 import { getActiveWarns } from '../Database/databasefunctions.js';
 import getNextPunishment from '../moderation/punishments.js';
@@ -8,6 +8,7 @@ export const data = new SlashCommandBuilder()
     .setName('warn')
     .setDescription('Warns a member')
     .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+    .setContexts([InteractionContextType.Guild])
     .addUserOption(opt =>
         opt.setName('target')
             .setDescription('Target user to warn')

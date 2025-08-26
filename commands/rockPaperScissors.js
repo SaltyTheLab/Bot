@@ -1,9 +1,10 @@
-import { EmbedBuilder, SlashCommandBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } from "discord.js";
+import { EmbedBuilder, SlashCommandBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, InteractionContextType } from "discord.js";
 import { getUser, saveUser } from "../Database/databasefunctions.js";
 
 export const data = new SlashCommandBuilder()
     .setName('rps')
     .setDescription('Play rock, paper, scissors')
+    .setContexts([InteractionContextType.Guild])
 
 export function execute(interaction) {
     let userWin = false;
@@ -70,8 +71,8 @@ export function execute(interaction) {
             .setTitle(result)
             .setDescription(`You chose **${userchoice}**.\nOpponent chose **${opponentchoice}**.`)
             .setColor(0xffa500);
-        if(userWin){
-            const {userData} = getUser(user, guildId)
+        if (userWin) {
+            const { userData } = getUser(user, guildId)
             userData.coins += 20;
             saveUser(userData);
         }

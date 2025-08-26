@@ -1,10 +1,11 @@
-import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, InteractionContextType } from 'discord.js';
 import { deleteNote, getUser, viewNotes } from '../Database/databasefunctions.js';
 import { buildNoteButtons, buildNoteEmbed } from '../utilities/buildmodlogembeds.js';
 export const data = new SlashCommandBuilder()
     .setName('noteshow')
     .setDescription('View the notes of a user')
     .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+    .setContexts([InteractionContextType.Guild])
     .addUserOption(opt =>
         opt.setName('target').setDescription('Target user').setRequired(true)
     );

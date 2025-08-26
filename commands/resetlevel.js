@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
+import { SlashCommandBuilder, PermissionFlagsBits, InteractionContextType } from 'discord.js';
 import { getUser, saveUser } from '../Database/databasefunctions.js';
 import logRecentCommand from '../Logging/recentcommands.js';
 
@@ -6,6 +6,7 @@ export const data = new SlashCommandBuilder()
     .setName('resetlevel')
     .setDescription('Reset a user\'s level and XP to 0')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .setContexts([InteractionContextType.Guild])
     .addUserOption(option =>
         option.setName('user')
             .setDescription('The user to reset')

@@ -1,4 +1,4 @@
-import { InteractionContextType, SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } from "discord.js";
+import { InteractionContextType, SlashCommandBuilder, ActionRowBuilder, ButtonStyle, ButtonBuilder } from "discord.js";
 
 export const data = new SlashCommandBuilder()
     .setContexts([InteractionContextType.BotDM])
@@ -11,47 +11,19 @@ export const data = new SlashCommandBuilder()
 
 
 export async function execute(interaction) {
-    const modal = new ModalBuilder()
-        .setCustomId('appealModal')
-        .setTitle('Ban Appeal Submission');
+    const guildId = interaction.options.getString('guild_id');
 
-    const guildid = new TextInputBuilder()
-        .setCustomId('guildId')
-        .setLabel("Guild ID")
-        .setStyle(TextInputStyle.Short)
-        .setValue(interaction.options.getString('guild_id')) // Prefill with the provided ID
-        .setRequired(true)
+    // Create the button
+    const appealButton = new ButtonBuilder()
+        .setCustomId(`appealButton_${guildId}`) // Embed the guild ID in the custom ID
+        .setLabel('Start Ban Appeal')
+        .setStyle(ButtonStyle.Primary);
 
-    const reason = new TextInputBuilder()
-        .setCustomId('reason')
-        .setLabel("Why were you banned?")
-        .setStyle(TextInputStyle.Paragraph)
-        .setRequired(true)
-        .setPlaceholder('Put your ban reason here')
+    const row = new ActionRowBuilder().addComponents(appealButton);
 
-    const justification = new TextInputBuilder()
-        .setCustomId('justification')
-        .setLabel("Why should accept your ban appeal?")
-        .setStyle(TextInputStyle.Paragraph)
-        .setRequired(true)
-        .setPlaceholder('Put your explaination here')
-
-    const extra = new TextInputBuilder()
-        .setCustomId('extra')
-        .setLabel('Anything else we need to know?')
-        .setStyle(TextInputStyle.Paragraph)
-        .setRequired(false)
-        .setPlaceholder('Put anything else here')
-
-    const firstActionRow = new ActionRowBuilder().addComponents(guildid);
-    const secondActionRow = new ActionRowBuilder().addComponents(reason);
-    const thirdActionRow = new ActionRowBuilder().addComponents(justification);
-    const fourthActionRow = new ActionRowBuilder().addComponents(extra);
-
-    modal.addComponents(firstActionRow, secondActionRow, thirdActionRow, fourthActionRow);
-
-    await interaction.showModal(modal);
+    // Reply with a message containing the button
+    await interaction.reply({
+        content: `To submit your ban appeal for the guild with ID **\`${guildId}\`**, please click the button below.`,
+        components: [row]
+    });
 }
-
-
-

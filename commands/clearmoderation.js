@@ -1,4 +1,4 @@
-import { EmbedBuilder, SlashCommandBuilder, PermissionFlagsBits } from "discord.js";
+import { EmbedBuilder, SlashCommandBuilder, PermissionFlagsBits, InteractionContextType } from "discord.js";
 import { clearmodlogs } from "../Database/databasefunctions.js";
 import logRecentCommand from "../Logging/recentcommands.js";
 
@@ -6,6 +6,7 @@ export const data = new SlashCommandBuilder()
     .setName('clearmoderationforuser')
     .setDescription('clears the modlog database for a user (admin only)')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .setContexts([InteractionContextType.Guild])
     .addUserOption(opt =>
         opt.setName('target').setDescription(' Target User to clear modlogs')
             .setRequired(true)

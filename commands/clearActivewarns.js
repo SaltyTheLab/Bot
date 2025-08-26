@@ -1,10 +1,11 @@
-import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
+import { SlashCommandBuilder, PermissionFlagsBits, InteractionContextType } from 'discord.js';
 import { clearActiveWarns } from '../Database/databasefunctions.js';
 
 export const data = new SlashCommandBuilder()
     .setName('clearactivewarns')
     .setDescription('Clears all warnings for a user (Admin only)')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .setContexts([InteractionContextType.Guild])
     .addUserOption(opt =>
         opt.setName('target')
             .setDescription('User to clear warnings for')

@@ -1,10 +1,11 @@
-import { PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
+import { InteractionContextType, PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
 import punishUser from "../utilities/punishUser.js";
 
 export const data = new SlashCommandBuilder()
     .setName('ban')
     .setDescription('Ban a member')
     .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
+    .setContexts([InteractionContextType.Guild])
     .addUserOption(opt =>
         opt.setName('target')
             .setDescription('User to ban')

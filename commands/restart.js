@@ -1,9 +1,10 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, InteractionContextType } from 'discord.js';
 
 export const data = new SlashCommandBuilder()
     .setName('restart')
     .setDescription('Restarts the bot (admin only).')
-    .setDefaultMemberPermissions(0);
+    .setDefaultMemberPermissions(0)
+    .setContexts([InteractionContextType.Guild])
 
 export async function execute(interaction) {
     await interaction.deferReply();

@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle } from "discord.js";
+import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle, InteractionContextType } from "discord.js";
 import { getUser, saveUser } from "../Database/databasefunctions.js";
 import fs from 'node:fs';
 import path from 'node:path'
@@ -17,6 +17,7 @@ function shuffle(array) {
 
 export const data = new SlashCommandBuilder()
     .setName('logos')
+    .setContexts([InteractionContextType.Guild])
     .setDescription('Guess the logo');
 
 export async function execute(interaction) {

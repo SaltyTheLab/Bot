@@ -1,4 +1,4 @@
-import { PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
+import { PermissionFlagsBits, SlashCommandBuilder, InteractionContextType } from 'discord.js';
 import punishUser from '../utilities/punishUser.js';
 
 const unitMap = { min: 60000, hour: 3600000, day: 86400000 };
@@ -7,6 +7,7 @@ export const data = new SlashCommandBuilder()
     .setName('mute')
     .setDescription('Mute a member')
     .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+    .setContexts([InteractionContextType.Guild])
     .addUserOption(opt =>
         opt.setName('target').setDescription('Target user').setRequired(true)
     )
