@@ -20,9 +20,6 @@ export async function buildLogEmbed(interaction, log, idx, totalLogs) {
     const fields = [
         { name: 'Member', value: `<@${log.userId}>`, inline: true },
         { name: 'Type', value: `\`${log.type}\``, inline: true },
-        { name: 'Channel', value: `<#${log.channel}>`, inline: false },
-        { name: 'Reason', value: `\`${log.reason}\``, inline: false },
-        { name: 'Warns at Log Time', value: `\`${log.weight}\``, inline: false },
     ];
     //add mute duration if log type is mute
     if (log.type === 'Mute' && log.duration) {
@@ -35,14 +32,17 @@ export async function buildLogEmbed(interaction, log, idx, totalLogs) {
         } else {
             durationString = `${totalMinutes} minute${totalMinutes !== 1 ? 's' : ''}`;
         }
-        fields.push({ name: 'Duration', value: `\`${durationString}\``, inline: true });
+        fields.push({ name: 'Duration', value: `\`${durationString}\``, inline: false });
     }
-    fields.push({ name: 'Log Status', value: log.active == 1 ? '✅ Active' : '❌ Inactive/cleared', inline: true });
-
     return new EmbedBuilder()
         .setColor(LOG_COLORS[log.type])
         .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
-        .addFields(fields)
+        .addFields(...fields,
+            { name: 'Reason', value: `\`${log.reason}\``, inline: false },
+            { name: 'Warns at Log Time', value: `\`${log.weight}\``, inline: true },
+            { name: 'Log Status', value: log.active == 1 ? '✅ Active' : '❌ Inactive/cleared', inline: true },
+            { name: 'Channel', value: `<#${log.channel}>\n\n [Event Link](${log.refrence})`, inline: false }
+        )
         .setFooter({
             text: `Staff: ${moderator.tag} | Log ${idx + 1} of ${totalLogs} | ${formattedDate}`,
             iconURL: moderator.displayAvatarURL({ dynamic: true })
@@ -51,12 +51,12 @@ export async function buildLogEmbed(interaction, log, idx, totalLogs) {
 export async function buildButtons(idx, totalLogs, isDeletable, logId, disabled = false) {
     const buttons = [
         new ButtonBuilder()
-            .setCustomId(`modlog_prev`)
+            .setCustomId(`modlog-prev`)
             .setLabel('⬅️ Back')
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(idx === 0 || disabled),
         new ButtonBuilder()
-            .setCustomId(`modlog_next`)
+            .setCustomId(`modlog-next`)
             .setLabel('Next ➡️')
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(idx >= totalLogs - 1 || disabled)
@@ -65,7 +65,7 @@ export async function buildButtons(idx, totalLogs, isDeletable, logId, disabled 
     if (isDeletable) {
         buttons.push(
             new ButtonBuilder()
-                .setCustomId(`modlog_del_${logId}`)
+                .setCustomId(`modlog-del-${logId}`)
                 .setLabel('Delete')
                 .setStyle(ButtonStyle.Danger)
                 .setDisabled(disabled)
@@ -74,10 +74,11 @@ export async function buildButtons(idx, totalLogs, isDeletable, logId, disabled 
     return new ActionRowBuilder().addComponents(...buttons);
 };
 export async function buildNoteEmbed(interaction, index, currentNote, length) {
+    console.log(currentNote.userId)
     const [target, mod] = await Promise.all(
         [interaction.client.users.fetch(currentNote.userId),
         interaction.client.users.fetch(currentNote.moderatorId)
-        ])
+        ]);
     const formattedDate = new Date(currentNote.timestamp).toLocaleString('en-US', {
         dateStyle: 'medium',
         timeStyle: 'short',
@@ -99,19 +100,19 @@ export async function buildNoteEmbed(interaction, index, currentNote, length) {
 export async function buildNoteButtons(index, allnotes, id, disabled = false) {
     return new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-            .setCustomId(`note_prev`)
+            .setCustomId(`note-prev`)
             .setLabel('◀️ prev')
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(index === 0 || disabled),
 
         new ButtonBuilder()
-            .setCustomId(`note_next`)
+            .setCustomId(`note-next`)
             .setLabel('▶️ next')
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(index >= allnotes.length - 1 || disabled),
 
         new ButtonBuilder()
-            .setCustomId(`note_del_${id}`)
+            .setCustomId(`note-del-${id}`)
             .setLabel('🗑️ delete')
             .setStyle(ButtonStyle.Danger)
             .setDisabled(disabled)
