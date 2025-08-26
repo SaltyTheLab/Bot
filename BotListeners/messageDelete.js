@@ -29,7 +29,7 @@ export async function messageDelete(message) {
     //build the embed
     const mainEmbed = new EmbedBuilder()
         .setColor(0xf03030)
-        .setDescription([title, message.content || '_No content_', `[Event Link](${messageLink})`].join('\n'))
+        .setDescription([title, message.content || '_No content_\n', `[Event Link](${messageLink})`].join('\n'))
         .setThumbnail(message.author.displayAvatarURL())
         .setFooter({ text: `ID: ${message.id}` })
         .setTimestamp();

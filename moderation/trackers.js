@@ -9,7 +9,7 @@ const userMessageTrackers = new LRUCache({
 });
 
 const GENERAL_SPAM_WINDOW = 4 * 1000;
-const GENERAL_SPAM_THRESHOLD = 7;
+const GENERAL_SPAM_THRESHOLD = 5;
 const DUPLICATE_SPAM_THRESHOLD = 3;
 
 export default function updateTracker(userId, message) {
@@ -85,7 +85,7 @@ export default function updateTracker(userId, message) {
     tracker.timestamps.clear();
   }
   //if spam detected, flag it and clear out recentMessages array
-  if (tracker.recentMessages.size() > GENERAL_SPAM_THRESHOLD)
+  if (wasGeneralSpam)
     tracker.recentMessages.clear();
 
   if (isDuplicateSpam) {

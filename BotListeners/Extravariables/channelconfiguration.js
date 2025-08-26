@@ -7,6 +7,7 @@ const guildChannelMap = {
             updatedlogChannel: '1353558675855376384',
             namelogChannel: '1394761880366616657',
             banlogChannel: '1256029364768997406',
+            appealChannel: '1269407374825881600'
         },
         publicChannels: {
             rules: '1235295566356025354',
@@ -56,7 +57,8 @@ const guildChannelMap = {
             welcomeChannel: '1408174219665211402',
             deletedlogChannel: '1408174271066407022',
             updatedlogChannel: '1408174346345910282',
-            namelogChannel: '1408174310903910420'
+            namelogChannel: '1408174310903910420',
+            appealChannel: '1409015785468203101'
         },
         publicChannels: {
             rules: '1388104789514129468',

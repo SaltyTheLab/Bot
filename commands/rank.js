@@ -150,8 +150,7 @@ export async function execute(interaction) {
         const userId = targetUser.id;
         const guildId = interaction.guild.id
         // *** Directly use the result from your existing getUser ***
-        const { userData } = getUser(userId, guildId);
-
+        const userData = await getUser(userId, guildId);
         //abort if userdata doesn't exist or there are error in their data
         if (!userData || userData.xp === undefined || userData.level === undefined) {
             return interaction.editReply({ content: 'User data not found or incomplete. They might need to gain some XP first!', ephemeral: true });
@@ -159,7 +158,7 @@ export async function execute(interaction) {
 
         //find user within all users for rank
         const xpNeeded = Math.round(((userData.level - 1) ** 1.5 * 52 + 40) / 20) * 20
-        const rank = getRank(userId, guildId)
+        const rank = await getRank(userId, guildId)
         const rankCard = await generateRankCard(userData, targetUser, xpNeeded, rank);
 
         await interaction.editReply({

@@ -10,7 +10,7 @@ const violationWeights = new Map(Weights.violationWeights.map(w => [w.type.toLow
  */
 export default async function getWarnStats(userId, guildId, newViolationType = []) {
   //get previous active warnings
-  const activeWarningsPromise = getActiveWarns(userId, guildId);
+  const activeWarningsPromise = await getActiveWarns(userId, guildId);
   // get weights of violations
   const currentWarnWeightPromise = Promise.resolve(
     Math.ceil(newViolationType.reduce((acc, v) => {

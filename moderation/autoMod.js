@@ -11,7 +11,6 @@ const forbiddenWords = new Set(forbbidenWordsData.forbiddenWords.map(w => w.toLo
 const inviteRegex = /(https?:\/\/)?(www\.)?(discord\.gg|discord(app)?\.com\/invite)\/[a-zA-Z0-9-]+/i;
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
 export default async function AutoMod(client, message) {
-
   const { author, content, member, guild, channel } = message;
   const userId = author.id;
   const exclusions = guildChannelMap[guild.id].exclusions;
