@@ -25,9 +25,11 @@ export async function messageCreate(client, message) {
 
   guildId = message.guild.id;
   const publicChannels = guildChannelMap[guildId].publicChannels
+  const sentbystaff = message.member.permissions.has('ModerateMembers')
 
   //skip if message creator is bot or not in the server
-  if (message.author.bot || !message.guild || !message.member) return;
+  if (message.author.bot)
+    return;
   //check for counting channel
   if (publicChannels?.countingChannel) {
     countingChannel = publicChannels.countingChannel;
@@ -60,6 +62,8 @@ export async function messageCreate(client, message) {
   if (lowerContent.includes('say') && lowerContent.includes('the') && lowerContent.includes('line')) {
     message.reply('stay frosty :3')
   }
+  if (lowerContent.includes('execute') && lowerContent.includes('order') && lowerContent.includes('66'))
+    message.reply({ content: 'Not the Padawans!!!' })
 
   if ((message.type === MessageType.Default || message.type === MessageType.Reply) && message.channel.id != countingChannel)
     await applyUserXP(userId, message, guildId);
@@ -67,7 +71,6 @@ export async function messageCreate(client, message) {
   if (countingChannel && message.channel.id === countingChannel) {// check for a counting channel and if exists fetch the last valid message
     if (counting == 0) {
       for (const message of lastmessages.values()) {
-        console.log(message.content);
         counting = parseInt(message.content) - 1;
         if (!isNaN(counting) && !message.embeds.length > 0) {
           lastmessages = [];
@@ -104,6 +107,7 @@ export async function messageCreate(client, message) {
       return;
     }
   }
+  if (sentbystaff) return;
   await AutoMod(client, message, guildId);
 }
 
