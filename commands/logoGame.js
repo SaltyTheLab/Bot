@@ -84,9 +84,9 @@ export async function execute(interaction) {
         });
 
         if (i.customId === logo.brand) {
-            const { userData } = getUser(user.id, guildId);
-            userData.points += 20;
-            saveUser(userData);
+            const userData = await getUser(user.id, guildId);
+            userData.coins += 20;
+            saveUser({ userData });
         }
         await i.update({
             components: [updatedButtons],

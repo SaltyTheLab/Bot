@@ -21,14 +21,14 @@ export const data = new SlashCommandBuilder()
     );
 
 export async function execute(interaction) {
-    const target = interaction.options.getUser('target');
+    const target = await interaction.options.get('target');
     const reason = interaction.options.getString('reason');
     const issuer = interaction.user;
     const channel = interaction.channel;
     let duration;
-    let unit;
+    let unit = 'min';
     let durationMs;
-    let effectiveDurationMs
+    let effectiveDurationMs = 0;
     const MAX_TIMEOUT_MS = 2419200000;
 
     if (!target) {
@@ -50,17 +50,20 @@ export async function execute(interaction) {
         durationMs = duration * multiplier;
         effectiveDurationMs = Math.min(durationMs, MAX_TIMEOUT_MS);
     }
-
     //run through relevent helper command function
     await punishUser({
         interaction: interaction,
         guild: interaction.guild,
-        target: target.id,
+        target: target.value,
         moderatorUser: issuer,
         reason: reason,
         channel: channel,
         isAutomated: false,
+        currentWarnWeight: 1,
         duration: effectiveDurationMs,
-        unit: unit
+        unit: unit,
+        banflag: false,
+        buttonflag: false
+
     });
 }

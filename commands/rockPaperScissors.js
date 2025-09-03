@@ -74,7 +74,7 @@ export function execute(interaction) {
         if (userWin) {
             const { userData } = getUser(user, guildId)
             userData.coins += 20;
-            saveUser(userData);
+            saveUser({ userData });
         }
         await i.update({
             embeds: [resultEmbed],

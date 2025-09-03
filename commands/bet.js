@@ -11,7 +11,7 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
     const user = await interaction.user;
-    const { userData } = getUser(user.id, interaction.guild.id);
+    const userData = await getUser(user.id, interaction.guild.id);
     const coincount = interaction.options.getInteger('amount')
     const bet = Math.random()
     const win = Math.ceil(coincount * 1.5);
@@ -23,8 +23,7 @@ export async function execute(interaction) {
             iconURL: user.displayAvatarURL({ dyanamic: true })
         })
     if (bet >= .5) {
-        userData.points += win;
-
+        userData.coins += win;
     } else {
         statement = ` ${user.tag} you bet ${coincount} and lost!`
         result.setColor(0x7a0000)
@@ -32,9 +31,9 @@ export async function execute(interaction) {
             name: statement,
             iconURL: user.displayAvatarURL({ dyanamic: true })
         })
-        userData.points -= coincount;
+        userData.coins -= coincount;
     }
-    saveUser(userData);
+    saveUser({ userData });
     interaction.reply(
         {
             embeds: [result]

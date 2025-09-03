@@ -29,7 +29,7 @@ export const data = new SlashCommandBuilder()
     );
 
 export async function execute(interaction) {
-    const target = interaction.options.getUser('target');
+    const target = await interaction.options.get('target');
     const reason = interaction.options.getString('reason');
     const duration = interaction.options.getInteger('duration');
     const unit = interaction.options.getString('unit');
@@ -58,7 +58,7 @@ export async function execute(interaction) {
     await punishUser({
         interaction: interaction,
         guild: guild,
-        target: target.id,
+        target: target.value,
         moderatorUser: issuer,
         reason,
         channel: channel,

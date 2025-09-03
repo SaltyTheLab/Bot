@@ -18,7 +18,7 @@ export const data = new SlashCommandBuilder()
     );
 
 export async function execute(interaction) {
-    const target = await interaction.guild.members.fetch(interaction.options.getUser('target'));
+    const target = await interaction.options.get('target');
     const reason = interaction.options.getString('reason');
     if (!target) {
         return interaction.reply({ content: '⚠️ User not found.', ephemeral: true });
@@ -30,14 +30,16 @@ export async function execute(interaction) {
     await punishUser({
         interaction: interaction,
         guild: interaction.guild,
-        target: target.id,
+        target: target.value,
         moderatorUser: interaction.user,
         reason: reason,
         channel: interaction.channel,
         isAutomated: false,
         currentWarnWeight: 1,
         duration: 0,
-        banflag: true
+        unit: 'min',
+        banflag: true,
+        buttonflag: false
     });
 
 }

@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, InteractionContextType } from 'discord.js';
 import { deletePunishment, getPunishments, getUser } from '../Database/databasefunctions.js';
-import { buildLogEmbed, buildButtons } from '../utilities/buildmodlogembeds.js';
+import { buildLogEmbed, buildButtons } from '../utilities/buildembeds.js';
 import logRecentCommand from '../Logging/recentcommands.js';
 export const data = new SlashCommandBuilder()
     .setName('modlogs')
@@ -74,7 +74,6 @@ export async function execute(interaction) {
                                 .setDescription(`All modlogs for ${targetUser} have been deleted.`)],
                             components: []
                         });
-                        collector.stop();
                         return;
                     }
                     currentIndex = Math.min(currentIndex, allLogs.length - 1)

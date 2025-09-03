@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, InteractionContextType } from 'discord.js';
 import { deleteNote, getUser, viewNotes } from '../Database/databasefunctions.js';
-import { buildNoteButtons, buildNoteEmbed } from '../utilities/buildmodlogembeds.js';
+import { buildNoteButtons, buildNoteEmbed } from '../utilities/buildembeds.js';
 export const data = new SlashCommandBuilder()
     .setName('noteshow')
     .setDescription('View the notes of a user')
