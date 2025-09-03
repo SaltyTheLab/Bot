@@ -1,4 +1,4 @@
-import invites from "../BotListeners/Extravariables/invites.js";
+import invites from "../BotListeners/Extravariables/mapsandsets.js";
 /**
  * Initializes the invite cache for the guild.
  * @param guild The GuildId of the guild.

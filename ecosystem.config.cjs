@@ -1,9 +1,9 @@
 module.exports = {
   apps: [{
     name: "Febot",
-    script: "index.js", // The main script of your application
+    script: "index.js",
     watch: false,
-    max_memory_restart: "1G", // Optional: restart the app if it exceeds this memory usage
+    max_memory_restart: "1G",
     env: {
       NODE_ENV: "development",
     },

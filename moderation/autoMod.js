@@ -37,8 +37,7 @@ export default async function AutoMod(client, message) {
 
   //variable to flag message for automod detection
   const hasViolation = matchedWord || hasInvite || everyonePing ||
-    violationFlags.isMediaViolation || violationFlags.isGeneralSpam || violationFlags.isDuplicateSpam
-    || violationFlags.isCapSpam;
+    violationFlags.isMediaViolation || violationFlags.isGeneralSpam || violationFlags.isDuplicateSpam || violationFlags.isCapSpam;
   if (!hasViolation) return;
 
   //delete violating message and generate reason

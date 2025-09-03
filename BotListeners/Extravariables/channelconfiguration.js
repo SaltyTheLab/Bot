@@ -7,7 +7,9 @@ const guildChannelMap = {
             updatedlogChannel: '1353558675855376384',
             namelogChannel: '1394761880366616657',
             banlogChannel: '1256029364768997406',
-            appealChannel: '1269407374825881600'
+            appealChannel: '1269407374825881600',
+            applicationChannel: '1411452661907062916',
+            adminChannel: '1257411106520043680'
         },
         publicChannels: {
             rules: '1235295566356025354',
@@ -37,7 +39,7 @@ const guildChannelMap = {
             welcomeChannel: '1403065196653842604',
             deletedlogChannel: '1403065389021270066',
             updatedlogChannel: '1403065299216891985',
-            namelogChannel: '1403065343202693181'
+            namelogChannel: '1403065343202693181',
         },
         publicChannels: {
             rules: '1347399775951257704',
@@ -58,11 +60,14 @@ const guildChannelMap = {
             deletedlogChannel: '1408174271066407022',
             updatedlogChannel: '1408174346345910282',
             namelogChannel: '1408174310903910420',
-            appealChannel: '1409015785468203101'
+            appealChannel: '1409015785468203101',
+            applicationChannel: '1411500568630788326',
+            adminChannel: '1412523674346717315'
         },
         publicChannels: {
             rules: '1388104789514129468',
-            generalChannel: '1342845802980048939'
+            generalChannel: '1342845802980048939',
+            getroles: '1410696524849217578'
         },
         exclusions: {
             adultcatagorey: '1388114900118667366',
