@@ -49,7 +49,7 @@ export async function guildMemberRemove(member) {
                 .setColor(0xff5555)
                 .setTitle(`${executor.tag} kicked a member`)
                 .addFields(
-                    { name: 'User:', value: member },
+                    { name: 'User:', value: `${member}` },
                     { name: 'Reason:', value: `${reason}`, inline: false })
         } else if (action == 'prune') {
             embed

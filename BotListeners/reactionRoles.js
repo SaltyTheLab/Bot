@@ -1,5 +1,6 @@
 import embedIDs from '../embeds/EmbedIDs.json' with {type: 'json'}
 import { emojiRoleMap } from "./Extravariables/reactionrolemap.js";
+import { getblacklist } from '../Database/databasefunctions.js';
 /**
  * Handle reaction-based role assignment or removal
  */
@@ -40,8 +41,11 @@ async function handleReactionChange(reaction, user, action = 'add') {
     console.log('❌ Member not found');
     return;
   }
+  const blacklist = await getblacklist(user.id, reaction.message.guild.id)
 
   // attempt to modify the users roles
+  if (blacklist.find(r => r === roleID))
+    return;
   try {
     const rolesToModify = Array.isArray(roleID) ? roleID : [roleID];
     await member.roles[action](rolesToModify);
