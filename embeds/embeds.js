@@ -1,6 +1,7 @@
 import { EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle, StringSelectMenuBuilder } from 'discord.js';
 import guildChannelMap from '../BotListeners/Extravariables/channelconfiguration.js';
 import { saveMessageIDs, loadMessageIDs } from '../utilities/messageStorage.js';
+import { getComparableEmbed } from '../utilities/messagecomarator.js';
 const guildEmbedConfig = {
     "1231453115937587270": [
         { name: "rules", senderFunc: createRulesEmbed },
@@ -21,25 +22,24 @@ const guildEmbedConfig = {
         { name: "Getcolor", senderFunc: EvocreateColorsRoleEmbed }
     ],
     "1342845801059192913": [
-        { name: "rules", senderFunc: BarkCreateRulesEmbed }
+        { name: "rules", senderFunc: BarkCreateRulesEmbed },
+        { name: "getroles", senderFunc: BarkCreateReactionEmbed }
     ]
 };
 // New function to handle the common tasks of sending and saving embed info
 async function sendEmbedAndSave(guild, messageIDs, embedName, embedData, guildChannels) {
-    const targetChannelId = guildChannels[embedName];
-    if (!targetChannelId) {
-        console.error(`❌ No channel ID found for embed name: '${embedName}' in guild ${guild.id}.`);
-        return;
+    const channel = await guild.channels.fetch(guildChannels[embedName]);
+    const oldMessageIndex = messageIDs[guild.id].findIndex((message) => message.name === embedName)
+    if (oldMessageIndex !== -1) {
+        // Found an old message with the same name, so we remove it.
+        messageIDs[guild.id].splice(oldMessageIndex, 1);
     }
-
-    const channel = await guild.channels.fetch(targetChannelId);
-    if (!channel?.isTextBased()) {
-        console.error(`Channel ${targetChannelId} for '${embedName}' embed is not text-based.`);
+    if (!channel.isTextBased()) {
+        console.error(`Channel ${channel.id} for '${embedName}' embed is not text-based.`);
         return;
     }
     const { embeds, components } = embedData;
     const msg = await channel.send({ embeds, components });
-
     if (embedData.reactions && embedData.reactions.length > 0) {
         for (const reaction of embedData.reactions) {
             try {
@@ -49,15 +49,11 @@ async function sendEmbedAndSave(guild, messageIDs, embedName, embedData, guildCh
             }
         }
     }
-
     console.log(`📝 Sent '${embedName}' embed. Message ID:`, msg.id);
-
-    // In your loop for each embed:
     if (!messageIDs[guild.id]) {
         // If the guild doesn't exist in our object, create an entry for it
         messageIDs[guild.id] = [];
     }
-
     messageIDs[guild.id].push({
         name: embedName,
         messageId: msg.id,
@@ -115,15 +111,14 @@ async function createRulesEmbed(guild) {
                 name: '**__Leveling System:__**', value:
                     'To prevent spam and abuse, new members are required to reach level 3 via <@1392656116428701726> to gain permissions for features such as posting GIFs and joining voice channels.'
                 , inline: false
+            },
+            {
+                name: '**__Roles__**',
+                value: 'Feel free to grab some roles in <#1235323618582466621> channel.'
             }
-
         )
-    const roles = new EmbedBuilder()
-        .setTitle('Roles')
-        .setDescription('Feel free to grab some roles in <#1235323618582466621> channel.');
-
     return {
-        embeds: [rules, roles]
+        embeds: [rules]
     };
 }
 async function createMentalHealthEmbed(guild) {
@@ -620,18 +615,19 @@ async function BarkCreateRulesEmbed(guild) {
             name: 'Bark',
             iconURL: guild.iconURL({ size: 1024, extension: 'png' }) || undefined
         })
-        .setDescription([`How automod works:`,
-            `things that are tracked:`,
-            '* Caps',
+        .setDescription(['Hi, Im Febot created by <@857445139416088647>, i\'m going to be watching the server for common rule breaks',
+            'I have a few things that I keep a look out for:',
+            '* Caps(minimun ten length)',
             '* everyone ping',
             '* bad words(will tell you what is caught)',
             '* Discord Invites',
             '* General Spam',
             '* Duplicate messeages',
-            '* media(more on this in a bit\n\n',
-            'for each warn you get from automod or manual, this becomes an Active warn meaning that the next punishment will compound and extend the mute if automod is triggered. After 24 hours, the warn that was issued will expire\n',
+            '* media(more on this in a bit)\n\n',
+            'for each warn you get from me or manual, this becomes an Active warn meaning that the next punishment will compound and extend the mute if automod is triggered. After 24 hours, the warn that was issued will expire\n',
             '**For media**:',
-            'Media has a limit of 1 per 20 messages, this is at a individual level so if someone else send media, you will not get penalized'
+            'Media has a limit of 1 per 20 messages, this is at a individual level so if someone else sends media, you will not get penalized',
+            'The max mute i can go to is 6h which you shouldn\'t reach otherwise <@&1409208962091585607> and <@&1388113570369372181> will know'
         ].join('\n')
         )
         .setFooter({ text: 'Bark', iconURL: guild.iconURL({ size: 1024, extension: 'png' }) });
@@ -639,10 +635,25 @@ async function BarkCreateRulesEmbed(guild) {
         embeds: [rules]
     }
 }
+async function BarkCreateReactionEmbed() {
+    const roleembed = new EmbedBuilder()
+        .setDescription([
+            `Get your age role here. Lying about your age is punishable up to a ban depending on severity:\n`,
+            '🔞: <@&1388113103081705502>',
+            '👨: <@&1388111992287400089>'
+
+        ].join('\n'))
+
+    const age = ['🔞', '👨']
+    return {
+        embeds: [roleembed],
+        reactions: age
+    }
+}
 export async function embedsenders(client, guildIds) {
     let embedTasks = [];
     let messageIDs = loadMessageIDs();
-    let newMessageIds = {};
+
     for (const id of guildIds) {
         const guild = client.guilds.cache.get(id)
         const guildChannels = guildChannelMap[guild.id].publicChannels;
@@ -650,9 +661,6 @@ export async function embedsenders(client, guildIds) {
             console.error(`❌ No channel mapping found for guild ID: ${guild.id}. Please check guildChannelMap.`);
             return;
         }
-        // 1. Load the existing message IDs from the file
-        // This will be the array that we modify in memory
-        // Call the function to load the array
 
         const guildConfigs = guildEmbedConfig[guild.id];
         if (!guildConfigs) {
@@ -660,37 +668,44 @@ export async function embedsenders(client, guildIds) {
             return;
         }
 
-
         // Iterate directly over the object's entries
         for (const embedConfig of guildConfigs) {
             const { name: embedName, senderFunc } = embedConfig;
-
+            const embedData = await senderFunc(guild);
             const existingEmbedInfo = messageIDs[guild.id]?.find((embed) => embed.name === embedName);
-            if (!existingEmbedInfo) {
-                const embedData = await senderFunc(guild);
-                embedTasks.push(sendEmbedAndSave(guild, newMessageIds, embedName, embedData, guildChannels));
+            const channel = await guild.client.channels.fetch(existingEmbedInfo.channelid);
+            let message;
+            try {
+                message = await channel.messages.fetch(existingEmbedInfo.messageId);
+            } catch {
+                console.log(`missing embed for ${embedName}, adding to queue...`)
+                embedTasks.push(sendEmbedAndSave(guild, messageIDs, embedName, embedData, guildChannels));
             }
-            else {
+            if (message) {
                 try {
                     // Fetch the message from the channel using its ID
-                    const channel = await guild.client.channels.fetch(existingEmbedInfo.channelid);
-                    const message = await channel.messages.fetch(existingEmbedInfo.messageId);
-                    const embedData = await senderFunc(guild);
-
+                    const existingEmbedsString = getComparableEmbed(message.embeds[0]);
+                    const newEmbedsString = getComparableEmbed(embedData.embeds[0].data);
                     // Edit the message with the new embed content
-                    await message.edit({
-                        embeds: embedData.embeds,
-                        ...(embedData.components && { components: embedData.components }),
-                    });
-                    console.log(`✅ Message '${embedName}' updated successfully.`);
+                    if (existingEmbedsString !== newEmbedsString) {
+                        await message.edit({
+                            embeds: embedData.embeds,
+                            ...(embedData.components && { components: embedData.components }),
+                        });
+                        console.log(`✅ Message '${embedName}' updated successfully.`);
+                    }
+                    else
+                        console.log(`Message '${embedName} has the same content`)
                 } catch (error) {
                     console.error(`❌ Failed to update message '${embedName}':`, error);
                 }
             }
+
         }
-        await Promise.all(embedTasks);
+        await Promise.allSettled(embedTasks);
     }
-    if (Object.keys(newMessageIds).length > 0)
-        saveMessageIDs(newMessageIds)
-    console.log('Embed sending process completed (new embeds created/IDs saved to file).');
+    if (embedTasks.length > 0) {
+        saveMessageIDs(messageIDs)
+        console.log('Embed sending process completed (new embeds created/IDs saved to file).');
+    }
 }
