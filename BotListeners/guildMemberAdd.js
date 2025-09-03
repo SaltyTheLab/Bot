@@ -1,7 +1,7 @@
 import { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } from "discord.js";
 import guildChannelMap from "./Extravariables/channelconfiguration.js";
-import invites from "./Extravariables/invites.js";
-
+import invites from "./Extravariables/mapsandsets.js";
+const fifteenMinutesInMs = 15 * 60 * 1000
 /**
  * Handles the guildMemberAdd event to log new members and their inviter.
  * @param {import("discord.js").GuildMember} member The new member.
@@ -120,7 +120,32 @@ export async function guildMemberAdd(member) {
 
     const actionRow = new ActionRowBuilder()
         .addComponents(banButton);
-
+    const introductionembed = new EmbedBuilder()
+        .setTitle('Hi there!')
+        .setDescription(`Im febot, I am dming you since it will open a dm with me. Below is a shiny blue button labeled commands. /appeal is the only one you can use here.\n`)
     await generalChannel.send({ embeds: [generalEmbed] });
-    await welcomeChannel.send({ embeds: [welcomeEmbed], components: [actionRow] });
+    const message = await welcomeChannel.send({ embeds: [welcomeEmbed], components: [actionRow] });
+    if (!member.user.bot)
+        try {
+            const dmChannel = await member.user.createDM();
+            await dmChannel.send({ embeds: [introductionembed] })
+        } catch (error) {
+            console.log('Could not dm this user.', error)
+        }
+    setTimeout(async () => {
+        const buttonComponent = message.components[0];
+        if (buttonComponent && !buttonComponent.disabled) {
+            const updatedBanButton = new ButtonBuilder()
+                .setCustomId(buttonComponent.components[0].customId)
+                .setLabel(buttonComponent.components[0].label === '🔨 Ban User & Delete Invite' ? '🔨 Ban User & Delete Invite (Expired)'
+                    : '🔨 Ban (Expired)')
+                .setStyle(ButtonStyle.Danger)
+                .setDisabled(true)
+
+            const updatedActionRow = new ActionRowBuilder().addComponents(updatedBanButton);
+            await message.edit({ components: [updatedActionRow] });
+        }
+
+    }, fifteenMinutesInMs)
 }
+
