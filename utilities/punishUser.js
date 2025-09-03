@@ -4,6 +4,8 @@ import getNextPunishment from '../moderation/punishments.js';
 import { addPunishment, getUser } from '../Database/databasefunctions.js';
 import logRecentCommand from '../Logging/recentcommands.js';
 import guildChannelMap from '../BotListeners/Extravariables/channelconfiguration.js';
+import { commandbans } from '../BotListeners/Extravariables/mapsandsets.js';
+const BAN_CACHE_TIMEOUT = 5000;
 
 const THRESHOLD = 24 * 60 * 60 * 1000; // 24h
 const unitMap = { min: 60000, hour: 3600000, day: 86400000 };
@@ -51,7 +53,8 @@ export default async function punishUser({
   duration = 0,
   unit = 'min',
   banflag = false,
-  buttonflag = false
+  buttonflag = false,
+  messagelink = null
 }) {
   const modChannels = guildChannelMap[guild.id].modChannels
   const targetUser = await guild.members.fetch(target).catch(() => null) ?? await guild.client.users.fetch(target).catch(() => null);
@@ -63,8 +66,11 @@ export default async function punishUser({
   let warnType;
   let sentMessage;
   // --- Define what type it is ---
-  if (banflag)
+  if (banflag) {
     warnType = 'Ban'
+    commandbans.add(target);
+    setTimeout(() => commandbans.delete(target), BAN_CACHE_TIMEOUT)
+  }
   else if (duration > 0) {
     warnType = 'Mute'
     const multiplier = unitMap[unit]
@@ -81,28 +87,29 @@ export default async function punishUser({
     .setColor(LOG_COLORS[warnType])
     .setAuthor({
       name: warnType == 'Ban' ? `${targetUser instanceof GuildMember ? targetUser.user.tag : targetUser.tag} was banned`
-        : duration > 0 ? `${targetUser.user.tag} was issued a ${durationStr} mute`
-          : `${targetUser.user.tag} was issued a warning`,
+        : duration > 0 ? `${targetUser instanceof GuildMember ? targetUser.user.tag : targetUser.tag} was issued a ${durationStr} mute`
+          : `${targetUser instanceof GuildMember ? targetUser.user.tag : targetUser.tag} was issued a warning`,
       iconURL: targetUser.displayAvatarURL({ dynamic: true })
     })
 
   // --- Send Reply and get the Message ID ---
-  if (!buttonflag) {
-    if (isAutomated) {
-      sentMessage = await channel.send({ embeds: [commandEmbed] }).catch(() => null);
-    } else {
-      // This is the key change: reply to the interaction and fetch the reply message
-      sentMessage = await interaction.reply({ embeds: [commandEmbed], fetchReply: true }).catch(() => null);
-    }
+  if (!buttonflag && isAutomated) {
+    sentMessage = await channel.send({ embeds: [commandEmbed] }).catch(() => null);
+  } else {
+    // This is the key change: reply to the interaction and fetch the reply message
+    sentMessage = await interaction.reply({ embeds: [commandEmbed], fetchReply: true }).catch(() => null);
   }
+
 
   const messageId = sentMessage ? sentMessage.id : null;
   const messageLink = messageId ? `https://discord.com/channels/${guild.id}/${channel.id}/${messageId}` : null;
+  const formattedReason = buttonflag ? `Button Ban: ${reason}`
+    : banflag ? `Ban Command: ${reason}`
+      : reason
 
   //add the database entry
   try {
-    if (usercheck)
-      await addPunishment(targetUser.id, moderatorUser.id, reason, effectiveDurationMs, warnType, currentWarnWeight, channel.id, guild.id, messageLink);
+    await addPunishment(targetUser.id, moderatorUser.id, formattedReason, isAutomated ? effectiveDurationMs : duration, warnType, currentWarnWeight, channel.id, guild.id, buttonflag ? messagelink : messageLink);
   } catch (err) {
     console.warn(err);
   }
@@ -110,15 +117,14 @@ export default async function punishUser({
   // Fetch updated active warnings for the user after the new warn has been added.
   const { activeWarnings } = await getWarnStats(targetUser.id, guild.id);
 
-  //get the users previous punishments and get the lin
-  // ks from the database
-  const pastinfractions = activeWarnings.slice(0, 11);
+  // get the users previous punishments and get the links from the
+  // database, slice to keep it within discords field character limit
+  const pastinfractions = activeWarnings.slice(0, 10);
   const refrences = pastinfractions.map((punishment, index) => {
     if (punishment.refrence) {
       return `[Case ${index + 1}](${punishment.refrence})`
     }
   })
-
   const displayrefs = refrences.length > 0 ? refrences.join(' | ') : 'none'
 
   const { label } = getNextPunishment(activeWarnings.length);
@@ -133,7 +139,7 @@ export default async function punishUser({
       return [{ name: 'Reason:', value: `\`${warnReason}\``, inline: false }]
     else return [
       { name: 'Reason:', value: `\`${warnReason}\``, inline: false },
-      { name: 'Punishments:', value: `\`${warnWeight} warn${durationStr !== '' ? `, ${durationStr}` : ''}\``, inline: false },
+      { name: 'Punishments:', value: `\`${warnWeight} warn\`${durationStr !== '' ? `, \`${durationStr}\`` : ''}`, inline: false },
       { name: 'Active Warnings:', value: `\`${activeWarnsCount}\``, inline: false },
       { name: warnType == 'mute' ? 'Mute expires:' : 'Warn expires:', value: `${formattedExpiry}` }
     ];
@@ -146,11 +152,11 @@ export default async function punishUser({
       iconURL: targetUser.displayAvatarURL({ dynamic: true })
     })
     .setThumbnail(guild.iconURL())
-    .setDescription(warnType == 'Ban' ? `${targetUser}, you have been **banned** from **${guild.name}**.\n\n` +
-      `Please use /appeal and cop this number: ${guild.id} to appeal your ban.`
+    .setDescription(warnType == 'Ban' ? `${targetUser}, you have been \`banned\` from ** ${guild.name} **.\n\n` + ` ** Reason **: \n\`${reason}\`\n` +
+      `Please use /appeal to appeal your ban.\n\n Incase if I do not have a mutual server with you, you can use this invite link: https://discord.gg/Aszq4EDB`
       : duration > 0 ? `<@${targetUser.id}>, you were given a \`${durationStr} mute\` in ${guild.name}.`
         : `<@${targetUser.id}>, you were given a \`warning\` in ${guild.name}.`)
-    .addFields(...commonFields(reason, currentWarnWeight, activeWarnings.length, durationStr, formattedExpiry, warnType))
+    .addFields(...commonFields(formattedReason, currentWarnWeight, activeWarnings.length, durationStr, formattedExpiry, warnType))
     .setTimestamp();
   const bancheck = warnType !== 'Ban' ? { name: 'Next Punishment:', value: `\`${label}\``, inline: false } : null
   // Embed for moderation log channel
@@ -168,7 +174,7 @@ export default async function punishUser({
       { name: 'Target:', value: `${targetUser}`, inline: true },
       { name: 'Channel:', value: `${channel}`, inline: true },
       { name: 'History:', value: `${displayrefs}`, inline: true },
-      ...commonFields(reason, currentWarnWeight, activeWarnings.length, durationStr, formattedExpiry, warnType),
+      ...commonFields(formattedReason, currentWarnWeight, activeWarnings.length, durationStr, formattedExpiry, warnType),
       ...(warnType !== 'Ban' ? [bancheck] : [])
     )
     .setTimestamp();
@@ -198,7 +204,7 @@ export default async function punishUser({
       Promise.resolve();
 
   try {
-    await Promise.all([logPromise, actionPromise].filter(Boolean));
+    await Promise.allSettled([logPromise, actionPromise].filter(Boolean));
   } catch (err) {
     console.log(`❌ Failed to perform action: ${err.message ?? err}`);
   }
