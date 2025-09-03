@@ -7,9 +7,8 @@ import connectToMongoDB from './Database/database.js';
 import initializeInvites from './utilities/initializeInvites.js';
 import register from './deploy-cmds.js';
 import cron from 'node-cron';
-import updateExpiredButtons from './utilities/updateExpiredButtons.js';
 import clearExpiredWarns from './utilities/clearExpiredWarns.js';
-import invites from './BotListeners/Extravariables/invites.js';
+import invites from './BotListeners/Extravariables/mapsandsets.js';
 
 config();// Setup dotenv
 export const { TOKEN, CLIENT_ID, GUILD_ID } = process.env;
@@ -43,7 +42,6 @@ async function main() {
   const guildIDs = guildIdsString.split(',').map(id => id.trim());
   client.once('ready', async () => {
     cron.schedule('0 0 * * *', async () => { await clearExpiredWarns(db) });
-    cron.schedule('16,32,48,04 * * * *', async () => { await updateExpiredButtons(client, guildIDs) });
     await embedsenders(client, guildIDs);
     for (const guildId of guildIDs) {
       const guild = client.guilds.cache.get(guildId);
