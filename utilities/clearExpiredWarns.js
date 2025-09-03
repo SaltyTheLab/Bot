@@ -15,7 +15,7 @@ export default async function clearExpiredWarns(db) {
     try {
         // Step 1: Find all active warns that are older than 24 hours
         // The query is modified to check for `active = 1` and old `timestamp`
-        const expiredWarns = await db.punishmentsCollection.updateMany(
+        const expiredWarns = await db.usersCollection.updateMany(
             {
                 active: 1,
                 timestamp: { $lt: now - twentyFourHours },
