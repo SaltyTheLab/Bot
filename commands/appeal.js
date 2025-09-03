@@ -1,29 +1,45 @@
-import { InteractionContextType, SlashCommandBuilder, ActionRowBuilder, ButtonStyle, ButtonBuilder } from "discord.js";
+import { InteractionContextType, SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder } from "discord.js";
+import { getUserforappeal } from "../Database/databasefunctions.js";
 
 export const data = new SlashCommandBuilder()
     .setContexts([InteractionContextType.BotDM])
     .setName('appeal')
     .setDescription('This command is only for DMs for users who have been banned, do not use in servers.')
-    .addStringOption(option =>
-        option.setName('guild_id')
-            .setDescription('The ID of the guild you were banned from.')
-            .setRequired(true))
-
 
 export async function execute(interaction) {
-    const guildId = interaction.options.getString('guild_id');
+    const userbans = await getUserforappeal(interaction.user.id)
+    if (!userbans || userbans.length === 0) {
+        return interaction.reply('You do not have any recent ban records with our shared communities.');
+    }
+    const options = []
+    for (const ban of userbans) {
+        let banentry = ban.punishments.filter(entry => entry.type === 'Ban')
+        if (banentry.length > 0) {
+            const guild = interaction.client.guilds.cache.get(ban.guildId);
+            if (guild) {
+                options.push({
+                    label: guild.name,
+                    value: guild.id,
+                    description: `Banned on: ${new Date(ban.punishments.timestamp).toLocaleDateString()}`
+                });
+            }
+        }
+    }
 
+
+    if (options.length == 0)
+        return interaction.reply('I could not find any ban records for any servers i am in.')
     // Create the button
-    const appealButton = new ButtonBuilder()
-        .setCustomId(`appealButton_${guildId}`) // Embed the guild ID in the custom ID
-        .setLabel('Start Ban Appeal')
-        .setStyle(ButtonStyle.Primary);
-
-    const row = new ActionRowBuilder().addComponents(appealButton);
-
+    const row = new ActionRowBuilder()
+        .addComponents(new StringSelectMenuBuilder()
+            .setCustomId('guild_appeal_select') // Embed the guild ID in the custom ID
+            .setPlaceholder('Select a guild to appeal your ban')
+            .addOptions(options)
+        )
     // Reply with a message containing the button
     await interaction.reply({
-        content: `To submit your ban appeal for the guild with ID **\`${guildId}\`**, please click the button below.`,
-        components: [row]
+        content: `Please select the guild you wish to appeal a ban from:`,
+        components: [row],
+        fetchReply: true
     });
 }

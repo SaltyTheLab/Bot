@@ -1,22 +1,17 @@
-import { ButtonBuilder, ButtonStyle, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, EmbedBuilder, GuildMember, AuditLogEvent } from "discord.js";
+import { ButtonBuilder, ButtonStyle, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, EmbedBuilder, GuildMember, AuditLogEvent, PermissionFlagsBits } from "discord.js";
 import punishUser from "../utilities/punishUser.js";
 import { stringreactions } from "./Extravariables/reactionrolemap.js";
 import guildChannelMap from "./Extravariables/channelconfiguration.js";
+import { appealsinsert, appealsget, appealupdate, getdeniedappeals } from "../Database/databasefunctions.js";
+import { applications } from "./Extravariables/mapsandsets.js";
 const maxTitleLength = 45;
 const appealinvites = {
     '1231453115937587270': 'https://discord.gg/xpYnPrSXDG',
     '1342845801059192913': 'https://discord.gg/nWj5KvgUt9'
 }
-const userssubmitted = []
 
-// Function to truncate a string with an ellipsis if it exceeds the max length
-function truncate(str, maxLength) {
-    if (str.length > maxLength) {
-        return str.substring(0, maxLength - 3) + '...';
-    }
-    return str;
-}
 export async function interactionCreate(interaction) {
+
     if (interaction.isChatInputCommand()) {
         const command = interaction.client.commands.get(interaction.commandName);
         if (!command) return;
@@ -34,18 +29,15 @@ export async function interactionCreate(interaction) {
     }
     if (interaction.isModalSubmit()) {
         if (interaction.customId.startsWith('ban_modal_')) {
-            await interaction.deferReply({ ephemeral: true });
+            await interaction.deferReply();
             const customIdParts = interaction.customId.split('_');
             // Correctly parse the user ID, invite code, and inviter ID from the modal's custom ID
             const userIdToBan = customIdParts[2];
             const inviterId = customIdParts[3];
             const inviteCode = customIdParts[4];
+            const reason = interaction.fields.getTextInputValue('banReasonInput');
             const userToBan = await interaction.guild.members.fetch(userIdToBan).catch(() => null)
                 ?? await interaction.client.users.fetch(userIdToBan);
-
-            console.log(`Modal submitted for user ID: ${userIdToBan}, Inviter ID: ${inviterId} `);
-
-            const reason = interaction.fields.getTextInputValue('banReasonInput');
 
             if (!userToBan) {
                 const noUserEmbed = new EmbedBuilder()
@@ -57,9 +49,7 @@ export async function interactionCreate(interaction) {
                 await interaction.editReply({ embeds: [noUserEmbed], ephemeral: false });
                 return;
             }
-
-            let banSuccess = false;
-
+            const messagelink = `https://discord.com/channels/${interaction.guildId}/${interaction.channelId}/${interaction.message.id}`;
             let finalMessage = ``;
 
             // Ban the user who just joined
@@ -69,21 +59,22 @@ export async function interactionCreate(interaction) {
                     guild: interaction.guild,
                     target: userIdToBan,
                     moderatorUser: interaction.user,
-                    reason: `${reason} `,
+                    reason: reason,
                     channel: interaction.channel,
-                    message: interaction.id,
                     isAutomated: false,
+                    currentWarnWeight: 1,
+                    duration: 0,
+                    unit: 'min',
                     banflag: true,
-                    buttonflag: true
+                    buttonflag: true,
+                    messagelink: messagelink
                 });
-                banSuccess = true
-                finalMessage = `Successfully banned ${userToBan instanceof GuildMember ? userToBan.user.tag : userToBan.tag}.`;
+                finalMessage = `Banned ${userToBan instanceof GuildMember ? userToBan : userToBan}.`;
             } catch (error) {
-                console.error(`Error banning user ${userToBan.user.tag}: `, error);
+                console.error(`Error banning user ${userToBan instanceof GuildMember ? userToBan.user.tag : userToBan.tag}: `, error);
                 return;
             }
 
-            // Ban the inviter if one exists
             if (inviterId !== 'no inviter') {
                 const inviterMember = await interaction.guild.members.fetch(inviterId).catch(() => null);
                 try {
@@ -92,34 +83,35 @@ export async function interactionCreate(interaction) {
                         guild: interaction.guild,
                         target: inviterId,
                         moderatorUser: interaction.user,
-                        reason: `${reason} `,
+                        reason: reason,
                         channel: interaction.channel,
                         isAutomated: false,
+                        currentWarnWeight: 1,
+                        duration: 0,
+                        unit: 'min',
                         banflag: true,
-                        buttonflag: true
+                        buttonflag: true,
+                        messagelink: messagelink
                     });
                     finalMessage += `, inviter ${inviterMember.user.tag}.`;
                 } catch (error) {
                     console.error(`Error banning inviter ${inviterMember.user.tag}: `, error);
                 }
             }
-            //delete the invite if successful and invitecode exists
-            if (banSuccess && inviteCode !== 'no invite code') {
+            if (inviteCode !== 'no invite code') {
                 try {
                     const invite = await interaction.guild.invites.fetch(inviteCode);
                     if (invite) {
                         await invite.delete();
-
                     }
-
                 } catch (error) {
                     console.error(`Error deleting invite ${inviteCode}: `, error);
                 }
                 finalMessage += ' Associated Invite was deleted'
-            }
-            else {
+            } else {
                 finalMessage += ' No associated invite to delete.'
             }
+
 
             const finalreply = new EmbedBuilder()
                 .setDescription(finalMessage);
@@ -139,77 +131,158 @@ export async function interactionCreate(interaction) {
 
             await originalMessage.edit({ components: [updatedActionRow] });
         }
-        if (interaction.customId.startsWith('appealModal')) {
-
+        if (interaction.customId.startsWith('appeal')) {
             const guildId = interaction.fields.getTextInputValue('guildId');
             const reason = interaction.fields.getTextInputValue('reason');
             const justification = interaction.fields.getTextInputValue('justification');
             const extra = interaction.fields.getTextInputValue('extra');
-            if (userssubmitted.findIndex(entry => entry.user === interaction.user.id && entry.guildId) == true)
-                interaction.reply('You have already submitted an appeal, please be patient')
-            else {
-                try {
-                    const targetUserid = interaction.user.id
-                    // Try to get the guild. This will fail if the bot is not a member.
-                    const guild = await interaction.client.guilds.fetch(guildId);
-                    const appealChannel = await guild.channels.fetch(guildChannelMap[guild.id].modChannels.appealChannel);
-                    const modRole = guild.roles.cache.find(role =>
-                        ((role.permissions.has('KickMembers') || role.permissions.has('BanMembers'))) &&
-                        role.name.toLowerCase().includes('mod') && !role.managed
-                    );
-                    const adminRole = guild.roles.cache.find(role => role.permissions.has('Administrator'));
+            try {
+                const targetUserid = interaction.user.id
+                // Try to get the guild. This will fail if the bot is not a member.
+                const guild = await interaction.client.guilds.fetch(guildId);
+                const appealChannel = await guild.channels.fetch(guildChannelMap[guild.id].modChannels.appealChannel);
+                const modRole = guild.roles.cache.find(role =>
+                    ((role.permissions.has('KickMembers') || role.permissions.has('BanMembers'))) &&
+                    role.name.toLowerCase().includes('mod') && !role.managed
+                );
+                const adminRole = guild.roles.cache.find(role => role.permissions.has('Administrator') && role.name.toLowerCase().includes('admin'));
 
-                    if (!appealChannel) {
-                        return await interaction.reply({
-                            content: 'The appeal channel for that guild could not be found. Please contact a moderator directly.',
-                            ephemeral: true
-                        });
-                    }
-                    const appealEmbed = new EmbedBuilder()
-                        .setAuthor({
-                            name: `${interaction.user.tag})`,
-                            iconURL: interaction.user.displayAvatarURL({ dynamic: true })
-                        })
-                        .setColor(0x13cbd8)
-                        .setTitle(`Ban appeal`)
-                        .addFields(
-                            { name: 'Why did you get banned?', value: `${reason}` },
-                            { name: 'Why do you believe that your appeal should be accepted?', value: `${justification}` },
-                            { name: 'Is there anything else you would like us to know?', value: `${extra}` }
-                        )
-                        .setFooter({ text: `User ID: ${targetUserid}` })
-                        .setTimestamp()
-
-                    const choices = [
-                        new ButtonBuilder()
-                            .setCustomId(`unban_approve_${reason}_${justification}_${extra}_${targetUserid}_${guildId}`)
-                            .setLabel('Approve')
-                            .setStyle(ButtonStyle.Success),
-
-                        new ButtonBuilder()
-                            .setCustomId(`unban_reject_${reason}_${justification}_${extra}_${targetUserid}__${guildId}`)
-                            .setLabel('Reject')
-                            .setStyle(ButtonStyle.Danger)
-                    ]
-
-                    const actionrow = new ActionRowBuilder()
-                        .addComponents(choices)
-                    const message = await appealChannel.send({
-                        content: `<@&${modRole.id}> <@&${adminRole.id}>`,
-                        embeds: [appealEmbed],
-                        components: [actionrow]
-                    })
-
-                    message.startThread({ name: interaction.user.tag })
-                    interaction.reply({ content: 'Your appeal has been submitted and our team will look into it.' })
-
-                } catch (error) {
-                    console.error(`Failed to handle ban appeal for guild ID ${guildId}:`, error);
-                    // Inform the user that the appeal could not be delivered
-                    await interaction.reply({ content: 'The appeal could not be submitted. This may be because the bot is not in that guild. Please contact a moderator for that guild directly.', ephemeral: true });
+                if (!appealChannel) {
+                    return await interaction.reply({
+                        content: 'The appeal channel for that guild could not be found. Please contact a moderator directly.',
+                        ephemeral: true
+                    });
                 }
+                const appealEmbed = new EmbedBuilder()
+                    .setAuthor({
+                        name: `${interaction.user.tag})`,
+                        iconURL: interaction.user.displayAvatarURL({ dynamic: true })
+                    })
+                    .setColor(0x13cbd8)
+                    .setTitle(`Ban appeal`)
+                    .addFields(
+                        { name: 'Why did you get banned?', value: `${reason}` },
+                        { name: 'Why do you believe that your appeal should be accepted?', value: `${justification}` },
+                        { name: 'Is there anything else you would like us to know?', value: `${extra}` }
+                    )
+                    .setFooter({ text: `User ID: ${targetUserid}` })
+                    .setTimestamp()
+
+                const choices = [
+                    new ButtonBuilder()
+                        .setCustomId(`unban_approve_${targetUserid}_${guildId}`)
+                        .setLabel('Approve')
+                        .setStyle(ButtonStyle.Success),
+
+                    new ButtonBuilder()
+                        .setCustomId(`unban_reject_${targetUserid}_${guildId}`)
+                        .setLabel('Reject')
+                        .setStyle(ButtonStyle.Danger)
+                ]
+
+                const actionrow = new ActionRowBuilder()
+                    .addComponents(choices)
+                const message = await appealChannel.send({
+                    content: `<@&${modRole.id}> <@&${adminRole.id}>`,
+                    embeds: [appealEmbed],
+                    components: [actionrow]
+                })
+
+                message.startThread({ name: interaction.user.tag })
+                interaction.reply({ content: 'Your appeal has been submitted and our team will look into it.' })
+
+            } catch (error) {
+                console.error(`Failed to handle ban appeal for guild ID ${guildId}:`, error);
+                // Inform the user that the appeal could not be delivered
+                await interaction.reply({ content: 'The appeal could not be submitted. This may be because the bot is not in that guild. Please contact a moderator for that guild directly.', ephemeral: true });
             }
-            userssubmitted.push({ user: interaction.user.id, guildId: guildId });
+            appealsinsert(interaction.user.id, guildId, reason, justification, extra);
+        }
+        if (interaction.customId.startsWith('situations')) {
+            const application = applications.get(interaction.user.id)
+            application.dmmember = interaction.fields.getTextInputValue('dmmember')
+            application.argument = interaction.fields.getTextInputValue('arguments')
+            application.ambiguous = interaction.fields.getTextInputValue('rulebreakdm')
+            application.staffbreakrule = interaction.fields.getTextInputValue('staffrulebreak')
+            application.illegal = interaction.fields.getTextInputValue('illegal')
+            const applicationChannelid = guildChannelMap[application.guild].modChannels.applicationChannel
+            const applicationChannel = await interaction.client.channels.fetch(applicationChannelid)
+            const guild = await interaction.client.guilds.cache.get(application.guild)
+            const applicationembed = new EmbedBuilder()
+                .setAuthor({
+                    name: `@${interaction.user.tag}`,
+                    iconURL: interaction.user.displayAvatarURL({ dynamic: true })
+                })
+                .setColor(0x13b6df)
+                .setTitle(`Mod Application for ${guild.name}`)
+                .addFields(
+                    { name: 'Age Range:', value: `${application.Agerange}`, inline: false },
+                    { name: 'Prior Experience:', value: `${application.Experience}`, inline: false },
+                    { name: 'Have you been warned/muted/kicked/banned before?(be honest)', value: `${application.History}`, inline: false },
+                    { name: 'Timezone:', value: `${application.Stayed}`, inline: false },
+                    { name: `How long have you been a member in ${guild.name}?`, value: `${application.Stayed}` },
+                    { name: `How active are you in ${guild.name}?`, value: `${application.Activity}`, inline: false },
+                    { name: 'Why do you want to be a mod?:', value: `${application.why}`, inline: false },
+                    { name: 'What is your definition of a troll?', value: `${application.trolldef}`, inline: false },
+                    { name: 'What is your definition of a raid?', value: `${application.raiddef}` },
+                    { name: 'You disagree with a staff punishment. What would you do?', value: `${application.staffissues}`, inline: false },
+                    { name: 'How would you handle a member report?', value: `${application.memberreport}`, inline: false },
+                    { name: 'A member messages you about being harrassed. How would you handle the situation?', value: `${application.dmmember}`, inline: false },
+                    { name: 'Users are arguing in general chat. explain your de-escalation steps.', value: `${application.argument}`, inline: false },
+                    { name: 'A member DMs you about a rule-breaking DM. What is your course of action?', value: `${application.ambiguous}`, inline: false },
+                    { name: 'A moderator is breaking a rule. What is your course of action?', value: `${application.staffbreakrule}`, inline: false },
+                    { name: 'A user share illegal content. What are the steps you take?', value: `${application.illegal}`, inline: false }
+                )
+
+            applicationChannel.send({
+                embeds: [applicationembed]
+            })
+            interaction.reply({
+                content: 'your application was successfuly submitted!!'
+            })
+            applications.delete(interaction.user.id)
+        }
+        if (interaction.customId.startsWith('Defs, reasons, and issues')) {
+            const application = applications.get(interaction.user.id)
+            application.why = interaction.fields.getTextInputValue('why')
+            application.trolldef = interaction.fields.getTextInputValue('trolldef')
+            application.raiddef = interaction.fields.getTextInputValue('raiddef')
+            application.staffissues = interaction.fields.getTextInputValue('staffissues')
+            application.memberreport = interaction.fields.getTextInputValue('memberreport')
+            const nextButton = new ButtonBuilder()
+                .setCustomId('next_modal_three')
+                .setLabel('Continue Application')
+                .setStyle(ButtonStyle.Primary);
+
+            const row = new ActionRowBuilder()
+                .addComponents(nextButton);
+
+            await interaction.reply({
+                content: 'Part 2 of your application has been submitted! Click the button below to continue to the next section.',
+                components: [row],
+                ephemeral: true
+            });
+
+        }
+        if (interaction.customId.startsWith('server')) {
+            const application = applications.get(interaction.user.id)
+            application.Experience = interaction.fields.getTextInputValue('experience')
+            application.History = interaction.fields.getTextInputValue('punishments')
+            application.Timezone = interaction.fields.getTextInputValue('timezone')
+            application.Stayed = interaction.fields.getTextInputValue('length')
+            application.Activity = interaction.fields.getTextInputValue('activity')
+            const nextButton = new ButtonBuilder()
+                .setCustomId('next_modal_two')
+                .setLabel('Continue Application')
+                .setStyle(ButtonStyle.Primary);
+
+            const row = new ActionRowBuilder()
+                .addComponents(nextButton);
+            interaction.reply({
+                content: 'Part 1 of your application has been submitted! Click the button below to continue to the next section.',
+                components: [row],
+                ephemeral: true
+            })
         }
     }
     if (interaction.isButton()) {
@@ -251,7 +324,7 @@ export async function interactionCreate(interaction) {
             }
 
             let inviter = null;
-            if (inviterId != 'no inviter') {
+            if (inviterId !== 'no inviter') {
                 inviter = await interaction.guild.members.fetch(inviterId).catch(() => null)
             }
 
@@ -259,12 +332,11 @@ export async function interactionCreate(interaction) {
             let inviterTag = inviterId && inviterId !== 'no inviter' ? inviter.user.tag : '';
 
             // Calculate available space for inviter tag
-            const baseTitle = `Ban User: ${truncate(memberTag, maxTitleLength)}`;
+            const baseTitle = `Ban ${memberTag}`;
             let modalTitle = baseTitle;
 
             if (inviterTag) {
-                // Check if adding the inviter tag will exceed the limit
-                const inviterPart = ` (Invited by ${truncate(inviterTag, maxTitleLength - baseTitle.length)})`;
+                const inviterPart = ` (Invited)`;
                 if (baseTitle.length + inviterPart.length <= maxTitleLength) {
                     modalTitle += inviterPart;
                 }
@@ -285,67 +357,82 @@ export async function interactionCreate(interaction) {
             modal.addComponents(firstActionRow);
             await interaction.showModal(modal);
         }
-        else if (interaction.customId.startsWith('unban_')) {
+        if (interaction.customId.startsWith('unban_')) {
             await interaction.deferReply();
             const customIdParts = interaction.customId.split('_')
             const action = customIdParts[1];
-            const reason = customIdParts[2];
-            const justification = customIdParts[3];
-            const extra = customIdParts[4];
-            const targetUser = await interaction.client.users.fetch(customIdParts[5])
+            const targetUser = await interaction.client.users.fetch(customIdParts[2])
+            const guild = await interaction.client.guilds.fetch(customIdParts[3]);
+            const appeals = await appealsget(targetUser.id, guild.id)
+            const reason = appeals[0].reason
+            const justification = appeals[0].justification
+            const extra = appeals[0].extra
+            let outcome = false
+            const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator)
+            const Adminchannel = guildChannelMap[guild.id].modChannels.AdminChannel
+            if (!isAdmin) {
+                interaction.reply({ content: `Please wait for an admin to make a decision. `, ephemeral: true })
+                Adminchannel.send({ content: `Letting you know ${interaction.user} tried to jump the gun on an appeal.` })
+                return;
+            }
             const appealEmbed = new EmbedBuilder()
                 .setAuthor({
-                    name: `${interaction.user.tag}`,
-                    iconURL: interaction.user.displayAvatarURL({ dynamic: true })
+                    name: `${targetUser.tag} `,
+                    iconURL: targetUser.displayAvatarURL({ dynamic: true })
                 })
                 .setColor(0x13cbd8)
                 .setTitle(`Ban appeal`)
                 .addFields(
-                    { name: 'Why did you get banned?', value: `${reason}` },
-                    { name: 'Why do you believe that your appeal should be accepted?', value: `${justification}` },
-                    { name: 'Is there anything else you would like us to know?', value: `${extra}` }
-                )
-                .setFooter({ text: `User ID: ${targetUser.id}` })
+                    { name: 'Why did you get banned?', value: `${reason} ` },
+                    { name: 'Why do you believe that your appeal should be accepted?', value: `${justification} ` },
+                    { name: 'Is there anything else you would like us to know?', value: `${extra}` })
+                .setFooter({ text: `User ID: ${targetUser.id} ` })
                 .setTimestamp()
             const response = new EmbedBuilder()
                 .setAuthor({
-                    name: `${targetUser.tag}`,
+                    name: `${targetUser.tag} `,
                     iconURL: targetUser.displayAvatarURL({ dynamic: true })
                 })
-            if (action === 'reject') {
-                response.setColor(0x890000)
-                response.setTitle('Appeal Denied...')
-                response.setDescription(`${targetUser} your ban appeal has unfortunantly been denied from ${interaction.guild.name}.`)
-                appealEmbed.setColor(0x890000)
-                appealEmbed.addFields({ name: 'Denied by:', value: `${interaction.user}`, inline: true })
-            }
-            else if (action === 'approve') {
-                const guild = await interaction.client.guilds.fetch(customIdParts[6]);
-                let fetchedlogs = await guild.fetchAuditLogs({
-                    type: AuditLogEvent.MemberBanAdd,
-                    limit: 25
-                })
-                const banLog = fetchedlogs.entries.find(log => log.target.id === targetUser.id);
-                if (!banLog) {
-                    interaction.reply(`Could not find a recent ban entry for user ${targetUser}`);
-                    return;
+
+            switch (action) {
+                case 'reject':
+                    response.setColor(0x890000)
+                    response.setTitle('Appeal Denied...')
+                    response.setDescription(`${targetUser} your ban appeal has unfortunantly been denied from ${interaction.guild.name}.`)
+                    appealEmbed.setColor(0x890000)
+                    appealEmbed.addFields(
+                        { name: 'Denied by:', value: `${interaction.user} `, inline: true })
+                    break;
+                case 'approve': {
+                    let fetchedlogs = await guild.fetchAuditLogs({
+                        type: AuditLogEvent.MemberBanAdd,
+                        limit: 25
+                    })
+                    const banLog = fetchedlogs.entries.find(log => log.target.id === targetUser.id);
+                    if (!banLog) {
+                        interaction.editReply(`Could not find a recent ban entry for user ${targetUser}`);
+                        return;
+                    }
+                    await guild.bans.remove(targetUser, `Ban Command: ${appeals[0].reason}`)
+                    response.setColor(0x008900)
+                    response.setTitle('Appeal Accepted!')
+                    response.setDescription(`${targetUser} your ban appeal has been accepted, click below to rejoin the server!\n\n invite: ${appealinvites[guild.id]} `)
+                    targetUser.send({ embeds: [response] })
+                    appealEmbed.setColor(0x008900)
+                    appealEmbed.addFields(
+                        { name: 'Approved by:', value: `${interaction.user} `, inline: true })
+                    outcome = true
+                    break;
                 }
-                await guild.bans.remove(targetUser, `${reason}`)
-                response.setColor(0x008900)
-                response.setTitle('Appeal Accepted!')
-                response.setDescription(`${targetUser} your ban appeal has been accepted, click below to rejoin the server!\n\n invite: ${appealinvites[guild.id]}`)
-                targetUser.send({ embeds: [response] })
-                appealEmbed.setColor(0x008900)
-                appealEmbed.addFields({ name: 'Approved by:', value: `${interaction.user}`, inline: true })
             }
             const updatedbuttons = [
                 new ButtonBuilder()
-                    .setCustomId(`unban_approve_${reason}_${justification}_${extra}_${targetUser.id}_${interaction.guild.id}`)
+                    .setCustomId(`unban_approve_${targetUser.id}_${interaction.guild.id} `)
                     .setLabel('Approve')
                     .setStyle(ButtonStyle.Success)
                     .setDisabled(true),
                 new ButtonBuilder()
-                    .setCustomId(`unban_reject_${reason}_${justification}_${extra}_${targetUser.id}__${interaction.guild.id}`)
+                    .setCustomId(`unban_reject_${targetUser.id}__${interaction.guild.id} `)
                     .setLabel('Reject')
                     .setStyle(ButtonStyle.Danger)
                     .setDisabled(true)
@@ -357,12 +444,116 @@ export async function interactionCreate(interaction) {
                 embeds: [appealEmbed],
                 components: [actionrow]
             })
-
+            await appealupdate(targetUser.id, guild.id, outcome)
             await interaction.deleteReply();
-            const usertoremove = userssubmitted.findIndex(entry => entry.user === targetUser.id && entry.guildid === interaction.guild.id);
-            if (usertoremove !== -1) {
-                userssubmitted.splice(usertoremove, 1)
-            }
+        }
+        if (interaction.customId.startsWith('next_modal_three')) {
+            const situationmodal = new ModalBuilder()
+                .setCustomId('situations')
+                .setTitle('Situations (3/3)')
+
+            const dmmember = new TextInputBuilder()
+                .setCustomId('dmmember')
+                .setLabel('A member messages you about being harrassed')
+                .setPlaceholder('How would you handle the situation?')
+                .setRequired(true)
+                .setStyle(TextInputStyle.Paragraph)
+                .setMaxLength(350)
+
+            const argument = new TextInputBuilder()
+                .setCustomId('arguments')
+                .setLabel('Users are arguing in general chat')
+                .setPlaceholder('explain your de-escalation steps')
+                .setStyle(TextInputStyle.Paragraph)
+                .setRequired(true)
+                .setMaxLength(350)
+
+            const ambiguous = new TextInputBuilder()
+                .setCustomId('rulebreakdm')
+                .setLabel('A member DMs you about a rule-breaking DM')
+                .setPlaceholder('What is your course of action?')
+                .setRequired(true)
+                .setStyle(TextInputStyle.Paragraph)
+                .setMaxLength(350)
+
+            const staffbreakrule = new TextInputBuilder()
+                .setCustomId('staffrulebreak')
+                .setLabel('A moderator is breaking a rule')
+                .setPlaceholder('What is your course of action')
+                .setRequired(true)
+                .setStyle(TextInputStyle.Paragraph)
+                .setMaxLength(350)
+
+            const illegalcontent = new TextInputBuilder()
+                .setCustomId('illegal')
+                .setLabel('A user share illegal content')
+                .setPlaceholder('What are the steps you take?')
+                .setRequired(true)
+                .setStyle(TextInputStyle.Paragraph)
+                .setMaxLength(350)
+
+            const questionOne = new ActionRowBuilder().addComponents(dmmember)
+            const questionTwo = new ActionRowBuilder().addComponents(argument)
+            const questionThree = new ActionRowBuilder().addComponents(ambiguous)
+            const questionFour = new ActionRowBuilder().addComponents(staffbreakrule)
+            const questionFive = new ActionRowBuilder().addComponents(illegalcontent)
+
+            situationmodal.addComponents(questionOne, questionTwo, questionThree, questionFour, questionFive)
+
+            interaction.showModal(situationmodal)
+        }
+        if (interaction.customId.startsWith('next_modal_two')) {
+
+            const questionsTwo = new ModalBuilder()
+                .setCustomId('Defs, reasons, and issues')
+                .setTitle('Definitions, Why mod, and Staff issues (2/3)')
+
+
+            const questionOne = new TextInputBuilder()
+                .setCustomId('why')
+                .setLabel('Why do you want to be a mod?')
+                .setRequired(true)
+                .setStyle(TextInputStyle.Paragraph)
+                .setMaxLength(500)
+
+            const questionTwo = new TextInputBuilder()
+                .setCustomId('trolldef')
+                .setLabel('What is your definition of a troll?')
+                .setRequired(true)
+                .setStyle(TextInputStyle.Short)
+                .setMaxLength(65)
+
+            const questionThree = new TextInputBuilder()
+                .setCustomId('raiddef')
+                .setLabel('What is your definition of a raid?')
+                .setRequired(true)
+                .setStyle(TextInputStyle.Short)
+                .setMaxLength(65)
+
+            const questionFour = new TextInputBuilder()
+                .setCustomId('staffissues')
+                .setLabel('Disagreement with a staff punishment')
+                .setPlaceholder('What would you do?')
+                .setRequired(true)
+                .setStyle(TextInputStyle.Paragraph)
+                .setMaxLength(300)
+
+            const questionFive = new TextInputBuilder()
+                .setCustomId('memberreport')
+                .setLabel('How would you handle a member report?')
+                .setPlaceholder('Describe the steps you would take to investigate and resolve it')
+                .setRequired(true)
+                .setStyle(TextInputStyle.Paragraph)
+                .setMaxLength(300)
+
+            const firstActionRow = new ActionRowBuilder().addComponents(questionOne);
+            const secondActionRow = new ActionRowBuilder().addComponents(questionTwo);
+            const thirdActionRow = new ActionRowBuilder().addComponents(questionThree);
+            const fourthActionRow = new ActionRowBuilder().addComponents(questionFour);
+            const fifthActionRow = new ActionRowBuilder().addComponents(questionFive);
+
+            questionsTwo.addComponents(firstActionRow, secondActionRow, thirdActionRow, fourthActionRow, fifthActionRow);
+            interaction.showModal(questionsTwo);
         }
     }
     if (interaction.isStringSelectMenu()) {
@@ -382,7 +573,7 @@ export async function interactionCreate(interaction) {
                 const roleID = reactions[roleValue];
 
                 if (!roleID) {
-                    console.warn(`⚠️ No role mapped for select menu value: ${roleValue}. Skipping.`);
+                    console.warn(`⚠️ No role mapped for select menu value: ${roleValue}.Skipping.`);
                     continue;
                 }
 
@@ -392,9 +583,9 @@ export async function interactionCreate(interaction) {
                     if (!member.roles.cache.has(roleID)) {
                         try {
                             await member.roles.add(roleID);
-                            rolesAdded.push(`<@&${roleID}>`);
+                            rolesAdded.push(`< @& ${roleID}> `);
                         } catch (err) {
-                            console.error(`❌ Failed to add role ${roleID} to ${member.user.tag}:`, err);
+                            console.error(`❌ Failed to add role ${roleID} to ${member.user.tag}: `, err);
                         }
                     }
                 } else {
@@ -402,26 +593,135 @@ export async function interactionCreate(interaction) {
                     if (member.roles.cache.has(roleID)) {
                         try {
                             await member.roles.remove(roleID);
-                            rolesRemoved.push(`<@&${roleID}>`);
+                            rolesRemoved.push(`< @& ${roleID}> `);
                         } catch (err) {
-                            console.error(`❌ Failed to remove role ${roleID} from ${member.user.tag}:`, err);
+                            console.error(`❌ Failed to remove role ${roleID} from ${member.user.tag}: `, err);
                         }
                     }
                 }
             }
             let replyContent = '';
             if (rolesAdded.length > 0) {
-                replyContent += `Added: ${rolesAdded.join(', ')}\n`;
+                replyContent += `Added: ${rolesAdded.join(', ')} \n`;
             }
             if (rolesRemoved.length > 0) {
-                replyContent += `Removed: ${rolesRemoved.join(', ')}\n`;
+                replyContent += `Removed: ${rolesRemoved.join(', ')} \n`;
             }
             if (!replyContent) {
                 replyContent = 'No role changes were made.';
             }
 
             await interaction.editReply({ content: replyContent, ephemeral: true });
-            console.log(`✅ Roles updated for ${member.user.tag} via select menu. Added: [${rolesAdded.join(', ')}], Removed: [${rolesRemoved.join(', ')}]`);
+            console.log(`✅ Roles updated for ${member.user.tag} via select menu.Added: [${rolesAdded.join(', ')}], Removed: [${rolesRemoved.join(', ')}]`);
+        }
+        if (interaction.customId.startsWith('guild_appeal')) {
+            const guildId = interaction.values[0];
+            const appealslist = await appealsget(interaction.user.id, guildId)
+            const deniedappeals = await getdeniedappeals(interaction.user.id, guildId)
+            if (deniedappeals.length > 0) {
+                interaction.reply(`Your previous appeal has been denied.I'm sorry.`)
+                return;
+            }
+            else if (appealslist && appealslist.length >= 1) {
+                interaction.reply(`You have already submitted an appeal, please be patient`)
+                return;
+            }
+            const modal = new ModalBuilder()
+                .setCustomId('appealModal')
+                .setTitle('Ban Appeal Submission');
+
+            const guildid = new TextInputBuilder()
+                .setCustomId('guildId')
+                .setLabel("Guild ID")
+                .setStyle(TextInputStyle.Short)
+                .setValue(guildId) // Prefill with the provided ID
+                .setRequired(true)
+
+            const reason = new TextInputBuilder()
+                .setCustomId('reason')
+                .setLabel("Why were you banned?")
+                .setStyle(TextInputStyle.Paragraph)
+                .setRequired(true)
+                .setPlaceholder('Put your ban reason here')
+
+            const justification = new TextInputBuilder()
+                .setCustomId('justification')
+                .setLabel("Why should accept your ban appeal?")
+                .setStyle(TextInputStyle.Paragraph)
+                .setRequired(true)
+                .setPlaceholder('Put your explaination here')
+
+            const extra = new TextInputBuilder()
+                .setCustomId('extra')
+                .setLabel('Anything else we need to know?')
+                .setStyle(TextInputStyle.Paragraph)
+                .setRequired(false)
+                .setPlaceholder('Put anything else here')
+
+            const firstActionRow = new ActionRowBuilder().addComponents(guildid);
+            const secondActionRow = new ActionRowBuilder().addComponents(reason);
+            const thirdActionRow = new ActionRowBuilder().addComponents(justification);
+            const fourthActionRow = new ActionRowBuilder().addComponents(extra);
+
+            modal.addComponents(firstActionRow, secondActionRow, thirdActionRow, fourthActionRow);
+
+            await interaction.showModal(modal);
+        }
+        if (interaction.customId.startsWith('select_age')) {
+            const application = applications.get(interaction.user.id)
+            application.Agerange = interaction.values[0];
+            const guild = interaction.client.guilds.cache.get(application.guild)
+            const questionModalOne = new ModalBuilder()
+                .setCustomId('server')
+                .setTitle('Experience and Activity (1/3)')
+
+            const questionOne = new TextInputBuilder()
+                .setCustomId('experience')
+                .setLabel('Please put down any prior mod experience')
+                .setPlaceholder('Put your experience here or N/A')
+                .setRequired(true)
+                .setStyle(TextInputStyle.Paragraph)
+                .setMaxLength(250)
+
+            const questionTwo = new TextInputBuilder()
+                .setCustomId('punishments')
+                .setLabel('Have you been warned/muted/kicked/banned?')
+                .setPlaceholder('be honest and you do not need too much detail')
+                .setRequired(true)
+                .setStyle(TextInputStyle.Short)
+                .setMaxLength(100)
+
+            const questionThree = new TextInputBuilder()
+                .setCustomId('timezone')
+                .setLabel('What is your timezone?')
+                .setRequired(true)
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('If unknown, put your current time')
+                .setMaxLength(8)
+
+            const questionFour = new TextInputBuilder()
+                .setCustomId('length')
+                .setLabel(`How long have you been a member in ${guild.name}?`)
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true)
+                .setMaxLength(25)
+
+            const questionFive = new TextInputBuilder()
+                .setCustomId('activity')
+                .setLabel(`How active are you in ${guild.name}`)
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true)
+                .setMaxLength(150)
+
+            const firstActionRow = new ActionRowBuilder().addComponents(questionOne)
+            const secondActionRow = new ActionRowBuilder().addComponents(questionTwo)
+            const thirdActionRow = new ActionRowBuilder().addComponents(questionThree)
+            const fourthActionRow = new ActionRowBuilder().addComponents(questionFour)
+            const fifthActionRow = new ActionRowBuilder().addComponents(questionFive)
+
+            questionModalOne.addComponents(firstActionRow, secondActionRow, thirdActionRow, fourthActionRow, fifthActionRow)
+            interaction.showModal(questionModalOne)
+
         }
     }
 }
