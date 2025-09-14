@@ -1,5 +1,5 @@
 import { EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle, StringSelectMenuBuilder } from 'discord.js';
-import guildChannelMap from '../BotListeners/Extravariables/channelconfiguration.js';
+import guildChannelMap from "../BotListeners/Extravariables/channelconfiguration.json" with {type: 'json'};
 import { saveMessageIDs, loadMessageIDs } from '../utilities/messageStorage.js';
 import { getComparableEmbed } from '../utilities/messagecomarator.js';
 const guildEmbedConfig = {
@@ -23,7 +23,8 @@ const guildEmbedConfig = {
     ],
     "1342845801059192913": [
         { name: "rules", senderFunc: BarkCreateRulesEmbed },
-        { name: "getroles", senderFunc: BarkCreateReactionEmbed }
+        { name: "getroles", senderFunc: BarkCreateReactionEmbed },
+        { name: "dirty", senderFunc: BarkCreateDirtyEmbed }
     ]
 };
 // New function to handle the common tasks of sending and saving embed info
@@ -611,25 +612,41 @@ async function EvocreateRulesEmbed(guild) {
 }
 async function BarkCreateRulesEmbed(guild) {
     const rules = new EmbedBuilder()
+        .setColor(0x086ca5)
         .setAuthor({
             name: 'Bark',
             iconURL: guild.iconURL({ size: 1024, extension: 'png' }) || undefined
         })
-        .setDescription(['Hi, Im Febot created by <@857445139416088647>, i\'m going to be watching the server for common rule breaks',
-            'I have a few things that I keep a look out for:',
-            '* Caps(minimun ten length)',
-            '* everyone ping',
-            '* bad words(will tell you what is caught)',
-            '* Discord Invites',
-            '* General Spam',
-            '* Duplicate messeages',
-            '* media(more on this in a bit)\n\n',
-            'for each warn you get from me or manual, this becomes an Active warn meaning that the next punishment will compound and extend the mute if automod is triggered. After 24 hours, the warn that was issued will expire\n',
-            '**For media**:',
-            'Media has a limit of 1 per 20 messages, this is at a individual level so if someone else sends media, you will not get penalized',
-            'The max mute i can go to is 6h which you shouldn\'t reach otherwise <@&1409208962091585607> and <@&1388113570369372181> will know'
-        ].join('\n')
+        .setTitle('Welcome to Bark!!')
+        .setDescription([
+            'This server has a few easy rules to follow, and by doing so you will like this community created by <@1226077693548953630>.',
+            'Here are the rules you need to follow:',
+            '1)  <#1388115293338996737> channel is only available to users with the <@&1388111992287400089> role. Getting this role requires you to be verified. Being caught lying about your age is punishable by __**ban**__, no exceptions. Having minors being able to access this section causes serious issues so once caught you cannot get the role back even if you prove your 18+ now',
+            '2) "do unto you as you do unto others" otherwise known as respect others and you will recieve respect in return. <@&1409208962091585607> will not always be available to de escalate things so, please, if you have issues and a mod is not around ping <@&1402282104401821828> and they can help as well. And always try to ping the role instead of a individual user as they specificlly may not see your message',
+            '3) Please keep drama, personal "beef", and arguements in dms or elsewhere as this kills the flow of chat.',
+            '4) <@1226077693548953630>, <@&1408636330124251157>, <@&1388113570369372181>, <@&1409208962091585607>, and <@&1402282104401821828> have final say on a topic. Please listen to them and do not start arguments like "it was just a joke". That excuse will not fly here since you are talking to strangers or people you barely know. What might be funny to you and someone else may be hurting a bystander watching chat.',
+            '5) Sensitive topics like "offing yourself" is strictly forbbiden here, we take this topic very seriously. No ifs, ands, or buts about it.',
+            '6) Do not block or mute staff, we need to be able to see everyone\'s activity. You will be banned on the spot.'
+        ].join('\n\n')
         )
+        .addFields({
+            name: 'AutoMod:', value: [
+                'AutoMod(<@1392656116428701726>) Functions:',
+                '* Caps(minimun ten length)',
+                '* everyone ping',
+                '* bad words',
+                '* Discord Invites',
+                '* General Spam',
+                '* Duplicate messeages',
+                '* media\n',
+                'Warnings:\n',
+                'for each warn you get from automod or manual, this becomes an Active Warn meaning tha After 24 hours, the warn that was issued will expire. These will compound when you get multiple in a day\n',
+                'Media:\n',
+                'For every 20 messages you send or are inactive(no messages sent) for an hour, your media count will be reset. Do not take advantage of the reset hence why it is so long',
+
+            ].join('\n')
+        },
+            { name: 'Circumventing automod filter:', value: 'Trying to use placeholders or different letters to circumvent the automods filter will lead to a warn or mute' })
         .setFooter({ text: 'Bark', iconURL: guild.iconURL({ size: 1024, extension: 'png' }) });
     return {
         embeds: [rules]
@@ -648,6 +665,27 @@ async function BarkCreateReactionEmbed() {
     return {
         embeds: [roleembed],
         reactions: age
+    }
+}
+async function BarkCreateDirtyEmbed(guild) {
+    const rulesembed = new EmbedBuilder()
+        .setThumbnail(guild.iconURL({ size: 1024, extension: "png" }))
+        .setColor(0xf700ff)
+        .setTitle('Rules of the 18+ catagorey')
+        .setDescription([
+            'All sever rules apply here but there are a few supplemental rules here:\n',
+            '1) all NSFW Art must go into the <#1388116277670842478> channel.',
+            '2) There is a dedicated nsfw vc channel called dirty talk for the appropriate conversations',
+            '3) No IRL pics in nsfw! We are adults here and expect common sense here. This will lead to a swift ban.\n',
+            'react with 🍆 to get access to <#1388116277670842478> and the dirty vc here!'
+        ].join('\n')
+        )
+        .setFooter({ text: guild.name, iconURL: guild.iconURL({ size: 1024, extension: 'png' }) })
+
+    const react = '🍆';
+    return {
+        embeds: [rulesembed],
+        reactions: react
     }
 }
 export async function embedsenders(client, guildIds) {
@@ -673,9 +711,9 @@ export async function embedsenders(client, guildIds) {
             const { name: embedName, senderFunc } = embedConfig;
             const embedData = await senderFunc(guild);
             const existingEmbedInfo = messageIDs[guild.id]?.find((embed) => embed.name === embedName);
-            const channel = await guild.client.channels.fetch(existingEmbedInfo.channelid);
             let message;
             try {
+                const channel = await guild.client.channels.fetch(existingEmbedInfo.channelid);
                 message = await channel.messages.fetch(existingEmbedInfo.messageId);
             } catch {
                 console.log(`missing embed for ${embedName}, adding to queue...`)
@@ -700,7 +738,6 @@ export async function embedsenders(client, guildIds) {
                     console.error(`❌ Failed to update message '${embedName}':`, error);
                 }
             }
-
         }
         await Promise.allSettled(embedTasks);
     }
