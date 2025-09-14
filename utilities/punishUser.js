@@ -1,9 +1,9 @@
-import { EmbedBuilder, GuildMember } from 'discord.js';
+import { EmbedBuilder, GuildMember, PermissionFlagsBits } from 'discord.js';
 import getWarnStats from '../moderation/simulatedwarn.js';
 import getNextPunishment from '../moderation/punishments.js';
 import { addPunishment, getUser } from '../Database/databasefunctions.js';
 import logRecentCommand from '../Logging/recentcommands.js';
-import guildChannelMap from '../BotListeners/Extravariables/channelconfiguration.js';
+import guildChannelMap from "../BotListeners/Extravariables/channelconfiguration.json" with {type: 'json'};
 import { commandbans } from '../BotListeners/Extravariables/mapsandsets.js';
 const BAN_CACHE_TIMEOUT = 5000;
 
@@ -58,6 +58,20 @@ export default async function punishUser({
 }) {
   const modChannels = guildChannelMap[guild.id].modChannels
   const targetUser = await guild.members.fetch(target).catch(() => null) ?? await guild.client.users.fetch(target).catch(() => null);
+  const staffcheck = targetUser.permissions.has(PermissionFlagsBits.ModerateMembers)
+  const userTag = targetUser instanceof GuildMember ? targetUser.user.tag : targetUser.tag
+  if (staffcheck) {
+    interaction.reply(
+      {
+        embeds: [new EmbedBuilder()
+          .setAuthor({
+            name: userTag + ' is staff, please handle this with an admin or co-owner.', iconURL: targetUser.displayAvatarURL({ dynamic: true })
+          })]
+        , ephemeral: true
+      })
+    return;
+  }
+
   const usercheck = await getUser(targetUser.id, guild.id);
   if (!usercheck && interaction)
     interaction.reply('❌ User does not exist in the Database. Likely bot.');
@@ -65,7 +79,6 @@ export default async function punishUser({
   let effectiveDurationMs;
   let warnType;
   let sentMessage;
-  // --- Define what type it is ---
   if (banflag) {
     warnType = 'Ban'
     commandbans.add(target);
@@ -86,9 +99,9 @@ export default async function punishUser({
   const commandEmbed = new EmbedBuilder()
     .setColor(LOG_COLORS[warnType])
     .setAuthor({
-      name: warnType == 'Ban' ? `${targetUser instanceof GuildMember ? targetUser.user.tag : targetUser.tag} was banned`
-        : duration > 0 ? `${targetUser instanceof GuildMember ? targetUser.user.tag : targetUser.tag} was issued a ${durationStr} mute`
-          : `${targetUser instanceof GuildMember ? targetUser.user.tag : targetUser.tag} was issued a warning`,
+      name: warnType == 'Ban' ? `${userTag} was banned`
+        : duration > 0 ? `${userTag} was issued a ${durationStr} mute`
+          : `${userTag} was issued a warning`,
       iconURL: targetUser.displayAvatarURL({ dynamic: true })
     })
 
@@ -210,7 +223,8 @@ export default async function punishUser({
   }
 
   // --- Log Command ---
-  logRecentCommand(warnType == 'Ban' ? `Ban - ${targetUser instanceof GuildMember ? targetUser.user.tag : targetUser.tag} - ${reason} - issuer: ${moderatorUser.tag}`
-    : duration > 0 ? `Mute- ${targetUser.tag} - ${reason} - issuer: ${moderatorUser.tag} duration: ${durationStr}`
-      : `warn - ${targetUser.tag} - ${reason} - issuer: ${moderatorUser.tag}`);
+  if (!isAutomated)
+    logRecentCommand(warnType == 'Ban' ? `Ban - ${userTag} - ${reason} - issuer: ${moderatorUser.tag}`
+      : duration > 0 ? `Mute- ${userTag} - ${reason} - issuer: ${moderatorUser.tag} duration: ${durationStr}`
+        : `warn - ${userTag} - ${reason} - issuer: ${moderatorUser.tag}`);
 }
