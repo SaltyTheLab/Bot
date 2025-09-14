@@ -1,7 +1,7 @@
 import { ButtonBuilder, ButtonStyle, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, EmbedBuilder, GuildMember, AuditLogEvent, PermissionFlagsBits } from "discord.js";
 import punishUser from "../utilities/punishUser.js";
 import { stringreactions } from "./Extravariables/reactionrolemap.js";
-import guildChannelMap from "./Extravariables/channelconfiguration.js";
+import guildChannelMap from "./Extravariables/channelconfiguration.json" with {type: 'json'};
 import { appealsinsert, appealsget, appealupdate, getdeniedappeals } from "../Database/databasefunctions.js";
 import { applications } from "./Extravariables/mapsandsets.js";
 const maxTitleLength = 45;
@@ -701,7 +701,7 @@ export async function interactionCreate(interaction) {
 
             const questionFour = new TextInputBuilder()
                 .setCustomId('length')
-                .setLabel(`How long have you been a member in ${guild.name}?`)
+                .setLabel(`Time you been a member in ${guild.name}?`)
                 .setStyle(TextInputStyle.Short)
                 .setRequired(true)
                 .setMaxLength(25)

@@ -1,5 +1,5 @@
 import { EmbedBuilder } from "discord.js";
-import guildChannelMap from "./Extravariables/channelconfiguration.js";
+import guildChannelMap from "./Extravariables/channelconfiguration.json" with {type: 'json'};
 export async function messageDelete(message) {
     const guildId = message.guild.id;
     const modChannels = guildChannelMap[guildId].modChannels

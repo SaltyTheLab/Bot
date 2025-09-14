@@ -1,5 +1,5 @@
 import { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } from "discord.js";
-import guildChannelMap from "./Extravariables/channelconfiguration.js";
+import guildChannelMap from "./Extravariables/channelconfiguration.json" with {type: 'json'};
 import invites from "./Extravariables/mapsandsets.js";
 const fifteenMinutesInMs = 15 * 60 * 1000
 /**

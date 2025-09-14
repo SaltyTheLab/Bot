@@ -2,29 +2,15 @@ import { EmbedBuilder } from '@discordjs/builders';
 import { getUser, saveUser } from '../Database/databasefunctions.js';
 import AutoMod from '../moderation/autoMod.js';
 import { MessageType } from 'discord.js';
-import guildChannelMap from './Extravariables/channelconfiguration.js';
+import guildChannelMap from "./Extravariables/channelconfiguration.json" with {type: 'json'};
 //setup constants and common triggers 
 let counting = 0;
 let lastuser;
 let lastmessages;
-let guildId;
-let CountingObject;
 let countingChannel
 const eyes = '1257522749635563561';
-const keywords = {
-  cute: "You're Cute",
-  adorable: "You're Adorable",
-  ping: "pong!",
-  bork: "bark",
-  borderlands: "there ain't no rest for the wicked",
-  potato: "tomato, potato, potato, patato",
-  grr: "dont you growl at me",
-  '<@364089951660408843>': 'Awooooooooo'
-};
 export async function messageCreate(client, message) {
-
-  guildId = message.guild.id;
-  const publicChannels = guildChannelMap[guildId].publicChannels
+  const publicChannels = guildChannelMap[message.guild.id].publicChannels
   const sentbystaff = message.member.permissions.has('ModerateMembers')
 
   //skip if message creator is bot or not in the server
@@ -33,7 +19,7 @@ export async function messageCreate(client, message) {
   //check for counting channel
   if (publicChannels?.countingChannel) {
     countingChannel = publicChannels.countingChannel;
-    CountingObject = await message.guild.channels.fetch(countingChannel)
+    let CountingObject = await message.guild.channels.fetch(countingChannel)
     lastmessages = await CountingObject.messages.fetch({ limit: 5 });
   }
 
@@ -41,32 +27,35 @@ export async function messageCreate(client, message) {
   const userId = message.author.id;
   const lowerContent = message.content.toLowerCase().split(/\s/);
 
-  for (const word of lowerContent) {
-    if (word in keywords) {
-      message.reply(keywords[word]);
-    }
-  }
-
+  if (lowerContent.includes('bark'))
+    message.reply('bark')
+  if (lowerContent.includes('cute'))
+    message.reply('You\'re Cute')
+  if (lowerContent.includes('adorable'))
+    message.reply('You\'re adorable')
+  if (lowerContent.includes('borderlands'))
+    message.reply('there ain\'t rest for the wicked')
+  if (lowerContent.includes('potato'))
+    message.reply('tomato, potato, potato, patato')
+  if (lowerContent.includes('grr'))
+    message.reply('Don\'t you growl at me')
+  if (lowerContent.includes('<@364089951660408843>'))
+    message.reply('awooooooooo')
   if (lowerContent.includes('<@857445139416088647>'))
     message.react(eyes)
-
   if (lowerContent.includes('bad') && lowerContent.includes('bot'))
     message.react('😡');
-
-  if (lowerContent.includes('hello') && lowerContent.includes('there')) {
+  if (lowerContent.includes('hello') && lowerContent.includes('there'))
     message.reply({ content: "general Kenobi" })
-  }
-  if (lowerContent.includes('bark') && lowerContent.includes('at') && lowerContent.includes('you')) {
+  if (lowerContent.includes('bark') && lowerContent.includes('at') && lowerContent.includes('you'))
     message.reply({ content: "woof woof bark bark\nwoof woof woof bark bark\nwoof woof woof\nwoof woof woof\nbark bark bark" });
-  }
-  if (lowerContent.includes('say') && lowerContent.includes('the') && lowerContent.includes('line')) {
+  if (lowerContent.includes('say') && lowerContent.includes('the') && lowerContent.includes('line'))
     message.reply('stay frosty :3')
-  }
   if (lowerContent.includes('execute') && lowerContent.includes('order') && lowerContent.includes('66'))
     message.reply({ content: 'Not the Padawans!!!' })
 
   if ((message.type === MessageType.Default || message.type === MessageType.Reply) && message.channel.id != countingChannel)
-    await applyUserXP(userId, message, guildId);
+    await applyUserXP(userId, message, message.guild.id);
 
   if (countingChannel && message.channel.id === countingChannel) {// check for a counting channel and if exists fetch the last valid message
     if (counting == 0) {
@@ -87,14 +76,12 @@ export async function messageCreate(client, message) {
         ]
       })
       return;
-    }
-    if (number == counting + 1 && lastuser != message.author) {
+    } else if (number == counting + 1 && lastuser != message.author) {
       message.react('✅')
       counting += 1;
       lastuser = message.author;
       return;
-    }
-    else {
+    } else {
       message.react('❌')
       message.reply({
         embeds: [new EmbedBuilder()
@@ -106,9 +93,10 @@ export async function messageCreate(client, message) {
       lastuser = null;
       return;
     }
+
   }
   if (sentbystaff) return;
-  await AutoMod(client, message, guildId);
+  await AutoMod(client, message, message.guild.id);
 }
 
 async function applyUserXP(userId, message, guildId) {
@@ -120,6 +108,7 @@ async function applyUserXP(userId, message, guildId) {
     userData = getUser(userId, guildId); // Re-fetch the now-clean data
   }
   userData.xp += 20;
+  userData.totalmessages += 1;
   const xpNeeded = Math.round(((userData.level - 1) ** 1.5 * 52 + 40) / 20) * 20
   if (userData.xp >= xpNeeded) {
     userData.level++;

@@ -1,10 +1,10 @@
 import { LRUCache } from 'lru-cache';
 import Denque from 'denque';
-import guildChannelMap from '../BotListeners/Extravariables/channelconfiguration.js';
-
+import guildChannelMap from "../BotListeners/Extravariables/channelconfiguration.json" with {type: 'json'};
+const hourInMs = 60 * 60 * 1000
 const userMessageTrackers = new LRUCache({
   max: 500,
-  ttl: 5 * 60 * 1000, // 5 minutes
+  ttl: hourInMs,
   updateAgeOnGet: true,
 });
 
@@ -30,6 +30,14 @@ export default function updateTracker(userId, message) {
     };
     userMessageTrackers.set(userId, tracker);
   }
+  const mostRecentTimestamp = tracker.timestamps.peekBack();
+  if (mostRecentTimestamp && (now - mostRecentTimestamp > hourInMs)) {
+    tracker.total = 0;
+    tracker.mediaCount = 0;
+    tracker.timestamps.clear();
+    tracker.duplicateCounts.clear();
+    tracker.recentMessages.clear();
+  }
 
   tracker.total += 1;
 
@@ -37,7 +45,7 @@ export default function updateTracker(userId, message) {
   if (content.length >= minLengthForCapsCheck) {
     const lettersOnly = content.replace(/[^a-zA-Z]/g, '');
     const upperCaseCount = (lettersOnly.match(/[A-Z]/g) || []).length
-    if (lettersOnly.length > 0) {
+    if (lettersOnly.length > 3) {
       const upperRatio = lettersOnly.length > 0 ? upperCaseCount / lettersOnly.length : 0;
       isCapSpam = upperRatio > .7;
     }
@@ -79,7 +87,7 @@ export default function updateTracker(userId, message) {
     tracker.mediaCount = 0;
 
   // clear messages after 20 sent over, resetting all flags
-  if (tracker.total >= 20) {
+  if (tracker.total >= 5) {
     tracker.total = 0;
     tracker.mediaCount = 0;
     tracker.timestamps.clear();
@@ -98,8 +106,7 @@ export default function updateTracker(userId, message) {
     isMediaViolation,
     isGeneralSpam: wasGeneralSpam,
     isDuplicateSpam: isDuplicateSpam,
-    isCapSpam,
-    triggeredByCurrentMessage: wasGeneralSpam || isDuplicateSpam || isMediaViolation || isCapSpam
+    isCapSpam
   };
 }
 

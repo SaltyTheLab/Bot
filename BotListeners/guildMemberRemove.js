@@ -1,5 +1,5 @@
 import { EmbedBuilder, AuditLogEvent } from "discord.js";
-import guildChannelMap from "./Extravariables/channelconfiguration.js";
+import guildChannelMap from "./Extravariables/channelconfiguration.json" with {type: 'json'};
 
 export async function guildMemberRemove(member) {
     const guildId = member.guild.id

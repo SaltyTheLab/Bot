@@ -1,5 +1,5 @@
 import { EmbedBuilder, AuditLogEvent } from "discord.js";
-import guildChannelMap from "./Extravariables/channelconfiguration.js";
+import guildChannelMap from "./Extravariables/channelconfiguration.json" with {type: 'json'};
 import { commandbans } from "./Extravariables/mapsandsets.js";
 const recentBans = new Map();
 
@@ -13,19 +13,17 @@ async function sendMassBanEmbed(executorId, guild, channel) {
             name: `${executor?.tag} ${isMassban ? `mass banned` : `banned a member`}`,
             iconURL: executor?.displayAvatarURL({ dynamic: true })
         })
+        .setTitle(title)
         .setColor(0x900000)
         .setTimestamp()
-    console.log(bans)
     if (isMassban) {
         const description = bans.map(ban => [`**Tag**: \`${ban.userTag}\``, `**ID**:\`${ban.userId}\``, `**Reason**:\`${ban.reason}\``].join('\n')).join('\n\n');
         banlog
-            .setTitle(title)
             .setDescription(description)
             .setFooter({ text: `Banned by ${executor?.tag}`, iconURL: executor.displayAvatarURL({ dynamic: true }) });
     } else {
         const singleBan = bans[0];
         banlog
-            .setTitle(title)
             .setThumbnail(await guild.client.users.fetch(singleBan.userId).then(u => u.displayAvatarURL({ dynamic: true })))
             .setDescription(
                 [

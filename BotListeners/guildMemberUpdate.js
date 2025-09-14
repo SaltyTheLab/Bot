@@ -1,5 +1,5 @@
 import { EmbedBuilder } from "discord.js";
-import guildChannelMap from "./Extravariables/channelconfiguration.js";
+import guildChannelMap from "./Extravariables/channelconfiguration.json" with {type: 'json'};
 export async function guildMemberUpdate(oldMember, newMember) {
     const guildId = oldMember.guild.id;
     const modChannels = guildChannelMap[guildId].modChannels
@@ -20,6 +20,7 @@ export async function guildMemberUpdate(oldMember, newMember) {
     //make embed
     const embed = new EmbedBuilder()
         .setThumbnail(newMember.user.displayAvatarURL())
+        .setColor(0x4e85b6)
         .setDescription(
             `<@${newMember.id}> **changed their nickname**\n\n` +
             `**Before:**\n${oldNick}\n\n` +
