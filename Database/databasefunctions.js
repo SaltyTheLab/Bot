@@ -26,7 +26,8 @@ export async function getUser(userId, guildId, modflag = false) {
       guildId: guildId,
       notes: [],
       punishments: [],
-      blacklist: []
+      blacklist: [],
+      totalmessages: 0
     }
     try {
       await usersCollection.insertOne(newUser);
@@ -34,7 +35,7 @@ export async function getUser(userId, guildId, modflag = false) {
       console.log(`[getUser] Successfully inserted and retrieved new user: ${userId} in guild ${guildId}`);
     } catch (error) {
       console.error(`❌ [getUser] Error inserting new user ${userId} in guild ${guildId}:`, error);
-      return { userData: { userId, xp: 0, level: 1, coins: 100, guildId }, allUsers: [] };
+      return { userData: { userId, xp: 0, level: 1, coins: 100, guildId } };
     }
   };
   return userData ? userData : null;
@@ -62,14 +63,13 @@ export async function getRank(userId, guildId) {
       { level: User.level, xp: { $gt: User.xp } }
     ]
   });
-  console.log(rank)
   return rank + 1;
 }
 
 // update user stats
 export async function saveUser({ userData }) {
   const filter = { userId: userData.userId, guildId: userData.guildId };
-  const update = { $set: { xp: userData.xp, level: userData.level, coins: userData.coins } };
+  const update = { $set: { xp: userData.xp, level: userData.level, coins: userData.coins, totalmessages: userData.totalmessages } };
   const options = { upsert: true };
   await usersCollection.updateOne(filter, update, options)
 }
@@ -175,14 +175,6 @@ export async function clearmodlogs(userId, guildId) {
   const result = await usersCollection.updateOne(
     { userId, guildId },
     { $set: { punishments: [] } }
-  );
-  return result.modifiedCount > 0;
-}
-export async function clearActiveWarns(userId, guildId) {
-  const result = await usersCollection.updateMany(
-    { userId, guildId, "punishments.active": 1 },
-    { $set: { "punishments.$[elem].active": 0 } },
-    { arrayFilters: [{ "elem.active": 1 }] }
   );
   return result.modifiedCount > 0;
 }
