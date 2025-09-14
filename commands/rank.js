@@ -16,19 +16,22 @@ function roundRect(ctx, x, y, width, height, radius) {
     ctx.beginPath();
     ctx.moveTo(x + radius, y);
     ctx.lineTo(x + width - radius, y);
-    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+    ctx.arcTo(x + width, y, x + width, y + radius, radius);
     ctx.lineTo(x + width, y + height - radius);
-    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    ctx.arcTo(x + width, y + height, x + width - radius, y + height, radius);
     ctx.lineTo(x + radius, y + height);
-    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+    ctx.arcTo(x, y + height, x, y + height - radius, radius);
     ctx.lineTo(x, y + radius);
-    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.arcTo(x, y, x + radius, y, radius);
     ctx.closePath();
 }
 
-
+function formatXP(xp) {
+    if (xp >= 10000)
+        return `${Math.floor(xp / 1000)}k`;
+}
 export async function generateRankCard(userData, targetUser, xpNeeded, rank) {
-    const canvas = Canvas.createCanvas(500, 100);
+    const canvas = Canvas.createCanvas(500, 150);
     const ctx = canvas.getContext('2d');
 
     const xpPercent = Math.min(userData.xp / xpNeeded, 1);
@@ -39,11 +42,11 @@ export async function generateRankCard(userData, targetUser, xpNeeded, rank) {
     ctx.fill();
 
     // === Avatar and Border ===
-    const avatarSize = 64;
+    const avatarSize = 100;
     const avatarX = 20;
     const avatarY = canvas.height / 2 - avatarSize / 2;
     const borderColor = '#3ba55d';
-    const borderWidth = 2; // Thickness of the green border
+    const borderWidth = 1.5; // Thickness of the green border
 
     // Load the avatar image first
     const avatarUrl = targetUser.displayAvatarURL({ extension: 'png', size: 128 });
@@ -89,16 +92,15 @@ export async function generateRankCard(userData, targetUser, xpNeeded, rank) {
     // === Text ===
     ctx.fillStyle = '#ffffff'; // Set color once for white text
     ctx.font = '20px sans-serif';
-    ctx.fillText(`LEVEL ${userData.level}`, 110, 30);
+    ctx.fillText(`Level ${userData.level}`, canvas.width - 220, 30);
 
     ctx.textAlign = 'right';
     ctx.fillText(`RANK ${rank}`, canvas.width - 20, 30);
 
     ctx.textAlign = 'left'; // Reset for username
-    ctx.font = '16px sans-serif';
 
     // Username truncation logic (from previous suggestion)
-    const maxUsernameWidth = 150; // Adjust as needed
+    const maxUsernameWidth = 200; // Adjust as needed
     let usernameToDisplay = targetUser.username;
     const metrics = ctx.measureText(usernameToDisplay);
     if (metrics.width > maxUsernameWidth) {
@@ -112,17 +114,25 @@ export async function generateRankCard(userData, targetUser, xpNeeded, rank) {
         }
     }
     ctx.fillStyle = '#ffffff';
-    ctx.fillText(usernameToDisplay, 110, 52);
+    ctx.fillText(usernameToDisplay, 150, canvas.height - 90);
 
     ctx.textAlign = 'right'; // Reset for XP text
     ctx.fillStyle = '#cccccc'; // Lighter color for XP text
-    ctx.fillText(`${userData.xp} / ${xpNeeded}`, canvas.width - 20, 52);
+    let formattedxp = null;
+    let formattedneeded = null;
+    if (userData.xp > 10000)
+        formattedxp = formatXP(userData.xp)
+    if (xpNeeded > 10000)
+        formattedneeded = formatXP(xpNeeded)
+    ctx.fillText(`${formattedxp ?? userData.xp} / ${formattedneeded ?? xpNeeded}`, canvas.width - 20, canvas.height - 90);
 
+    ctx.textAlign = 'left';
+    ctx.fillText(`Total Messages: ${userData.totalmessages}`, 130, canvas.height - 20)
     // === XP Progress Bar ===
-    const barX = 110;
-    const barY = 65;
-    const barWidth = canvas.width - 130;
-    const barHeight = 15;
+    const barX = 130;
+    const barY = canvas.height - 75;
+    const barWidth = canvas.width - 150;
+    const barHeight = 25;
     const radius = barHeight / 2;
 
     // Background of progress bar
@@ -133,7 +143,7 @@ export async function generateRankCard(userData, targetUser, xpNeeded, rank) {
     // Fill of progress bar
     if (xpPercent > 0) {
         ctx.fillStyle = '#3ba55d';
-        const filledWidith = Math.max(barWidth * xpPercent, 20)
+        const filledWidith = Math.max(barWidth * xpPercent, 25)
         roundRect(ctx, barX, barY, filledWidith, barHeight, radius);
         ctx.fill();
     }
