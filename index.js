@@ -9,10 +9,11 @@ import register from './deploy-cmds.js';
 import cron from 'node-cron';
 import clearExpiredWarns from './utilities/clearExpiredWarns.js';
 import invites from './BotListeners/Extravariables/mapsandsets.js';
+const db = await connectToMongoDB();
+const usersCollection = db.collection('users');
 
 config();// Setup dotenv
 export const { TOKEN, CLIENT_ID, GUILD_ID } = process.env;
-const db = connectToMongoDB();
 export const client = new Client({ // Initialize Discord client
   intents: [
     GatewayIntentBits.Guilds,
@@ -40,8 +41,8 @@ async function main() {
   await loadListeners(client); //load listeners
   const guildIdsString = GUILD_ID;
   const guildIDs = guildIdsString.split(',').map(id => id.trim());
-  client.once('ready', async () => {
-    cron.schedule('0 0 * * *', async () => { await clearExpiredWarns(db) });
+  client.once('clientReady', async () => {
+    cron.schedule('0 0 * * *', async () => { await clearExpiredWarns(usersCollection) });
     await embedsenders(client, guildIDs);
     for (const guildId of guildIDs) {
       const guild = client.guilds.cache.get(guildId);

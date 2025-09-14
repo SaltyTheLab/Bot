@@ -92,7 +92,7 @@ export async function execute(interaction) {
     });
     collector.on('end', async () => {
         try {
-            if (replyMessage.Message.embeds.length > 0 && replyMessage.Message.components[0]) {
+            if (replyMessage.embeds.length > 0 && replyMessage.components[0]) {
                 await replyMessage.edit({ components: [await buildButtons(currentIndex, allLogs.length, isAdmin, currentLog._id, true)] });
                 console.log(`Modlog buttons for ${targetUser.tag} were disabled automatically.`);
             }

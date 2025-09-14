@@ -7,7 +7,7 @@ const dbName = "Database";
 let db;
 let client;
 
-async function connectToMongoDB() {
+export default async function connectToMongoDB() {
   if (db) {
     return db
   }
@@ -23,4 +23,3 @@ async function connectToMongoDB() {
     process.exit(1);
   }
 }
-export default connectToMongoDB;
