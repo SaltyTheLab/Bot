@@ -5,22 +5,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SaltyTheLab BOT Configurator</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    body {
-      font-family: 'Inter', sans-serif;
-    }
-  </style>
+  <link href="/dist/output.css" rel="stylesheet">
   <script type="module" src="Logging/recentcommandshtml.js" defer></script>
+  <script type="module" src="Logging/guildconfig.js" defer></script>
 </head>
 
-<body class="bg-gray-900 text-gray-100 min-h-screen flex items-center justify-center p-4">
-  <div class="w-full max-w-4xl bg-gray-800 rounded-x1 shadow-lg p-6 space-y-6">
-    <div calss="flex flex-col md:flex-ro md:items-center justify-between gap-4">
-      <h1 class="text-3xl font-bold text-blue-400"> SaltyTheLab Bot Configurator</h1>
-      </h1>
-    </div>
-    <div id="mainApp" class=" " space-y-6>
+<body class="bg-gray-900 text-gray-100 min-h-half flex items-center p-4">
+  <div class=" flex gap-4 w-full">
+    <div class="w-full min-w-4xl bg-gray-800 rounded-x1 shadow-lg p-6 space-y-6">
+      <h1 class="text-3xl font-bold text-blue-400"> Bot Configuration</h1>
+      <h2 class=" text-3l font-semibold text-red-400 justify-center"> Make sure
+        to save your work and to dowload the generated json config!!</h2>
       <!-- Guild Selection and Management -->
       <div class="bg-gray-700 p-4 rounded-x1 shadow-inner">
         <label for="guildSelect" class="block text-gray-300 font-semibold mb-2"> Select
@@ -39,66 +34,84 @@
       <!-- Configurable Channel Sections -->
       <div id="channelsContainer" class="space-y-6">
         <!-- Mod Channels-->
-        <div class="bg-gray-700 p-4 rounded-x1 shadow-inner">
+        <div class="bg-gray-700 p-4 rounded-x1 space-y-4 shadow-inner">
           <h2 class="text-x1 font-bold text-blue-300 mb-4"> Mod Channels</h2>
-          <div id="modChannelsSection" class="space-y-4"></div>
+          <div id="modChannelsSection"></div>
           <button id="addModChannelBtn" class="mt-4 px-4 py-2 bg-blue-500
           text-white font-semibold rounded-lg hover:bg-blue-600
           transition-colors"> Add Mod Channel</button>
         </div>
         <!-- Public Channels-->
-        <div class="bg-gray-700 p-4 rounded-x1 shadow-inner">
+        <div class="bg-gray-700 p-4 rounded-x1 space-y-4 shadow-inner">
           <h2 class="text-x1 font-bold text-blue-300 mb-4"> Public Channels</h2>
-          <div id="publicChannelsSection" class="space-y-4"></div>
+          <div id="publicChannelsSection"></div>
           <button id="addPublicChannelBtn" class="mt-4 px-4 py-2 bg-blue-500
           text-white font-semibold rounded-lg hover:bg-blue-600
           transition-colors"> Add Pulbic Channel </button>
         </div>
         <!-- Exclusions-->
-        <div class="bg-gray-700 p-4 rounded-x1 shadow-inner">
+        <div class="bg-gray-700 p-4 rounded-x1 space-y-4 shadow-inner">
           <h2 class="text-x1 font-bold text-blue-300 mb-4"> Exclusions</h2>
-          <div id="exclusionsSection" class="space-y-4"></div>
+          <div id="exclusionsSection"></div>
           <button id="addExclusionBtn" class="mt-4 px-4 py-2 bg-blue-500
           text-white font-semibold rounded-lg hover:bg-blue-600
-          transition-colors"> Add Exclusion</button>
+          transition-colors"> Add Channel Exclusion</button>
         </div>
-      </div>
-
-      <!-- Action Buttons-->
-      <div class="flex justify-between items-center mt-6">
-        <button id="uploadConfigBtn"
-          class="w-full md:w-auto px-6 py-3 bg-indigo-500 text-white font-bold rounded-lg hover:bg-indigo-600 transition-colors transform hover:scale-105">UploadConfig
-          File</button>
-        <input type="file" id="fileInput" class="hidden">
-        <button id="saveConfigBtn" class="px-6 py-3 bg-green-500 text-white
+        <!-- Reactions -->
+        <div class="bg-gray-700 p-4 rounded-x1 space-y-4 shadow-inner">
+          <h2 class="text-x1 font bold text-blue-300 mb-4"> Reactions</h2>
+          <div id="reactionSection"></div>
+          <button id="addReactionBtn" class="mt-4 px-4 py-2 bg-blue-500
+          text-white font-semibold rounded-lg hover:bg-blue-600
+          transition-colors"> Add Reaction</button>
+        </div>
+        <!-- String Reactions -->
+        <div class="bg-gray-700 p-4 rounded-x1 space-y-4 shadow-inner">
+          <h2 class="text-x1 font bold text-blue-300 mb-4"> String Reactions</h2>
+          <div id="stringSection"></div>
+          <button id="addStringBtn" class="mt-4 px-4 py-2 bg-blue-500
+          text-white font-semibold rounded-lg hover:bg-blue-600
+          transition-colors"> Add String Reaction</button>
+        </div>
+        <!-- Action Buttons-->
+        <div class="flex justify-between items-center mt-6">
+          <button id="uploadConfigBtn" class="w-full md:w-auto px-6 py-3 bg-indigo-500 text-white
+        font-bold rounded-lg hover:bg-indigo-600 transition-colors transform
+        hover:scale-105">Upload Config File</button>
+          <input type="file" id="fileInput" class="hidden">
+          <button id="saveConfigBtn" class="px-6 py-3 bg-green-500 text-white
         font-bold rounded-lg hover:bg-green-600 transition-colors transform
         hover:scale-105"> Save Configuration</button>
-        <button id="deleteConfigBtn" class="px-6 py-3 bg-red-500 text-white
+          <button id="deleteConfigBtn" class="px-6 py-3 bg-red-500 text-white
         font-bold rounded-lg hover:bg-red-600 transition-colors transform
         hover:scale-105">Delete Guild</button>
-        <button id="downloadConfigBtn"
-          class="w-full md:w-auto px-6 py-3 bg-blue-500 text-white font-bold rounded-lg hover:bg-blue-600 transition-colors transform hover:scale-105">Download
-          Config File</button>
+          <button id="downloadConfigBtn" class="w-full md:w-auto px-6 py-3 bg-blue-500 text-white 
+        font-bold rounded-lg hover:bg-blue-600 transition-colors transform
+        hover:scale-105">Download Config File</button>
+        </div>
+
+        <!-- Message Error Display-->
+        <div id="messageBox" class="text-center p-3 rounded-lg hidden"></div>
+      </div>
+    </div>
+    <div class='w-half bg-gray-900 text-gray-200 border border-gray-600 rounded-lg
+    p-2 focus:ring-blue-500 focus:border-blue-500 whitespace-pre'>
+      <!-- View Recent Commands-->
+      <div class="overflow-x-scroll">
+        <label for="commandHistory" class=" text-gray-200">Recent Commands:</label>
+        <input type="text" id="searchInput" placeholder="Search Commands..."
+          class="rounded-lg text-blue-300 border-gray-500 font-semibold bg-blue-900">
+        <select id="commandHistory" class="text-blue-300
+        font-semibold border border-gray-600"></select>
       </div>
       <!-- JSON preview-->
-      <div class="bg-gray-900 p-4 rounded-xl shadow-inner overflow-x-auto">
-        <h2 class="text-xl font-bold text-gray-300 mb-2">JSON File Content Preview</h2>
-        <pre id="jsonPreview" class="text-sm text-gray-400 whitespace-pre-wrap break-words"></pre>
+      <div>
+        <h2 class="text-xl bg-gray-700 p-6 rounded-lg font-bold text-gray-300">JSON File Content Preview</h2>
+        <div class="bg-black rounded-xl">
+          <pre id="jsonPreview" class="text-sm text-gray-400"></pre>
+        </div>
       </div>
-      <!-- Message Error Display-->
-      <div id="messageBox" class="text-center p-3 rounded-lg hidden"></div>
     </div>
-  </div>
-  <script type="module" src="./Logging/guildconfig.js" defer></script>
-</body>
-
-<body>
-  <h1>SaltyTheLab BOT - Recent Commands</h1>
-  <!-- Listbox to display the last 5 commands used -->
-  <label for="commandHistory">Recent Commands:</label>
-  <select id="commandHistory" size="5" aria-label="Recent commands list"></select>
-  <!-- Optional container if you want to display other info -->
-  <div id="targetId"></div>
 </body>
 
 </html>
