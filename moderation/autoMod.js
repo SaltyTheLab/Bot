@@ -3,8 +3,8 @@ import getNextPunishment from './punishments.js';
 import getWarnStats from './simulatedwarn.js';
 import updateTracker, { clearSpamFlags } from './trackers.js';
 import evaluateViolations from './evaluateViolations.js';
-import guildChannelMap from "../BotListeners/Extravariables/channelconfiguration.json" with {type: 'json'};
-import forbbidenWordsData from '../moderation/forbiddenwords.json' with {type: 'json'};
+import guildChannelMap from "../BotListeners/Extravariables/guildconfiguration.json" with {type: 'json'};
+import forbbidenWordsData from './forbiddenwords.json' with {type: 'json'};
 
 const forbiddenWords = new Set(forbbidenWordsData.forbiddenWords.map(w => w.toLowerCase()));
 

@@ -1,6 +1,6 @@
 import { LRUCache } from 'lru-cache';
 import Denque from 'denque';
-import guildChannelMap from "../BotListeners/Extravariables/channelconfiguration.json" with {type: 'json'};
+import guildChannelMap from "../BotListeners/Extravariables/guildconfiguration.json" with {type: 'json'};
 const hourInMs = 60 * 60 * 1000
 const userMessageTrackers = new LRUCache({
   max: 500,

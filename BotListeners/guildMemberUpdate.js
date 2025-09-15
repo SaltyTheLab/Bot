@@ -1,5 +1,5 @@
 import { EmbedBuilder } from "discord.js";
-import guildChannelMap from "./Extravariables/channelconfiguration.json" with {type: 'json'};
+import guildChannelMap from "./Extravariables/guildconfiguration.json" with {type: 'json'};
 export async function guildMemberUpdate(oldMember, newMember) {
     const guildId = oldMember.guild.id;
     const modChannels = guildChannelMap[guildId].modChannels

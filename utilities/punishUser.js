@@ -3,7 +3,7 @@ import getWarnStats from '../moderation/simulatedwarn.js';
 import getNextPunishment from '../moderation/punishments.js';
 import { addPunishment, getUser } from '../Database/databasefunctions.js';
 import logRecentCommand from '../Logging/recentcommands.js';
-import guildChannelMap from "../BotListeners/Extravariables/channelconfiguration.json" with {type: 'json'};
+import guildChannelMap from "../BotListeners/Extravariables/guildconfiguration.json" with {type: 'json'};
 import { commandbans } from '../BotListeners/Extravariables/mapsandsets.js';
 const BAN_CACHE_TIMEOUT = 5000;
 

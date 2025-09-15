@@ -1,7 +1,6 @@
 import { ButtonBuilder, ButtonStyle, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, EmbedBuilder, GuildMember, AuditLogEvent, PermissionFlagsBits } from "discord.js";
 import punishUser from "../utilities/punishUser.js";
-import { stringreactions } from "./Extravariables/reactionrolemap.js";
-import guildChannelMap from "./Extravariables/channelconfiguration.json" with {type: 'json'};
+import guildChannelMap from "./Extravariables/guildconfiguration.json" with {type: 'json'};
 import { appealsinsert, appealsget, appealupdate, getdeniedappeals } from "../Database/databasefunctions.js";
 import { applications } from "./Extravariables/mapsandsets.js";
 const maxTitleLength = 45;
@@ -561,11 +560,11 @@ export async function interactionCreate(interaction) {
             await interaction.deferReply({ ephemeral: true })
             const member = interaction.member;
             const guildid = interaction.guild.id;
-            const reactions = stringreactions[guildid].roles
+            const reactions = guildChannelMap[guildid].roles
             const rolesAdded = [];
             const rolesRemoved = [];
 
-            const allPossibleSelectValues = Object.keys(stringreactions[guildid].roles).filter(() => {
+            const allPossibleSelectValues = Object.keys(reactions).filter(() => {
                 return true;
             });
 
@@ -583,7 +582,7 @@ export async function interactionCreate(interaction) {
                     if (!member.roles.cache.has(roleID)) {
                         try {
                             await member.roles.add(roleID);
-                            rolesAdded.push(`< @& ${roleID}> `);
+                            rolesAdded.push(`<@&${roleID}> `);
                         } catch (err) {
                             console.error(`❌ Failed to add role ${roleID} to ${member.user.tag}: `, err);
                         }
@@ -593,7 +592,7 @@ export async function interactionCreate(interaction) {
                     if (member.roles.cache.has(roleID)) {
                         try {
                             await member.roles.remove(roleID);
-                            rolesRemoved.push(`< @& ${roleID}> `);
+                            rolesRemoved.push(`<@&${roleID}> `);
                         } catch (err) {
                             console.error(`❌ Failed to remove role ${roleID} from ${member.user.tag}: `, err);
                         }

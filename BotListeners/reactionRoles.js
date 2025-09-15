@@ -1,5 +1,5 @@
 import embedIDs from '../embeds/EmbedIDs.json' with {type: 'json'}
-import { emojiRoleMap } from "./Extravariables/reactionrolemap.js";
+import guildconfig from "./Extravariables/guildconfiguration.json" with {type: 'json'};
 import { getblacklist } from '../Database/databasefunctions.js';
 /**
  * Handle reaction-based role assignment or removal
@@ -8,7 +8,7 @@ async function handleReactionChange(reaction, user, action = 'add') {
   //check for bot user
   if (user.bot) return;
 
-  const reactions = emojiRoleMap[reaction.message.guild.id].reactions;
+  const reactions = guildconfig[reaction.message.guild.id].reactions;
   const member = await reaction.message.guild.members.fetch(user.id);
   //fetch the reaction the user used
   try {

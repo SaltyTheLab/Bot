@@ -2,7 +2,7 @@ import { EmbedBuilder } from '@discordjs/builders';
 import { getUser, saveUser } from '../Database/databasefunctions.js';
 import AutoMod from '../moderation/autoMod.js';
 import { MessageType } from 'discord.js';
-import guildChannelMap from "./Extravariables/channelconfiguration.json" with {type: 'json'};
+import guildChannelMap from "./Extravariables/guildconfiguration.json" with {type: 'json'};
 //setup constants and common triggers 
 let counting = 0;
 let lastuser;
