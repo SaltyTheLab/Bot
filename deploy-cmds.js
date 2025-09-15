@@ -1,4 +1,4 @@
-import { REST, Routes } from 'discord.js';
+import { InteractionContextType, REST, Routes } from 'discord.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -39,13 +39,12 @@ async function loadCommands(commandsPath) {
 
     for (const filePath of filePaths) {
         try {
-            // Correctly format the file path as a URL for dynamic import
             const commandModule = await import(pathToFileURL(filePath).href);
-            // Check for both 'default' export and direct properties
             const command = commandModule.default || commandModule;
 
             if (command?.data?.name && typeof command.execute === 'function') {
-                commands.push(command.data.toJSON());
+                // Store the command object, not just the JSON, for context check
+                commands.push(command);
             } else {
                 console.warn(`⚠️ Skipping invalid command file: ${path.basename(filePath)} (missing 'data' or 'execute' property).`);
             }
@@ -53,14 +52,11 @@ async function loadCommands(commandsPath) {
             console.error(`❌ Failed to import ${path.basename(filePath)}:`, err);
         }
     }
-
     return commands;
 }
 
 // ✅ Main logic for registering commands
 export default async function register() {
-    let guildIds;
-    let guilddata;
     let data;
 
     if (!TOKEN || !CLIENT_ID) { // GUILD_ID check moved into the loop
@@ -69,75 +65,74 @@ export default async function register() {
     }
 
     const commandsPath = path.join(__dirname, 'commands');
-    const commands = await loadCommands(commandsPath);
-    const localCommandNames = new Set(commands.map(cmd => cmd.name));
+    const loadedCommands = await loadCommands(commandsPath);
+    const globalCommandsToRegister = loadedCommands
+        .filter(cmd => !cmd.data.contexts || !cmd.data.contexts.includes(InteractionContextType.Guild))
 
-    if (commands.length === 0) {
-        console.warn('⚠️ No valid commands to register.');
+    const guildCommandsToRegister = loadedCommands
+        .filter(cmd => cmd.data.contexts && cmd.data.contexts.includes(InteractionContextType.Guild))
+
+    if (globalCommandsToRegister.length === 0 && guildCommandsToRegister === 0) {
+        console.warn('⚠️ No valid commands to register.')
         return;
     }
 
     const rest = new REST({ version: '10' }).setToken(TOKEN);
     try {
-        const globalCommands = await rest.get(Routes.applicationCommands(CLIENT_ID));
-
-        const commandsToUpdateNames = new Set(
-            commands.filter(localCmd => {
-                const currentCmd = globalCommands.find(globalCmd => globalCmd.name === localCmd.name);
-                return !currentCmd || JSON.stringify(currentCmd) !== JSON.stringify(localCmd);
-            }).map(cmd => cmd.name)
-        );
-
-        const commandsToRemove = globalCommands.filter(globalCmd => !localCommandNames.has(globalCmd.name));
-        const commandsToKeep = globalCommands.filter(globalCmd => !commandsToUpdateNames.has(globalCmd.name) && !commandsToRemove.some(removedCmd => removedCmd.name === globalCmd.name));
-
-        const commandsToUpdate = commands.filter(cmd => commandsToUpdateNames.has(cmd.name));
-
-        if (commandsToUpdate.length > 0 || commandsToRemove.length > 0) {
-            const finalCommands = [...commandsToKeep, ...commandsToUpdate];
-
-            data = await rest.put(
-                Routes.applicationCommands(CLIENT_ID),
-                { body: finalCommands }
+        if (globalCommandsToRegister.length > 0) {
+            data = await rest.put(Routes.applicationCommands(CLIENT_ID),
+                { body: globalCommandsToRegister.map(cmd => cmd.data.toJSON()) }
             );
+            console.log(`✅ Successfully loaded ${data.length} global application (/) commands.`);
+        } else {
+            await rest.put(Routes.applicationCommands(CLIENT_ID), { body: [] });
+            console.log('✅ Cleared all global application (/) commands.');
         }
-        console.log(`✅ Successfully loaded ${data.length} global application (/) commands.`);
+
     } catch (error) {
         console.error('❌ Error registering global commands with Discord API:', error);
         return;
     }
 
     if (GUILD_ID) {
-        guildIds = GUILD_ID.split(',').map(id => id.trim()).filter(id => id.length > 0);
-
-        //register commands at a per guild basis
+        const guildIds = GUILD_ID.split(',').map(id => id.trim()).filter(id => id.length > 0);
         for (const guildId of guildIds) {
             if (!/^\d+$/.test(guildId)) {
                 console.error(`❌ Skipping invalid Guild ID: "${guildId}". It must be a numerical string.`);
                 continue;
             }
-            guilddata = await rest.put(
-                Routes.applicationGuildCommands(CLIENT_ID, guildId), // Correctly uses a single guildId
-                { body: [] },
-            );
-            console.log(`🔄 Attempting to register commands for Guild ID: ${guildId}...`);
+            let guildCommandsPath;
             try {
+                guildCommandsPath = path.join(__dirname, 'commands', 'guilds', guildId)
+            } catch {
+                console.log(`file path does not exist for ${guildId}`)
+                continue;
+            }
+            const guildLoadedCommands = await loadCommands(guildCommandsPath)
 
-                const guildCommands = commands.filter(cmd => !localCommandNames.has(cmd.name));
-                if (guildCommands.length > 0) {
-
-                    // The put method is used to fully refresh all commands in the guild with the current set
-                    guilddata = await rest.put(
-                        Routes.applicationGuildCommands(CLIENT_ID, guildId), // Correctly uses a single guildId
-                        { body: guildCommands },
+            if (guildLoadedCommands.length > 0) {
+                try {
+                    const guildData = await rest.put(
+                        Routes.applicationGuildCommands(CLIENT_ID, guildId),
+                        { body: guildLoadedCommands.map(cmd => cmd.data.toJSON()) }
                     );
-                    console.log(`Guild Commands: ${guildCommands.length}`);
-                    console.log(`✅ Successfully registered ${guilddata.length} application (/) commands for guild ${guildId}.`);
+                    console.log(`✅ Successfully registered ${guildData.length} application (/) commands for guild ${guildId}.`);
+                } catch (error) {
+                    console.error(`❌ Error registering commands for guild ${guildId} with Discord API:`, error);
                 }
-            } catch (error) {
-                // Catch and log errors for each guild individually
-                console.error(`❌ Error registering commands for guild ${guildId} with Discord API:`, error);
+            } else {
+                try {
+                    await rest.put(
+                        Routes.applicationGuildCommands(CLIENT_ID, guildId),
+                        { body: [] }
+                    );
+                    console.log(`✅ Cleared all guild commands for guild ${guildId}.`);
+                } catch (err) {
+                    console.error(`❌ Error clearing commands for guild ${guildId}:`, err);
+                }
             }
         }
     }
-};
+}
+
+
