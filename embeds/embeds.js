@@ -1,5 +1,5 @@
 import { EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle, StringSelectMenuBuilder } from 'discord.js';
-import guildChannelMap from "../BotListeners/Extravariables/channelconfiguration.json" with {type: 'json'};
+import guildChannelMap from "../BotListeners/Extravariables/guildconfiguration.json" with {type: 'json'};
 import { saveMessageIDs, loadMessageIDs } from '../utilities/messageStorage.js';
 import { getComparableEmbed } from '../utilities/messagecomarator.js';
 const guildEmbedConfig = {
