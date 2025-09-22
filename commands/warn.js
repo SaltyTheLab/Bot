@@ -1,5 +1,5 @@
-import { PermissionFlagsBits, SlashCommandBuilder, InteractionContextType } from 'discord.js';
-import punishUser from '../utilities/punishUser.js';
+import { PermissionFlagsBits, SlashCommandBuilder, InteractionContextType, EmbedBuilder } from 'discord.js';
+import punishUser from '../moderation/punishUser.js';
 import { getActiveWarns } from '../Database/databasefunctions.js';
 import getNextPunishment from '../moderation/punishments.js';
 
@@ -21,18 +21,27 @@ export const data = new SlashCommandBuilder()
     );
 
 export async function execute(interaction) {
-    const target = await interaction.options.get('target');
+    const target = await interaction.options.getMember('target');
     const reason = interaction.options.getString('reason');
     const issuer = interaction.user;
     const channel = interaction.channel;
+    const staffcheck = target.permissions.has(PermissionFlagsBits.ModerateMembers)
     let duration;
     let unit = 'min';
     let durationMs;
     let effectiveDurationMs = 0;
     const MAX_TIMEOUT_MS = 2419200000;
 
-    if (!target) {
-        return interaction.reply({ content: '⚠️ Could not find the user.', ephemeral: true });
+    if (staffcheck) {
+        interaction.reply({
+            embeds: [new EmbedBuilder()
+                .setAuthor({
+                    name: target.user.tag + ' is staff, please handle this with an admin, co-owner, or owner.', iconURL: target.displayAvatarURL({ dynamic: true })
+                })
+                .setColor('#4b0808')]
+            , ephemeral: true
+        })
+        return;
     }
 
     if (target.bot) {
@@ -54,16 +63,14 @@ export async function execute(interaction) {
     await punishUser({
         interaction: interaction,
         guild: interaction.guild,
-        target: target.value,
+        target: target.id,
         moderatorUser: issuer,
         reason: reason,
         channel: channel,
         isAutomated: false,
         currentWarnWeight: 1,
         duration: effectiveDurationMs,
-        unit: unit,
         banflag: false,
         buttonflag: false
-
     });
 }

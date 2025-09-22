@@ -1,5 +1,5 @@
-import { PermissionFlagsBits, SlashCommandBuilder, InteractionContextType } from 'discord.js';
-import punishUser from '../utilities/punishUser.js';
+import { PermissionFlagsBits, SlashCommandBuilder, InteractionContextType, EmbedBuilder } from 'discord.js';
+import punishUser from '../moderation/punishUser.js';
 
 const unitMap = { min: 60000, hour: 3600000, day: 86400000 };
 
@@ -29,27 +29,33 @@ export const data = new SlashCommandBuilder()
     );
 
 export async function execute(interaction) {
-    const target = await interaction.options.get('target');
+    const target = await interaction.options.getMember('target');
     const reason = interaction.options.getString('reason');
     const duration = interaction.options.getInteger('duration');
     const unit = interaction.options.getString('unit');
-    const issuer = interaction.user;
-    const guild = interaction.guild;
-    const channel = interaction.channel;
+    const staffcheck = target.permissions.has(PermissionFlagsBits.ModerateMembers)
 
     const MAX_TIMEOUT_MS = 2419200000;
 
+    if (staffcheck) {
+        interaction.reply({
+            embeds: [new EmbedBuilder()
+                .setAuthor({
+                    name: target.user.tag + ' is staff, please handle this with an admin, co-owner, or owner.', iconURL: target.displayAvatarURL({ dynamic: true })
+                })
+                .setColor('#4b0808')]
+            , ephemeral: true
+        })
+        return;
+    }
+
     const multiplier = unitMap[unit];
-    if (!multiplier || duration <= 0) {
+    if (duration <= 0) {
         return interaction.reply({ content: '❌ Invalid duration or unit.', ephemeral: true });
     }
 
     let durationMs = duration * multiplier;
     durationMs = Math.min(durationMs, MAX_TIMEOUT_MS);
-
-    if (!target) {
-        return interaction.reply({ content: '❌ User not found in the server.', ephemeral: true });
-    }
 
     if (target.communicationDisabledUntilTimestamp && target.communicationDisabledUntilTimestamp > Date.now()) {
         return interaction.reply({ content: '⚠️ User is already muted.', ephemeral: true });
@@ -57,13 +63,12 @@ export async function execute(interaction) {
 
     await punishUser({
         interaction: interaction,
-        guild: guild,
-        target: target.value,
-        moderatorUser: issuer,
+        guild: interaction.guild,
+        target: target.id,
+        moderatorUser: interaction.user,
         reason,
-        channel: channel,
+        channel: interaction.channel,
         isAutomated: false,
-        duration: durationMs,
-        unit: unit
+        duration: durationMs
     });
 }

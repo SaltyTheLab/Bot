@@ -1,5 +1,5 @@
-import { InteractionContextType, PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
-import punishUser from "../utilities/punishUser.js";
+import { InteractionContextType, PermissionFlagsBits, SlashCommandBuilder, EmbedBuilder } from "discord.js";
+import punishUser from "../moderation/punishUser.js";
 
 export const data = new SlashCommandBuilder()
     .setName('ban')
@@ -18,10 +18,20 @@ export const data = new SlashCommandBuilder()
     );
 
 export async function execute(interaction) {
-    const target = await interaction.options.get('target');
+    const target = await interaction.options.getMember('target');
     const reason = interaction.options.getString('reason');
-    if (!target) {
-        return interaction.reply({ content: '⚠️ User not found.', ephemeral: true });
+    const staffcheck = target.permissions.has(PermissionFlagsBits.ModerateMembers)
+
+    if (staffcheck) {
+        interaction.reply({
+            embeds: [new EmbedBuilder()
+                .setAuthor({
+                    name: target.user.tag + ' is staff, please handle this with an admin, co-owner, or owner.', iconURL: target.displayAvatarURL({ dynamic: true })
+                })
+                .setColor('#4b0808')]
+            , ephemeral: true
+        })
+        return;
     }
 
     if (target.bot)
@@ -30,14 +40,13 @@ export async function execute(interaction) {
     await punishUser({
         interaction: interaction,
         guild: interaction.guild,
-        target: target.value,
+        target: target.id,
         moderatorUser: interaction.user,
         reason: reason,
         channel: interaction.channel,
         isAutomated: false,
         currentWarnWeight: 1,
         duration: 0,
-        unit: 'min',
         banflag: true,
         buttonflag: false
     });
