@@ -61,9 +61,20 @@
                 "1235337203572543561",
                 "1235336646749327392",
                 "1235337070504050735"
-            ]
+            ],
+            "🔷": "1418796891138687107"
         },
-        "roles": {}
+        "roles": {},
+        "countsaver": [],
+        "automodsettings": {
+            "spamwindow": 4000,
+            "spamthreshold": 5,
+            "Duplicatespamthreshold": 3,
+            "capsratio": 0.7,
+            "mediathreshold": 5,
+            "capscheckminlength": 20,
+            "messagethreshold": 15
+        }
     },
     "1347217846991851541": {
         "modChannels": {
@@ -117,6 +128,15 @@
             "role_game_Dragon": "1347422683268120619",
             "role_game_D&D": "1347422870867021844",
             "role_game_Borderlands": "1347423007282430007"
+        },
+        "automodsettings": {
+            "spamwindow": 4000,
+            "spamthreshold": 5,
+            "Duplicatespamthreshold": 3,
+            "capsratio": 0.7,
+            "mediathreshold": 5,
+            "capscheckminlength": 20,
+            "messagethreshold": 15
         }
     },
     "1342845801059192913": {
@@ -138,7 +158,7 @@
             "dirty": "1415773272934715534"
         },
         "exclusions": {
-            "adultcatagorey": "1388114900118667366",
+            "adultcategory": "1388114900118667366",
             "petschannel": "1408128548924821514",
             "botcommands": "1386308567866409182"
         },
@@ -146,6 +166,15 @@
             "🔞": "1388113103081705502",
             "👨": "1388111992287400089",
             "🍆": "1388115995419349132"
+        },
+        "automodsettings": {
+            "spamwindow": 4000,
+            "spamthreshold": 5,
+            "Duplicatespamthreshold": 3,
+            "capsratio": 0.7,
+            "mediathreshold": 5,
+            "capscheckminlength": 20,
+            "messagethreshold": 15
         }
     }
 }
