@@ -1,8 +1,8 @@
 import { ButtonBuilder, ButtonStyle, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, EmbedBuilder, GuildMember, AuditLogEvent, PermissionFlagsBits } from "discord.js";
-import punishUser from "../utilities/punishUser.js";
+import punishUser from "../moderation/punishUser.js";
 import guildChannelMap from "./Extravariables/guildconfiguration.json" with {type: 'json'};
 import { appealsinsert, appealsget, appealupdate, getdeniedappeals } from "../Database/databasefunctions.js";
-import { applications } from "./Extravariables/mapsandsets.js";
+import { loadApplications, saveApplications } from "../utilities/jsonloaders.js";
 const maxTitleLength = 45;
 const appealinvites = {
     '1231453115937587270': 'https://discord.gg/xpYnPrSXDG',
@@ -198,7 +198,8 @@ export async function interactionCreate(interaction) {
             appealsinsert(interaction.user.id, guildId, reason, justification, extra);
         }
         if (interaction.customId.startsWith('situations')) {
-            const application = applications.get(interaction.user.id)
+            const applications = await loadApplications();
+            const application = applications[interaction.user.id]
             application.dmmember = interaction.fields.getTextInputValue('dmmember')
             application.argument = interaction.fields.getTextInputValue('arguments')
             application.ambiguous = interaction.fields.getTextInputValue('rulebreakdm')
@@ -239,15 +240,18 @@ export async function interactionCreate(interaction) {
             interaction.reply({
                 content: 'your application was successfuly submitted!!'
             })
-            applications.delete(interaction.user.id)
+            delete applications[interaction.user.id];
+            saveApplications(applications)
         }
         if (interaction.customId.startsWith('Defs, reasons, and issues')) {
-            const application = applications.get(interaction.user.id)
+            const applications = await loadApplications()
+            const application = applications[interaction.user.id]
             application.why = interaction.fields.getTextInputValue('why')
             application.trolldef = interaction.fields.getTextInputValue('trolldef')
             application.raiddef = interaction.fields.getTextInputValue('raiddef')
             application.staffissues = interaction.fields.getTextInputValue('staffissues')
             application.memberreport = interaction.fields.getTextInputValue('memberreport')
+            await saveApplications(applications);
             const nextButton = new ButtonBuilder()
                 .setCustomId('next_modal_three')
                 .setLabel('Continue Application')
@@ -264,12 +268,14 @@ export async function interactionCreate(interaction) {
 
         }
         if (interaction.customId.startsWith('server')) {
-            const application = applications.get(interaction.user.id)
+            const applications = await loadApplications()
+            const application = applications[interaction.user.id]
             application.Experience = interaction.fields.getTextInputValue('experience')
             application.History = interaction.fields.getTextInputValue('punishments')
             application.Timezone = interaction.fields.getTextInputValue('timezone')
             application.Stayed = interaction.fields.getTextInputValue('length')
             application.Activity = interaction.fields.getTextInputValue('activity')
+            await saveApplications(applications)
             const nextButton = new ButtonBuilder()
                 .setCustomId('next_modal_two')
                 .setLabel('Continue Application')
@@ -667,8 +673,11 @@ export async function interactionCreate(interaction) {
             await interaction.showModal(modal);
         }
         if (interaction.customId.startsWith('select_age')) {
-            const application = applications.get(interaction.user.id)
+            const applications = await loadApplications();
+            const application = applications[interaction.user.id]
+
             application.Agerange = interaction.values[0];
+            await saveApplications(applications);
             const guild = interaction.client.guilds.cache.get(application.guild)
             const questionModalOne = new ModalBuilder()
                 .setCustomId('server')

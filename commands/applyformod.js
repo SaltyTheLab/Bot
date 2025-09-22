@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, InteractionContextType, StringSelectMenuOptionBuilder, StringSelectMenuBuilder, ActionRowBuilder } from "discord.js";
-import { applications } from "../BotListeners/Extravariables/mapsandsets.js";
+import { loadApplications, saveApplications } from "../utilities/jsonloaders.js";
 const ages = [
     { label: '16 to 17', range: '16-17' },
     { label: '18 and over', range: '18+' }
@@ -12,14 +12,14 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
     const userId = interaction.user.id;
     const guild = interaction.guild;
-
-    if (!applications.has(userId)) {
-        applications.set(userId, {})
+    const applications = await loadApplications();
+    if ((!Object.hasOwn(applications, userId))) {
+        applications[userId] = {}
     }
-    const application = applications.get(userId)
 
+    applications[userId].guild = guild.id
+    await saveApplications(applications);
 
-    application.guild = guild.id
     const ageoptions = ages.map(age => new StringSelectMenuOptionBuilder()
         .setLabel(age.label)
         .setValue(age.range))
