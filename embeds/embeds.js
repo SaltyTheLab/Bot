@@ -1,7 +1,7 @@
 import { EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle, StringSelectMenuBuilder } from 'discord.js';
 import guildChannelMap from "../BotListeners/Extravariables/guildconfiguration.json" with {type: 'json'};
-import { saveMessageIDs, loadMessageIDs } from '../utilities/messageStorage.js';
-import { getComparableEmbed } from '../utilities/messagecomarator.js';
+import IDs from '../embeds/EmbedIDs.json' with {type: 'json'}
+import getComparableEmbed from '../utilities/messagecomarator.js';
 const guildEmbedConfig = {
     "1231453115937587270": [
         { name: "rules", senderFunc: createRulesEmbed },
@@ -34,10 +34,6 @@ async function sendEmbedAndSave(guild, messageIDs, embedName, embedData, guildCh
     if (oldMessageIndex !== -1) {
         // Found an old message with the same name, so we remove it.
         messageIDs[guild.id].splice(oldMessageIndex, 1);
-    }
-    if (!channel.isTextBased()) {
-        console.error(`Channel ${channel.id} for '${embedName}' embed is not text-based.`);
-        return;
     }
     const { embeds, components } = embedData;
     const msg = await channel.send({ embeds, components });
@@ -285,9 +281,10 @@ async function createColorsRoleEmbed() {
             '🩷: <@&1235323622969835611>',
             '🟠: <@&1235323624055902289>',
             '🟡: <@&1235323625037500466>',
-            '🔵: <@&1235323625452601437>'
+            '🔵: <@&1235323625452601437>',
+            '🔷: <@&1418796891138687107>'
         ].join('\n'))
-    const colors = ['🔴', '🟣', '🟢', '🩷', '🟠', '🟡', '🔵'];
+    const colors = ['🔴', '🟣', '🟢', '🩷', '🟠', '🟡', '🔵', '🔷'];
     return {
         embeds: [color],
         reactions: colors
@@ -690,59 +687,60 @@ async function BarkCreateDirtyEmbed(guild) {
 }
 export async function embedsenders(client, guildIds) {
     let embedTasks = [];
-    let messageIDs = loadMessageIDs();
+    let messageIDs = IDs;
 
     for (const id of guildIds) {
         const guild = client.guilds.cache.get(id)
+
+        const guildConfig = guildEmbedConfig[guild.id];
+        if (!guildConfig) {
+            console.log(`No embed configuration found for guild ID: ${guild.id}`);
+            continue;
+        }
+
         const guildChannels = guildChannelMap[guild.id].publicChannels;
         if (!guildChannels) {
             console.error(`❌ No channel mapping found for guild ID: ${guild.id}. Please check guildChannelMap.`);
-            return;
+            continue;
         }
 
-        const guildConfigs = guildEmbedConfig[guild.id];
-        if (!guildConfigs) {
-            console.log(`No embed configuration found for guild ID: ${guild.id}`);
-            return;
-        }
-
-        // Iterate directly over the object's entries
-        for (const embedConfig of guildConfigs) {
+        for (const embedConfig of guildConfig) {
             const { name: embedName, senderFunc } = embedConfig;
-            const embedData = await senderFunc(guild);
             const existingEmbedInfo = messageIDs[guild.id]?.find((embed) => embed.name === embedName);
-            let message;
-            try {
-                const channel = await guild.client.channels.fetch(existingEmbedInfo.channelid);
-                message = await channel.messages.fetch(existingEmbedInfo.messageId);
-            } catch {
-                console.log(`missing embed for ${embedName}, adding to queue...`)
-                embedTasks.push(sendEmbedAndSave(guild, messageIDs, embedName, embedData, guildChannels));
-            }
-            if (message) {
+
+            embedTasks.push(async () => {
+                const embedData = await senderFunc(guild);
+                if (!existingEmbedInfo) {
+                    console.log(`missing embed for ${embedName}, adding to queue...`)
+                    embedTasks.push(sendEmbedAndSave(guild, messageIDs, embedName, embedData, guildChannels));
+                }
+
                 try {
-                    // Fetch the message from the channel using its ID
-                    const existingEmbedsString = getComparableEmbed(message.embeds[0]);
-                    const newEmbedsString = getComparableEmbed(embedData.embeds[0].data);
-                    // Edit the message with the new embed content
-                    if (existingEmbedsString !== newEmbedsString) {
+                    const channel = await guild.client.channels.fetch(existingEmbedInfo.channelid);
+                    const message = await channel.messages.fetch(existingEmbedInfo.messageId);
+
+                    const existingEmbedString = getComparableEmbed(message.embeds[0]);
+                    const newEmbedString = getComparableEmbed(embedData.embeds[0].data);
+
+                    if (existingEmbedString !== newEmbedString) {
                         await message.edit({
                             embeds: embedData.embeds,
-                            ...(embedData.components && { components: embedData.components }),
-                        });
+                            ...(embedData.components && { components: embedData.components })
+                        })
                         console.log(`✅ Message '${embedName}' updated successfully.`);
-                    }
-                    else
-                        console.log(`Message '${embedName} has the same content`)
+                        if (embedData.reactions) {
+                            await message.reactions.removeAll();
+                            const reactionPromises = embedData.reactions.map(reaction => message.react(reaction));
+                            await Promise.all(reactionPromises)
+                        }
+
+                    } else
+                        console.log(`Message '${embedName}' has the same content.`);
                 } catch (error) {
-                    console.error(`❌ Failed to update message '${embedName}':`, error);
+                    console.error(`❌ Failed to update or fetch message '${embedName}':`, error);
                 }
-            }
+            });
         }
-        await Promise.allSettled(embedTasks);
     }
-    if (embedTasks.length > 0) {
-        saveMessageIDs(messageIDs)
-        console.log('Embed sending process completed (new embeds created/IDs saved to file).');
-    }
+    await Promise.allSettled(embedTasks.map(task => task()));
 }
