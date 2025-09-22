@@ -4,39 +4,33 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { CLIENT_ID, GUILD_ID, TOKEN } from './index.js';
 
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+async function findFiles(dir) {
+    let filePaths = [];
+    try {
+        const dirents = await fs.readdir(dir, { withFileTypes: true });
+        for (const dirent of dirents) {
+            const fullPath = path.join(dir, dirent.name);
+            if (dirent.isFile() && dirent.name.endsWith('.js')) {
+                filePaths.push(fullPath);
+            }
+        }
+    } catch (error) {
+        console.error(`❌ Error reading directory ${dir}:`, error);
+    }
+    return filePaths;
+}
 // ✅ Utility: Load all commands
 async function loadCommands(commandsPath) {
     const commands = [];
-    let filePaths = [];
-
-    // Helper function to find all .js files recursively
-    async function findFiles(dir) {
-        try {
-            const dirents = await fs.readdir(dir, { withFileTypes: true });
-            for (const dirent of dirents) {
-                const fullPath = path.join(dir, dirent.name);
-                if (dirent.isDirectory()) {
-                    await findFiles(fullPath);
-                } else if (dirent.isFile() && dirent.name.endsWith('.js')) {
-                    filePaths.push(fullPath);
-                }
-            }
-        } catch (error) {
-            console.error(`❌ Error reading directory ${dir}:`, error);
-        }
-    }
-
-    await findFiles(commandsPath);
+    const filePaths = await findFiles(commandsPath);
 
     if (filePaths.length === 0) {
         console.warn('⚠️ No command files found.');
         return commands;
     }
-
     for (const filePath of filePaths) {
         try {
             const commandModule = await import(pathToFileURL(filePath).href);
@@ -67,15 +61,7 @@ export default async function register() {
     const commandsPath = path.join(__dirname, 'commands');
     const loadedCommands = await loadCommands(commandsPath);
     const globalCommandsToRegister = loadedCommands
-        .filter(cmd => !cmd.data.contexts || !cmd.data.contexts.includes(InteractionContextType.Guild))
-
-    const guildCommandsToRegister = loadedCommands
-        .filter(cmd => cmd.data.contexts && cmd.data.contexts.includes(InteractionContextType.Guild))
-
-    if (globalCommandsToRegister.length === 0 && guildCommandsToRegister === 0) {
-        console.warn('⚠️ No valid commands to register.')
-        return;
-    }
+        .filter(cmd => !cmd.data.contexts.includes(InteractionContextType.PrivateChannel))
 
     const rest = new REST({ version: '10' }).setToken(TOKEN);
     try {
@@ -84,9 +70,6 @@ export default async function register() {
                 { body: globalCommandsToRegister.map(cmd => cmd.data.toJSON()) }
             );
             console.log(`✅ Successfully loaded ${data.length} global application (/) commands.`);
-        } else {
-            await rest.put(Routes.applicationCommands(CLIENT_ID), { body: [] });
-            console.log('✅ Cleared all global application (/) commands.');
         }
 
     } catch (error) {
@@ -96,18 +79,12 @@ export default async function register() {
 
     if (GUILD_ID) {
         const guildIds = GUILD_ID.split(',').map(id => id.trim()).filter(id => id.length > 0);
-        for (const guildId of guildIds) {
+        const guildPromises = guildIds.map(async guildId => {
             if (!/^\d+$/.test(guildId)) {
                 console.error(`❌ Skipping invalid Guild ID: "${guildId}". It must be a numerical string.`);
-                continue;
+                return;
             }
-            let guildCommandsPath;
-            try {
-                guildCommandsPath = path.join(__dirname, 'commands', 'guilds', guildId)
-            } catch {
-                console.log(`file path does not exist for ${guildId}`)
-                continue;
-            }
+            const guildCommandsPath = path.join(__dirname, 'commands', 'guilds', guildId)
             const guildLoadedCommands = await loadCommands(guildCommandsPath)
 
             if (guildLoadedCommands.length > 0) {
@@ -120,19 +97,8 @@ export default async function register() {
                 } catch (error) {
                     console.error(`❌ Error registering commands for guild ${guildId} with Discord API:`, error);
                 }
-            } else {
-                try {
-                    await rest.put(
-                        Routes.applicationGuildCommands(CLIENT_ID, guildId),
-                        { body: [] }
-                    );
-                    console.log(`✅ Cleared all guild commands for guild ${guildId}.`);
-                } catch (err) {
-                    console.error(`❌ Error clearing commands for guild ${guildId}:`, err);
-                }
             }
-        }
+        })
+        await Promise.all(guildPromises);
     }
-}
-
-
+};
