@@ -7,8 +7,8 @@ import guildChannelMap from "./Extravariables/guildconfiguration.json" with {typ
 let counting = 0;
 let lastuser;
 let lastmessages;
-let countingChannel
-const eyes = '1257522749635563561';
+let countingChannel;
+let restart = true;
 export async function messageCreate(client, message) {
   const publicChannels = guildChannelMap[message.guild.id].publicChannels
   const sentbystaff = message.member.permissions.has('ModerateMembers')
@@ -42,7 +42,7 @@ export async function messageCreate(client, message) {
   if (lowerContent.includes('<@364089951660408843>'))
     message.reply('awooooooooo')
   if (lowerContent.includes('<@857445139416088647>'))
-    message.react(eyes)
+    message.react('1257522749635563561')
   if (lowerContent.includes('bad') && lowerContent.includes('bot'))
     message.react('😡');
   if (lowerContent.includes('hello') && lowerContent.includes('there'))
@@ -53,50 +53,59 @@ export async function messageCreate(client, message) {
     message.reply('stay frosty :3')
   if (lowerContent.includes('execute') && lowerContent.includes('order') && lowerContent.includes('66'))
     message.reply({ content: 'Not the Padawans!!!' })
+  if (lowerContent.includes('lazy'))
+    message.reply('Get up then!!')
+
 
   if ((message.type === MessageType.Default || message.type === MessageType.Reply) && message.channel.id != countingChannel)
     await applyUserXP(userId, message, message.guild.id);
 
   if (countingChannel && message.channel.id === countingChannel) {// check for a counting channel and if exists fetch the last valid message
-    if (counting == 0) {
+    if (counting == 0 && restart == true) {
       for (const message of lastmessages.values()) {
         counting = parseInt(message.content) - 1;
         if (!isNaN(counting) && !message.embeds.length > 0) {
           lastmessages = [];
+          restart = null
           break;
         }
       }
     }
     //check messages that are sent and compare them to the next number with a failsafe that tells the user that this channel is only for counting
     const number = parseInt(message.content);
-    if (!number) {
+    if (!message.content.trim() || isNaN(number) || Number(message.content) !== number) {
+      return;
+    }
+    const countsaver = guildChannelMap[message.guild.id].countsaver
+    if (number == counting + 1 && lastuser != message.author.id) {
+      counting += 1;
+      lastuser = message.author.id;
+      message.react('✅')
+    } else if (countsaver.length > 0) {
+      let lastsavior = countsaver[countsaver.length - 1]
       message.reply({
         embeds: [new EmbedBuilder()
-          .setDescription(`This channel is only for counting ${message.author}(number not reset)`)
+          .setDescription(`${lastsavior} had a key, count saved.`)
+          .setColor(0x009000)
         ]
       })
-      return;
-    } else if (number == counting + 1 && lastuser != message.author) {
-      message.react('✅')
-      counting += 1;
-      lastuser = message.author;
-      return;
-    } else {
-      message.react('❌')
+      countsaver.pop();
+    }
+    else {
       message.reply({
         embeds: [new EmbedBuilder()
-          .setDescription(lastuser == message.author ? `you already put a number down ${message.author}!(number reset)`
-            : `${message.author} missed the count, it was supposed to be ${counting + 1}`)
+          .setDescription(lastuser == message.author.id ? `you already put a number down <@${message.author.id}>!(number reset)`
+            : `<@${message.author.id}> missed the count, it was supposed to be ${counting + 1}`)
         ]
       })
       counting = 0;
       lastuser = null;
-      return;
+      message.react('❌')
     }
-
+    return;
   }
   if (sentbystaff) return;
-  await AutoMod(client, message, message.guild.id);
+  await AutoMod(client, message);
 }
 
 async function applyUserXP(userId, message, guildId) {
