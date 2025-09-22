@@ -8,15 +8,19 @@ const userMessageTrackers = new LRUCache({
   updateAgeOnGet: true,
 });
 
-const GENERAL_SPAM_WINDOW = 4 * 1000;
-const GENERAL_SPAM_THRESHOLD = 5;
-const DUPLICATE_SPAM_THRESHOLD = 3;
-
 export default function updateTracker(userId, message) {
+  const {
+    spamwindow: GENERAL_SPAM_WINDOW,
+    spamthreshold: GENERAL_SPAM_THRESHOLD,
+    Duplicatespamthreshold: DUPLICATE_SPAM_THRESHOLD,
+    capsratio: capsthreshold,
+    mediathreshold: mediathreshold,
+    messagethreshold: messageThreshold,
+    capscheckminlength: minLengthForCapsCheck
+  } = guildChannelMap[message.guild.id].automodsettings;
   const now = Date.now();
   const exclusions = guildChannelMap[message.guild.id].exclusions;
   const content = message.content;
-  const minLengthForCapsCheck = 10;
   let isCapSpam = false;
 
   let tracker = userMessageTrackers.get(userId);
@@ -43,11 +47,12 @@ export default function updateTracker(userId, message) {
 
   // cap spam check method
   if (content.length >= minLengthForCapsCheck) {
-    const lettersOnly = content.replace(/[^a-zA-Z]/g, '');
+    const noEmotes = content.replace(/[<a?:[a-zA-Z0-9_]+:\d+>/g, '');
+    const lettersOnly = noEmotes.replace(/[^a-zA-Z]/g, '')
     const upperCaseCount = (lettersOnly.match(/[A-Z]/g) || []).length
-    if (lettersOnly.length > 3) {
+    if (upperCaseCount > 3) {
       const upperRatio = lettersOnly.length > 0 ? upperCaseCount / lettersOnly.length : 0;
-      isCapSpam = upperRatio > .7;
+      isCapSpam = upperRatio > capsthreshold;
     }
   }
 
@@ -81,13 +86,12 @@ export default function updateTracker(userId, message) {
 
   const isDuplicateSpam = (tracker.duplicateCounts.get(content) || 0) > DUPLICATE_SPAM_THRESHOLD;
 
-  const isMediaViolation = tracker.mediaCount > 1 && tracker.total < 20;
+  const isMediaViolation = tracker.mediaCount > mediathreshold && tracker.total < messageThreshold;
 
   if (isMediaViolation)
     tracker.mediaCount = 0;
 
-  // clear messages after 20 sent over, resetting all flags
-  if (tracker.total >= 5) {
+  if (tracker.total >= messageThreshold) {
     tracker.total = 0;
     tracker.mediaCount = 0;
     tracker.timestamps.clear();
