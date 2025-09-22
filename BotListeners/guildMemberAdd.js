@@ -7,6 +7,8 @@ const fifteenMinutesInMs = 15 * 60 * 1000
  * @param {import("discord.js").GuildMember} member The new member.
  */
 export async function guildMemberAdd(member) {
+    const owner = await member.guild.fetchOwner();
+    const user = member.user;
     const guildId = member.guild.id
     const modChannels = guildChannelMap[guildId].modChannels;
     const publicChannels = guildChannelMap[guildId].publicChannels;
@@ -16,12 +18,11 @@ export async function guildMemberAdd(member) {
         await member.guild.channels.fetch(modChannels.mutelogChannel),
     ]
 
-
     // Define account creation date and two days in milliseconds
     const twoDaysInMs = 2 * 24 * 60 * 60 * 1000;
 
     // Check if account is less than two days old
-    const accountAgeInMs = Date.now() - member.user.createdTimestamp;
+    const accountAgeInMs = Date.now() - user.createdTimestamp;
 
     // Kick member if account is less than two days old
     if (accountAgeInMs < twoDaysInMs) {
@@ -31,14 +32,14 @@ export async function guildMemberAdd(member) {
                 .setTitle('A member was auto-kicked')
                 .addFields(
                     { name: '**User**', value: `${member}`, inline: true },
-                    { name: '**tag**', value: `\`${member.user.tag}\``, inline: true },
+                    { name: '**tag**', value: `\`${user.tag}\``, inline: true },
                     { name: '**Reason**', value: "`Account under the age of 2 days`" },
-                    { name: '**Account created:**', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>` }
+                    { name: '**Account created:**', value: `<t:${Math.floor(user.createdTimestamp / 1000)}:R>` }
                 );
             await mutechannel.send({ embeds: [kickmessage] });
             return; // Exit if member was kicked
         } catch (error) {
-            console.error(`Failed to auto-kick member ${member.user.tag}:`, error);
+            console.error(`Failed to auto-kick member ${user.tag}:`, error);
         }
     }
 
@@ -90,7 +91,7 @@ export async function guildMemberAdd(member) {
     const welcomeEmbed = new EmbedBuilder()
         .setColor(0x00FF99)
         .setDescription(`${member} joined the Server!`)
-        .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+        .setThumbnail(user.displayAvatarURL({ dynamic: true }))
         .addFields(
             { name: 'Discord Join Date:', value: `<t:${Math.floor(member.joinedAt.getTime() / 1000)}>`, inline: true }
         )
@@ -106,15 +107,15 @@ export async function guildMemberAdd(member) {
     const generalEmbed = new EmbedBuilder()
         .setColor(0x00FF99)
         .setDescription(`Welcome ${member} to the Cave!`)
-        .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+        .setThumbnail(user.displayAvatarURL({ dynamic: true }))
         .addFields(
-            { name: 'Discord Join Date:', value: `<t:${Math.floor(member.user.createdAt.getTime() / 1000)}:R>`, inline: true }
+            { name: 'Discord Join Date:', value: `<t:${Math.floor(user.createdAt.getTime() / 1000)}:R>`, inline: true }
         );
 
     // Create the ban button with the inviter's ID included
     const banButton = new ButtonBuilder()
-        .setCustomId(isPersistentInvite ? `inviter_ban_delete_invite_${member.id}_${inviter.id}_${invite.code}` : `inviter_ban_delete_invite_${member.id}_no inviter_no invite code`)
-        .setLabel(isPersistentInvite ? '🔨 Ban User & Delete Invite' : '🔨 Ban')
+        .setCustomId(isPersistentInvite && inviter.id !== owner.user.id ? `inviter_ban_delete_invite_${member.id}_${inviter.id}_${invite.code}` : `inviter_ban_delete_invite_${member.id}_no inviter_no invite code`)
+        .setLabel(isPersistentInvite && inviter.id !== owner.user.id ? '🔨 Ban User & Delete Invite' : '🔨 Ban')
         .setStyle(ButtonStyle.Danger)
         .setDisabled(false);
 
@@ -125,9 +126,9 @@ export async function guildMemberAdd(member) {
         .setDescription(`Im febot, I am dming you since it will open a dm with me. Below is a shiny blue button labeled commands. /appeal is the only one you can use here.\n`)
     await generalChannel.send({ embeds: [generalEmbed] });
     const message = await welcomeChannel.send({ embeds: [welcomeEmbed], components: [actionRow] });
-    if (!member.user.bot)
+    if (!user.bot)
         try {
-            const dmChannel = await member.user.createDM();
+            const dmChannel = await user.createDM();
             await dmChannel.send({ embeds: [introductionembed] })
         } catch (error) {
             console.log('Could not dm this user.', error)
@@ -145,7 +146,6 @@ export async function guildMemberAdd(member) {
             const updatedActionRow = new ActionRowBuilder().addComponents(updatedBanButton);
             await message.edit({ components: [updatedActionRow] });
         }
-
     }, fifteenMinutesInMs)
 }
 

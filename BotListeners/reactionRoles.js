@@ -36,11 +36,6 @@ async function handleReactionChange(reaction, user, action = 'add') {
     return;
   }
 
-  //error out if member not found
-  if (!member) {
-    console.log('❌ Member not found');
-    return;
-  }
   const blacklist = await getblacklist(user.id, reaction.message.guild.id)
 
   // attempt to modify the users roles
