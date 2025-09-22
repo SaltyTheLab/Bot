@@ -66,5 +66,45 @@
   {
     "brand": "Reddit",
     "image": "Database\\images\\reddit.png"
+  },
+  {
+    "brand": "Beats",
+    "image": "Database\\images\\beats.png"
+  },
+  {
+    "brand": "Adobe",
+    "image": "Database\\images\\Adobe.png"
+  },
+  {
+    "brand": "Mercedes",
+    "image": "Database\\images\\mercedes.png"
+  },
+  {
+    "brand": "Audi",
+    "image": "Database\\images\\audi.png"
+  },
+  {
+    "brand": "Oculus",
+    "image": "Database\\images\\Oculus.png"
+  },
+  {
+    "brand": "Steam",
+    "image": "Database\\images\\Steam.png"
+  },
+  {
+    "brand": "Xbox",
+    "image": "Database\\images\\xbox.png"
+  },
+  {
+    "brand": "Playstation",
+    "image": "Database\\images\\playstation.png"
+  },
+  {
+    "brand": "Cartoon Network",
+    "image": "Database\\images\\Cartoon Network.png"
+  },
+  {
+    "brand": "Nvidia",
+    "image": "Database\\images\\Nvidia.png"
   }
 ]
