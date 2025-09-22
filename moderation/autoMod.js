@@ -1,15 +1,38 @@
-import punishUser from '../utilities/punishUser.js';
+import punishUser from './punishUser.js';
 import getNextPunishment from './punishments.js';
-import getWarnStats from './simulatedwarn.js';
+import getWarnStats from './getActiveWarns.js';
 import updateTracker, { clearSpamFlags } from './trackers.js';
-import evaluateViolations from './evaluateViolations.js';
 import guildChannelMap from "../BotListeners/Extravariables/guildconfiguration.json" with {type: 'json'};
 import forbbidenWordsData from './forbiddenwords.json' with {type: 'json'};
+import interaction from 'discord.js'
 
 const forbiddenWords = new Set(forbbidenWordsData.forbiddenWords.map(w => w.toLowerCase()));
-
 const inviteRegex = /(https?:\/\/)?(www\.)?(discord\.gg|discord(app)?\.com\/invite)\/[a-zA-Z0-9-]+/i;
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
+
+function evaluateViolations({ hasInvite, matchedWord, everyonePing, isGeneralSpam, isDuplicateSpam, isMediaViolation, isNewUser, isCapSpam }) {
+  const checks = [
+    { flag: hasInvite, type: 'invite', reason: 'Discord invite' },
+    { flag: matchedWord, type: 'forbiddenWord', reason: `Forbidden word "${matchedWord}"` },
+    { flag: everyonePing, type: 'everyonePing', reason: 'Mass ping' },
+    { flag: isGeneralSpam, type: 'spam', reason: 'Spamming' },
+    { flag: isDuplicateSpam, type: 'spam', reason: 'Spamming the same message' },
+    { flag: isMediaViolation, type: 'mediaViolation', reason: 'Media violation' },
+    { flag: isNewUser, type: 'isNewUser', reason: 'while new to the server.' },
+    { flag: isCapSpam, type: 'CapSpam', reason: 'Spamming Caps' }
+  ];
+
+  const violations = checks
+    .filter(check => check.flag)
+    .map(({ type, reason }) => ({ type, reason }));
+
+  return {
+    allReasons: violations.map(v => v.reason),
+    violations
+  };
+}
+
+const unitMap = { min: 60000, hour: 3600000, day: 86400000 };
 export default async function AutoMod(client, message) {
   const { author, content, member, guild, channel } = message;
   const userId = author.id;
@@ -71,12 +94,15 @@ export default async function AutoMod(client, message) {
   const { activeWarnings, currentWarnWeight } = await getWarnStats(userId, guild.id, evaluationResult.violations);
 
   // calculate mute duration and unit
-  const { duration, unit } = getNextPunishment(activeWarnings.length + currentWarnWeight);
+  let { duration, unit } = getNextPunishment(activeWarnings.length + currentWarnWeight);
+  const multiplier = unitMap[unit]
+  duration = duration * multiplier;
 
   // common arguments for all commands
   const commonPayload = {
+    interaction: interaction,
     guild: guild,
-    target: member.id,
+    target: author,
     moderatorUser: client.user,
     reason: reasonText,
     channel: channel,
