@@ -210,7 +210,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function confirm(message) {
         return new Promise((resolve) => {
             const modal = document.createElement('div');
-            modal.className = "fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4";
+            modal.className = "fixed inset-0 bg-black flex items-center justify-center z-50 p-4";
             modal.innerHTML = `
         <div class="bg-gray-800 rounded-xl p-6 shadow-xl w-full max-w-md space-y-4 text-center" >
             <p class="text-lg text-gray-200">${message}</p>

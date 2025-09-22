@@ -7,7 +7,7 @@ let filteredCommands = [];
 
 async function fetchRecentCommands() {
     try {
-        const response = await fetch('Logging/recentCommandslog.json');
+        const response = await fetch('WebsiteTool/recentCommandslog.json');
         if (!response.ok) throw new Error('Failed to fetch recent commands');
         const commands = await response.json();
         recentCommands = commands.slice(0, maxCommands);
