@@ -72,9 +72,9 @@ export function execute(interaction) {
             .setDescription(`You chose **${userchoice}**.\nOpponent chose **${opponentchoice}**.`)
             .setColor(0xffa500);
         if (userWin) {
-            const { userData } = getUser(user, guildId)
+            const userData = await getUser(user, guildId)
             userData.coins += 20;
-            saveUser({ userData });
+            await saveUser({ userData });
         }
         await i.update({
             embeds: [resultEmbed],
