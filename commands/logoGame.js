@@ -1,12 +1,13 @@
 import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle, InteractionContextType } from "discord.js";
 import { getUser, saveUser } from "../Database/databasefunctions.js";
-import fs from 'node:fs';
 import path from 'node:path'
+import logos from '../Database/logos.json' with {type: 'json'}
 
-// Read and parse logos JSON correctly
-const info = fs.readFileSync('./Database/logos.json', 'utf-8');
-const logos = JSON.parse(info);
-let updatedButtons;
+function getRandomColor() {
+    const randomHex = Math.floor(Math.random() * 16777215)
+    return `#${randomHex.toString(16).padStart(6, '0')}`
+}
+
 function shuffle(array) {
     for (let i = array.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -21,21 +22,14 @@ export const data = new SlashCommandBuilder()
     .setDescription('Guess the logo');
 
 export async function execute(interaction) {
-    const user = interaction.user;
-    const guildId = interaction.guild.id
     // Pick a random logo as the correct answer
     const logo = logos[Math.floor(Math.random() * logos.length)];
-    const imagePath = path.resolve(`./${logo.image}`);
-    // Filter out the correct logo and pick up to 3 distractors
-    const filtered = logos.filter(l => l.brand !== logo.brand);
-    const distractorsCount = Math.min(3, filtered.length);
-    const distractors = shuffle(filtered).slice(0, distractorsCount);
-
-    const choices = [logo, ...distractors];
-    const options = shuffle(choices);
+    // Filter out the correct logo and pick 3 distractors
+    const noAnswerLogo = logos.filter(l => l.brand !== logo.brand)
+    const distractors = shuffle(noAnswerLogo).slice(0, 3);
+    const options = shuffle([logo, ...distractors]);
 
     const buttons = new ActionRowBuilder();
-
     options.forEach(option => {
         buttons.addComponents(
             new ButtonBuilder()
@@ -47,27 +41,29 @@ export async function execute(interaction) {
 
     const quiry = new EmbedBuilder()
         .setAuthor({
-            name: `Guess this logo ${user.tag}`,
-            iconURL: user.displayAvatarURL({ dynamic: true }),
+            name: `Guess this logo ${interaction.user.tag}`,
+            iconURL: interaction.user.displayAvatarURL({ dynamic: true }),
         })
-        .setColor(0x000085);
+        .setColor(getRandomColor())
 
     await interaction.reply({
         embeds: [quiry.setImage('attachment://logo.png')],
-        files: [{ attachment: imagePath, name: 'logo.png' }],
+        files: [{
+            attachment: path.resolve(`./${logo.image}`)
+            , name: 'logo.png'
+        }],
         components: [buttons]
     });
 
-    const filter = i => i.user.id === interaction.user.id;
-    const collector = interaction.channel.createMessageComponentCollector({ filter, time: 15000 });
+    const collector = interaction.channel.createMessageComponentCollector({ filter: i => i.user.id === interaction.user.id, time: 15000 });
+    let updatedButtons;
 
     collector.on('collect', async i => {
-        let updatedButtons = new ActionRowBuilder();
+        updatedButtons = new ActionRowBuilder();
 
         options.forEach(option => {
             const isCorrect = option.brand === logo.brand;
             const wasClicked = i.customId === option.brand;
-
             updatedButtons.addComponents(
                 new ButtonBuilder()
                     .setCustomId(`disabled_${option.brand}`)
@@ -82,19 +78,16 @@ export async function execute(interaction) {
                     .setDisabled(true)
             );
         });
-
         if (i.customId === logo.brand) {
-            const userData = await getUser(user.id, guildId);
+            const userData = await getUser(interaction.user.id, interaction.guild.id);
             userData.coins += 20;
             saveUser({ userData });
         }
         await i.update({
             components: [updatedButtons],
         });
-
         collector.stop();
     });
-
     collector.on('end', async (collected, reason) => {
         if (collected.size === 0 && reason == 'time') {
             updatedButtons = new ActionRowBuilder()
@@ -108,7 +101,6 @@ export async function execute(interaction) {
                         .setDisabled(true)
                 )
             })
-
             await interaction.editReply({ components: [updatedButtons] })
         }
     })
