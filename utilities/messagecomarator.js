@@ -1,4 +1,4 @@
-export function getComparableEmbed(embedData) {
+export default function getComparableEmbed(embedData) {
     if (!embedData) return null;
     const normalizeText = (text) => text?.replace(/\r\n/g, '\n').trim() || null;
     const cleanEmbed = {

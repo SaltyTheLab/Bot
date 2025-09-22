@@ -1,4 +1,3 @@
-// utilities/botReloader.js
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
 import path from 'node:path';
@@ -45,10 +44,7 @@ export async function loadCommands(client) {
                         } else {
                             console.warn(`[WARN] Invalid command file during reload: ${filePath}`);
                         }
-
-
                     }
-                    console.log('✅ Global commands loaded successfully.');
                     for (const guildId in msg.guildData) {
                         for (const filePath of msg.guildData[guildId]) {
                             const command = await import(pathToFileURL(filePath).href)
@@ -81,9 +77,7 @@ async function findFiles(dir) {
         const dirents = await fs.readdir(dir, { withFileTypes: true });
         for (const dirent of dirents) {
             const fullPath = path.join(dir, dirent.name);
-            if (dirent.isDirectory()) {
-                filePaths.push(...(await findFiles(fullPath)));
-            } else if (dirent.isFile() && dirent.name.endsWith('.js')) {
+            if (dirent.isFile() && dirent.name.endsWith('.js')) {
                 filePaths.push(fullPath);
             }
         }
