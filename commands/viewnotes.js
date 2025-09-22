@@ -1,6 +1,50 @@
-import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, InteractionContextType } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, InteractionContextType, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { deleteNote, getUser, viewNotes } from '../Database/databasefunctions.js';
-import { buildNoteButtons, buildNoteEmbed } from '../utilities/buildembeds.js';
+
+async function buildNoteEmbed(interaction, index, currentNote, length) {
+    const [target, mod] = await Promise.all(
+        [interaction.client.users.fetch(currentNote.userId),
+        interaction.client.users.fetch(currentNote.moderatorId)
+        ]);
+    const formattedDate = new Date(currentNote.timestamp).toLocaleString('en-US', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+        timeZone: 'CST'
+    });
+
+    return new EmbedBuilder()
+        .setColor(0xdddddd)
+        .setThumbnail(target.displayAvatarURL({ dynamic: true }))
+        .setDescription([
+            `${target} notes |  \`${index + 1} of ${length}\``,
+            `> ${currentNote.note}`
+        ].join('\n'))
+        .setFooter({
+            text: `${mod.tag} | ${formattedDate}`,
+            iconURL: mod.displayAvatarURL({ dynamic: true })
+        });
+};
+async function buildNoteButtons(index, allnotes, id, disabled = false) {
+    return new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId(`note-prev`)
+            .setLabel('◀️ prev')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(index === 0 || disabled),
+
+        new ButtonBuilder()
+            .setCustomId(`note-next`)
+            .setLabel('▶️ next')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(index >= allnotes.length - 1 || disabled),
+
+        new ButtonBuilder()
+            .setCustomId(`note-del-${id}`)
+            .setLabel('🗑️ delete')
+            .setStyle(ButtonStyle.Danger)
+            .setDisabled(disabled)
+    );
+};
 export const data = new SlashCommandBuilder()
     .setName('noteshow')
     .setDescription('View the notes of a user')

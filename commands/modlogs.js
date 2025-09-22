@@ -1,7 +1,80 @@
-import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, InteractionContextType } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, InteractionContextType, ActionRowBuilder, ButtonStyle, ButtonBuilder } from 'discord.js';
 import { deletePunishment, getPunishments, getUser } from '../Database/databasefunctions.js';
-import { buildLogEmbed, buildButtons } from '../utilities/buildembeds.js';
-import logRecentCommand from '../Logging/recentcommands.js';
+import logRecentCommand from '../WebsiteTool/recentcommands.js';
+
+const LOG_COLORS = {
+    Warn: 0xffcc00,
+    Mute: 0xff4444,
+    Ban: 0xd1b1bf
+};
+
+async function buildLogEmbed(interaction, log, idx, totalLogs) {
+    const [targetUser, moderator] = await Promise.all(
+        [interaction.client.users.fetch(log.userId),
+        interaction.client.users.fetch(log.moderatorId)
+        ]);
+    const formattedDate = new Date(log.timestamp).toLocaleString('en-US', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+        timeZone: 'CST'
+    });
+
+    const fields = [
+        { name: 'Member', value: `<@${log.userId}>`, inline: true },
+        { name: 'Type', value: `\`${log.type}\``, inline: true },
+    ];
+    //add mute duration if log type is mute
+    if (log.type === 'Mute' && log.duration) {
+        const totalMinutes = Math.round(log.duration / 60000); // convert ms to minutes
+        const hours = Math.floor(totalMinutes / 60);
+
+        let durationString;
+        if (hours > 0) {
+            durationString = `${hours} hour${hours > 1 ? 's' : ''}`;
+        } else {
+            durationString = `${totalMinutes} minute${totalMinutes !== 1 ? 's' : ''}`;
+        }
+        fields.push({ name: 'Duration', value: `\`${durationString}\``, inline: false });
+    }
+    return new EmbedBuilder()
+        .setColor(LOG_COLORS[log.type])
+        .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
+        .addFields(...fields,
+            { name: 'Reason', value: `\`${log.reason}\``, inline: false },
+            { name: 'Warns at Log Time', value: `\`${log.weight}\``, inline: true },
+            { name: 'Log Status', value: log.active == 1 ? '✅ Active' : '❌ Inactive/cleared', inline: true },
+            { name: 'Channel', value: `<#${log.channel}>\n\n [Event Link](${log.refrence})`, inline: false }
+        )
+        .setFooter({
+            text: `Staff: ${moderator.tag} | Log ${idx + 1} of ${totalLogs} | ${formattedDate}`,
+            iconURL: moderator.displayAvatarURL({ dynamic: true })
+        });
+};
+async function buildButtons(idx, totalLogs, isDeletable, logId, disabled = false) {
+    const buttons = [
+        new ButtonBuilder()
+            .setCustomId(`modlog-prev`)
+            .setLabel('⬅️ Back')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(idx === 0 || disabled),
+        new ButtonBuilder()
+            .setCustomId(`modlog-next`)
+            .setLabel('Next ➡️')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(idx >= totalLogs - 1 || disabled)
+    ];
+
+    if (isDeletable) {
+        buttons.push(
+            new ButtonBuilder()
+                .setCustomId(`modlog-del-${logId}`)
+                .setLabel('Delete')
+                .setStyle(ButtonStyle.Danger)
+                .setDisabled(disabled)
+        );
+    }
+    return new ActionRowBuilder().addComponents(...buttons);
+};
 export const data = new SlashCommandBuilder()
     .setName('modlogs')
     .setDescription('View a user’s moderation history.')
