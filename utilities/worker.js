@@ -7,11 +7,8 @@ async function findFiles(dir) {
     const dirents = await fs.readdir(dir, { withFileTypes: true });
     for (const dirent of dirents) {
       const fullPath = path.join(dir, dirent.name);
-      if (dirent.isDirectory()) {
-        filePaths.push(...(await findFiles(fullPath)))
-      } else if (dirent.isFile() && dirent.name.endsWith('.js')) {
-        filePaths.push(fullPath)
-      }
+      if (dirent.isFile() && dirent.name.endsWith('.js'))
+        filePaths.push(fullPath);
     }
   } catch (err) {
     if (err.code !== 'ENOENT') {
@@ -27,7 +24,7 @@ parentPort.on('message', async (msg) => {
     const globalFilePaths = await findFiles(globalCommandsPath);
     const guildCommands = {};
     for (const guildId of guildIds) {
-      const guildCommandsPath = path.join(botRoot, `commands/${guildId}`);
+      const guildCommandsPath = path.join(botRoot, 'commands', 'guilds', guildId);
       guildCommands[guildId] = await findFiles(guildCommandsPath)
     }
     parentPort.postMessage({
