@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
-const recentCommandsPath = path.join(process.cwd(), 'Logging', 'recentCommandslog.json');
+const recentCommandsPath = path.join(process.cwd(), 'WebsiteTool', 'recentCommandslog.json');
 const MAX_COMMANDS = 50;
 
 export default async function logRecentCommand(commandString) {
