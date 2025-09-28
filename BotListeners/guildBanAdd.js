@@ -1,6 +1,6 @@
 import { EmbedBuilder, AuditLogEvent } from "discord.js";
 import guildChannelMap from "./Extravariables/guildconfiguration.json" with {type: 'json'};
-import { commandbans } from "./Extravariables/mapsandsets.js";
+import { loadbans, saveBans } from "../utilities/jsonloaders.js";
 const recentBans = new Map();
 
 async function sendMassBanEmbed(executorId, guild, channel) {
@@ -38,9 +38,13 @@ async function sendMassBanEmbed(executorId, guild, channel) {
     recentBans.delete(executorId);
 }
 export async function guildBanAdd(ban) {
-
+    const bans = await loadbans();
     const user = ban.user
-    if (commandbans.has(user.id)) {
+    const userId = ban.user.id
+    const banIndex = bans.includes(userId)
+    if (banIndex) {
+        bans.pop();
+        saveBans(bans)
         return;
     }
     const guild = ban.guild;
