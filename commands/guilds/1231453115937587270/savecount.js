@@ -1,10 +1,11 @@
-import { SlashCommandBuilder, EmbedBuilder } from "discord.js";
+import { InteractionContextType, SlashCommandBuilder, EmbedBuilder } from "discord.js";
 import { getUser, saveUser } from '../../../Database/databasefunctions.js';
 import guildchannelmap from '../../../Botlisteners/Extravariables/guildconfiguration.json' with {type: 'json'}
 
 export const data = new SlashCommandBuilder()
     .setName('savecount')
     .setDescription('Save the count incase you miss it')
+    .setContexts([InteractionContextType.Guild])
 
 export async function execute(interaction) {
     const countsaver = guildchannelmap[interaction.guild.id].countsaver
