@@ -18,8 +18,8 @@ function evaluateViolations({ hasInvite, matchedWord, everyonePing, isGeneralSpa
     { flag: isGeneralSpam, type: 'spam', reason: 'Spamming' },
     { flag: isDuplicateSpam, type: 'spam', reason: 'Spamming the same message' },
     { flag: isMediaViolation, type: 'mediaViolation', reason: 'Media violation' },
+    { flag: isCapSpam, type: 'CapSpam', reason: 'Spamming Caps' },
     { flag: isNewUser, type: 'isNewUser', reason: 'while new to the server.' },
-    { flag: isCapSpam, type: 'CapSpam', reason: 'Spamming Caps' }
   ];
 
   const violations = checks
