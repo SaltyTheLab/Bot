@@ -1,25 +1,26 @@
-import { SlashCommandBuilder, EmbedBuilder, InteractionContextType } from 'discord.js';
+import { SlashCommandBuilder, InteractionContextType } from 'discord.js';
+import { sendShutdownWebHook } from '../utilities/sendwebhook.js';
 
 export const data = new SlashCommandBuilder()
     .setName('restart')
     .setDescription('Restarts the bot (admin only).')
-    .setDefaultMemberPermissions(0)
     .setContexts([InteractionContextType.Guild])
 
 export async function execute(interaction) {
-    await interaction.deferReply();
+    const owner = await interaction.guild.fetchOwner()
 
-    const restartEmbed = new EmbedBuilder()
-        .setTitle('🔄 Restarting Bot...')
-        .setDescription('The bot will be back online in a moment.')
-        .setColor('#FFD700');
+    if (interaction.user.id !== owner.user.id) {
+        interaction.reply({
+            content: `you are not authorized to use this command ${interaction.user}`,
+            ephemeral: true
+        })
+        return;
+    }
+    await interaction.reply({ content: "Initiating controlled restart... Notifying users now." });
+    await sendShutdownWebHook("RESTART")
 
-    await interaction.editReply({ embeds: [restartEmbed] });
 
-    // Log the restart request to the console for debugging
     console.log(`[RESTART] Restart requested by ${interaction.user.tag}.`);
-
-    // Exit the process with a success code. A process manager will
-    // detect this exit and automatically restart the bot.
+    interaction.client.destroy();
     process.exit(0);
 }
