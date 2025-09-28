@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle, InteractionContextType } from "discord.js";
+import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle, InteractionContextType, ComponentType } from "discord.js";
 import { getUser, saveUser } from "../Database/databasefunctions.js";
 import path from 'node:path'
 import logos from '../Database/logos.json' with {type: 'json'}
@@ -46,16 +46,21 @@ export async function execute(interaction) {
         })
         .setColor(getRandomColor())
 
-    await interaction.reply({
+    const message = await interaction.reply({
         embeds: [quiry.setImage('attachment://logo.png')],
-        files: [{
-            attachment: path.resolve(`./${logo.image}`)
-            , name: 'logo.png'
-        }],
-        components: [buttons]
-    });
-
-    const collector = interaction.channel.createMessageComponentCollector({ filter: i => i.user.id === interaction.user.id, time: 15000 });
+        files: [
+            { attachment: path.resolve(`./${logo.image}`), name: 'logo.png' }
+        ],
+        components: [buttons],
+        fetchReply: true
+    },);
+    const collector = interaction.channel.createMessageComponentCollector(
+        {
+            componentType: ComponentType.Button,
+            filter: i => i.message.id === message.id,
+            time: 15000
+        }
+    );
     let updatedButtons;
 
     collector.on('collect', async i => {
