@@ -10,12 +10,11 @@ let lastmessages;
 let countingChannel;
 let restart = true;
 export async function messageCreate(client, message) {
+  if (message.author.bot || !message.guild || !message.member)
+    return;
   const publicChannels = guildChannelMap[message.guild.id].publicChannels
   const sentbystaff = message.member.permissions.has('ModerateMembers')
 
-  //skip if message creator is bot or not in the server
-  if (message.author.bot)
-    return;
   //check for counting channel
   if (publicChannels?.countingChannel) {
     countingChannel = publicChannels.countingChannel;
@@ -110,12 +109,6 @@ export async function messageCreate(client, message) {
 
 async function applyUserXP(userId, message, guildId) {
   let userData = await getUser(userId, guildId);
-  if (!userData) {
-    console.warn(`Corrupt user data found for userId: ${userId}. Initializing with defaults.`);
-    const newUserData = { userId: userId, xp: 0, level: 1, coins: 100, guildId: guildId };
-    await saveUser(newUserData, guildId); // Save the clean data immediately
-    userData = getUser(userId, guildId); // Re-fetch the now-clean data
-  }
   userData.xp += 20;
   userData.totalmessages += 1;
   const xpNeeded = Math.round(((userData.level - 1) ** 1.5 * 52 + 40) / 20) * 20
