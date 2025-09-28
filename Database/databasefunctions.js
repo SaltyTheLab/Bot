@@ -17,17 +17,8 @@ initializeDb();
 export async function getUser(userId, guildId, modflag = false) {
   let userData = await usersCollection.findOne({ userId: userId, guildId: guildId });
   if (!userData && !modflag) {
-    console.log(`[getUser] User ${userId} in guild ${guildId} not found. Attempting to insert new user.`);
     const newUser = {
-      userId: userId,
-      xp: 0,
-      level: 1,
-      coins: 100,
-      guildId: guildId,
-      notes: [],
-      punishments: [],
-      blacklist: [],
-      totalmessages: 0
+      userId: userId, xp: 0, level: 1, coins: 100, guildId: guildId, notes: [], punishments: [], blacklist: [], totalmessages: 0
     }
     try {
       await usersCollection.insertOne(newUser);
@@ -38,7 +29,7 @@ export async function getUser(userId, guildId, modflag = false) {
       return { userData: { userId, xp: 0, level: 1, coins: 100, guildId } };
     }
   };
-  return userData ? userData : null;
+  return userData;
 }
 
 export async function getUserforappeal(userId) {
