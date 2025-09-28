@@ -2,6 +2,9 @@ import { EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle, StringSelec
 import guildChannelMap from "../BotListeners/Extravariables/guildconfiguration.json" with {type: 'json'};
 import IDs from '../embeds/EmbedIDs.json' with {type: 'json'}
 import getComparableEmbed from '../utilities/messagecomarator.js';
+import { writeFile } from 'fs/promises'
+import path from 'path';
+const messagepath = path.join(process.cwd(), 'embeds', 'EmbedIDs.json');
 const guildEmbedConfig = {
     "1231453115937587270": [
         { name: "rules", senderFunc: createRulesEmbed },
@@ -36,7 +39,7 @@ async function sendEmbedAndSave(guild, messageIDs, embedName, embedData, guildCh
         messageIDs[guild.id].splice(oldMessageIndex, 1);
     }
     const { embeds, components } = embedData;
-    const msg = await channel.send({ embeds, components });
+    const msg = await channel.send({ embeds, components, fetchReply: true });
     if (embedData.reactions && embedData.reactions.length > 0) {
         for (const reaction of embedData.reactions) {
             try {
@@ -56,6 +59,15 @@ async function sendEmbedAndSave(guild, messageIDs, embedName, embedData, guildCh
         messageId: msg.id,
         channelid: channel.id,
     });
+
+    try {
+        const jsonString = JSON.stringify(messageIDs, null, 4); // null, 4 for nice formatting
+        await writeFile(messagepath, jsonString, 'utf8');
+        console.log('✅ Successfully saved message IDs to disk.');
+    } catch (error) {
+        console.error('❌ Failed to save message IDs to disk:', error);
+    }
+
 }
 async function createRulesEmbed(guild) {
     const rules = new EmbedBuilder()
@@ -714,7 +726,6 @@ export async function embedsenders(client, guildIds) {
                     console.log(`missing embed for ${embedName}, adding to queue...`)
                     embedTasks.push(sendEmbedAndSave(guild, messageIDs, embedName, embedData, guildChannels));
                 }
-
                 try {
                     const channel = await guild.client.channels.fetch(existingEmbedInfo.channelid);
                     const message = await channel.messages.fetch(existingEmbedInfo.messageId);
