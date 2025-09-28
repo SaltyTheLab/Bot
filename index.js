@@ -1,11 +1,10 @@
 import { Client, GatewayIntentBits, Collection, Options } from 'discord.js';
 import { config } from 'dotenv';
 import { embedsenders } from './embeds/embeds.js';
-import { loadCommands, loadListeners } from './utilities/botreloader.js';
 import cacheInteractiveMessages from './utilities/cacheInteractiveMessages.js';
 import connectToMongoDB from './Database/database.js';
 import initializeInvites from './utilities/initializeInvites.js';
-import register from './deploy-cmds.js';
+import { loadCommandsToClient, loadListeners, register } from './deploy-cmds.js';
 import cron from 'node-cron';
 import clearExpiredWarns from './utilities/clearExpiredWarns.js';
 import invites from './BotListeners/Extravariables/mapsandsets.js';
@@ -34,28 +33,27 @@ export const client = new Client({ // Initialize Discord client
 client.commands = new Collection();//define the client commands variable
 
 async function main() {
-  await loadCommands(client);//load commands
-  await register();//register the commands to api
-  console.log('Loaded Commands:')//log for debugging purposes
-  client.commands.forEach((command, name) => console.log(name))
-  await loadListeners(client); //load listeners
-  const guildIdsString = GUILD_ID;
-  const guildIDs = guildIdsString.split(',').map(id => id.trim());
-  client.once('clientReady', async () => {
-    cron.schedule('0 0 * * *', async () => { await clearExpiredWarns(usersCollection) });
-    await embedsenders(client, guildIDs);
-    for (const guildId of guildIDs) {
-      const guild = client.guilds.cache.get(guildId);
+  await client.login(process.env.TOKEN);
+  await new Promise(resolve => client.once('clientReady', resolve));
+  await loadListeners(client);
+  await loadCommandsToClient(client);
+  await register();
+  cron.schedule('0 0 * * *', async () => { await clearExpiredWarns(usersCollection) });
+  // Run initial setup that needs guilds
+  const guildIDs = GUILD_ID.split(',').map(id => id.trim());
+  await embedsenders(client, guildIDs);
+  for (const guildId of guildIDs) {
+    const guild = client.guilds.cache.get(guildId);
+    if (guild) { // Check if guild exists to prevent errors
       await initializeInvites(guild);
       await cacheInteractiveMessages(guild);
     }
-    console.log('--- Initial Invites Cache State ---');
-    for (const [key, uses] of invites) {
-      console.log(`${key}, Uses: ${uses}`);
-    }
-    console.log('-----------------------------------');
-    console.log(`✅ Logged in as ${client.user.tag}`);//output for debugging
-  })
-  await client.login(process.env.TOKEN);
+  }
+  client.commands.forEach((command, name) => console.log(name))
+  for (const [key, uses] of invites) {
+    console.log(`${key}, Uses: ${uses}`);
+  }
+  console.log('-----------------------------------');
+  console.log(`✅ Logged in as ${client.user.tag}`);//output for debugging
 }
 main().catch(console.error);//run main loop
