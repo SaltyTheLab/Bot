@@ -13,6 +13,10 @@ export async function execute(interaction) {
     const user = await interaction.user;
     const userData = await getUser(user.id, interaction.guild.id);
     const coincount = interaction.options.getInteger('amount')
+    if (coincount > userData.coins) {
+        interaction.reply({ content: `you cannot bet more than you have ${user}`, ephemeral: true })
+        return;
+    }
     const bet = Math.random()
     const win = Math.ceil(coincount * 1.5);
     let statement = ` ${user.tag} you bet ${coincount} and won ${win} coins!!`
@@ -32,6 +36,8 @@ export async function execute(interaction) {
             iconURL: user.displayAvatarURL({ dyanamic: true })
         })
         userData.coins -= coincount;
+        if (userData.coins < 0)
+            userData.coins = 0
     }
     saveUser({ userData });
     interaction.reply(
