@@ -15,8 +15,9 @@
     <div class="w-full min-w-4xl bg-gray-800 rounded-x1 shadow-lg p-6 space-y-6">
       <h1 class="text-3xl font-bold text-blue-400"> Bot Configuration</h1>
       <h2 class=" text-3l font-semibold text-red-400 justify-center"> Make sure
-        to save your work and to dowload the generated json config!!</h2>
-      <!-- Guild Selection and Management -->
+        to save your work and download the generated json config!!</h2>
+
+      <!-- Guild SelectioN -->
       <div class="bg-gray-700 p-4 rounded-x1 shadow-inner">
         <label for="guildSelect" class="block text-gray-300 font-semibold mb-2"> Select
           Guild:</label>
@@ -25,75 +26,116 @@
           <option value="">-- Add New Guild --</option>
         </select>
       </div>
+
       <!-- Guild ID Input -->
       <div class="bg-gray-700 p-4 rounded-x1 shadow-inner">
         <label for="guildIdInput" class="block text-gray-300 font-semibold mb-2"> Guild ID:</label>
         <input type="text" id="guildIdInput" placeholder="Enter Guild ID" class="2-full bg-gray-900
         text-gray-200 border border-gray-600 rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500">
       </div>
-      <!-- Configurable Channel Sections -->
-      <div id="channelsContainer" class="space-y-6">
-        <!-- Mod Channels-->
-        <div class="bg-gray-700 p-4 rounded-x1 space-y-4 shadow-inner">
-          <h2 class="text-x1 font-bold text-blue-300 mb-4"> Mod Channels</h2>
-          <div id="modChannelsSection"></div>
-          <button id="addModChannelBtn" class="mt-4 px-4 py-2 bg-blue-500
-          text-white font-semibold rounded-lg hover:bg-blue-600
-          transition-colors"> Add Mod Channel</button>
-        </div>
-        <!-- Public Channels-->
-        <div class="bg-gray-700 p-4 rounded-x1 space-y-4 shadow-inner">
-          <h2 class="text-x1 font-bold text-blue-300 mb-4"> Public Channels</h2>
-          <div id="publicChannelsSection"></div>
-          <button id="addPublicChannelBtn" class="mt-4 px-4 py-2 bg-blue-500
-          text-white font-semibold rounded-lg hover:bg-blue-600
-          transition-colors"> Add Pulbic Channel </button>
-        </div>
-        <!-- Exclusions-->
-        <div class="bg-gray-700 p-4 rounded-x1 space-y-4 shadow-inner">
-          <h2 class="text-x1 font-bold text-blue-300 mb-4"> Exclusions</h2>
-          <div id="exclusionsSection"></div>
-          <button id="addExclusionBtn" class="mt-4 px-4 py-2 bg-blue-500
-          text-white font-semibold rounded-lg hover:bg-blue-600
-          transition-colors"> Add Channel Exclusion</button>
-        </div>
-        <!-- Reactions -->
-        <div class="bg-gray-700 p-4 rounded-x1 space-y-4 shadow-inner">
-          <h2 class="text-x1 font bold text-blue-300 mb-4"> Reactions</h2>
-          <div id="reactionSection"></div>
-          <button id="addReactionBtn" class="mt-4 px-4 py-2 bg-blue-500
-          text-white font-semibold rounded-lg hover:bg-blue-600
-          transition-colors"> Add Reaction</button>
-        </div>
-        <!-- String Reactions -->
-        <div class="bg-gray-700 p-4 rounded-x1 space-y-4 shadow-inner">
-          <h2 class="text-x1 font bold text-blue-300 mb-4"> String Reactions</h2>
-          <div id="stringSection"></div>
-          <button id="addStringBtn" class="mt-4 px-4 py-2 bg-blue-500
-          text-white font-semibold rounded-lg hover:bg-blue-600
-          transition-colors"> Add String Reaction</button>
-        </div>
-        <!-- Action Buttons-->
-        <div class="flex justify-between items-center mt-6">
-          <button id="uploadConfigBtn" class="w-full md:w-auto px-6 py-3 bg-indigo-500 text-white
+
+      <!-- Action Buttons-->
+      <div class="flex justify-between items-center mt-6">
+        <button id="uploadConfigBtn" class="w-full md:w-auto px-6 py-3 bg-indigo-500 text-white
         font-bold rounded-lg hover:bg-indigo-600 transition-colors transform
         hover:scale-105">Upload Config File</button>
-          <input type="file" id="fileInput" class="hidden">
-          <button id="saveConfigBtn" class="px-6 py-3 bg-green-500 text-white
+        <input type="file" id="fileInput" class="hidden">
+        <button id="saveConfigBtn" class="px-6 py-3 bg-green-500 text-white
         font-bold rounded-lg hover:bg-green-600 transition-colors transform
         hover:scale-105"> Save Configuration</button>
-          <button id="deleteConfigBtn" class="px-6 py-3 bg-red-500 text-white
+        <button id="deleteConfigBtn" class="px-6 py-3 bg-red-500 text-white
         font-bold rounded-lg hover:bg-red-600 transition-colors transform
         hover:scale-105">Delete Guild</button>
-          <button id="downloadConfigBtn" class="w-full md:w-auto px-6 py-3 bg-blue-500 text-white 
+        <button id="downloadConfigBtn" class="w-full md:w-auto px-6 py-3 bg-blue-500 text-white 
         font-bold rounded-lg hover:bg-blue-600 transition-colors transform
         hover:scale-105">Download Config File</button>
+      </div>
+
+      <!--Config tabs-->
+      <div id="channelsContainer" class="space-y-6">
+        <div class="flex border-b border-gray-600">
+          <button id="modChannelsTab"
+            class="tab-btn px-4 py-2 text-gray-300 font-semibold border-b-2 border-transparent hover:border-blue-400"
+            data-target="modChannelsContent">
+            Log Channels
+          </button>
+          <button id="autoModTab" class="tab-btn px-4 py-2 text-blue-400 font-semibold border-b-2 border-blue-400"
+            data-target="autoModContent">
+            AutoMod Settings
+          </button>
+          <button id="publicChannelsTab"
+            class="tab-btn px-4 py-2 text-gray-300 font-semibold border-b-2 border-transparent hover:border-blue-400"
+            data-target="publicChannelsContent">
+            Public Channels
+          </button>
+          <button id="exclusionsTab"
+            class="tab-btn px-4 py-2 text-gray-300 font-semibold border-b-2 border-transparent hover:border-blue-400"
+            data-target="exclusionsContent">
+            Exclusions
+          </button>
+          <button id="reactionsTab"
+            class="tab-btn px-4 py-2 text-gray-300 font-semibold border-b-2 border-transparent hover:border-blue-400"
+            data-target="reactionsContent">
+            Reactions
+          </button>
+          <button id="stringReactionsTab"
+            class="tab-btn px-4 py-2 text-gray-300 font-semibold border-b-2 border-transparent hover:border-blue-400"
+            data-target="stringReactionsContent">
+            String Reactions
+          </button>
+
         </div>
+
+        <div id="tabContentContainer" class="space-y-6">
+          <div id="modChannelsContent" class="tab-content bg-gray-700 p-4 rounded-xl space-y-4 shadow-inner hidden">
+            <div id="modChannelsSection"></div>
+          </div>
+
+          <div id="publicChannelsContent" class="tab-content bg-gray-700 p-4 rounded-xl space-y-4 shadow-inner hidden">
+            <div id="publicChannelsSection"></div>
+            <button id="addPublicChannelBtn"
+              class="mt-4 px-4 py-2 bg-blue-500 text-white font-semibold rounded-lg hover:bg-blue-600 transition-colors">
+              Add Public Channel
+            </button>
+          </div>
+
+          <div id="exclusionsContent" class="tab-content bg-gray-700 p-4 rounded-xl space-y-4 shadow-inner hidden">
+            <div id="exclusionsSection"></div>
+            <button id="addExclusionBtn"
+              class="mt-4 px-4 py-2 bg-blue-500 text-white font-semibold rounded-lg hover:bg-blue-600 transition-colors">
+              Add Channel Exclusion
+            </button>
+          </div>
+
+          <div id="reactionsContent" class="tab-content bg-gray-700 p-4 rounded-xl space-y-4 shadow-inner hidden">
+            <div id="reactionSection"></div>
+            <button id="addReactionBtn"
+              class="mt-4 px-4 py-2 bg-blue-500 text-white font-semibold rounded-lg hover:bg-blue-600 transition-colors">
+              Add Reaction
+            </button>
+          </div>
+
+          <div id="stringReactionsContent" class="tab-content bg-gray-700 p-4 rounded-xl space-y-4 shadow-inner hidden">
+            <div id="stringSection"></div>
+            <button id="addStringBtn"
+              class="mt-4 px-4 py-2 bg-blue-500 text-white font-semibold rounded-lg hover:bg-blue-600 transition-colors">
+              Add String Reaction
+            </button>
+          </div>
+
+          <div id="autoModContent" class="tab-content bg-gray-700 p-4 rounded-xl space-y-4 shadow-inner">
+            <div id="AutomodSection"></div>
+          </div>
+
+        </div>
+
 
         <!-- Message Error Display-->
         <div id="messageBox" class="text-center p-3 rounded-lg hidden"></div>
       </div>
+
     </div>
+
     <div class='w-half bg-gray-900 text-gray-200 border border-gray-600 rounded-lg
     p-2 focus:ring-blue-500 focus:border-blue-500 whitespace-pre'>
       <!-- View Recent Commands-->
@@ -112,6 +154,27 @@
         </div>
       </div>
     </div>
+    <script defer>
+      const tabs = document.querySelectorAll('.tab-btn');
+      const tabContents = document.querySelectorAll('.tab-content');
+
+      tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          tabs.forEach(item => {
+            item.classList.remove('border-blue-400', 'text-blue-400');
+            item.classList.add('border-transparent', 'text-gray-300');
+          });
+          tabContents.forEach(content => {
+            content.classList.add('hidden');
+          });
+          const targetId = tab.getAttribute('data-target');
+          document.getElementById(targetId).classList.remove('hidden');
+          tab.classList.add('border-blue-400', 'text-blue-400');
+          tab.classList.remove('border-transparent', 'text-gray-300');
+        });
+      });
+      document.getElementById('modChannelsTab').click();
+    </script>
 </body>
 
 </html>
