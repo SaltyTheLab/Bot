@@ -12,13 +12,24 @@ const appealinvites = {
 export async function interactionCreate(interaction) {
 
     if (interaction.isChatInputCommand()) {
-        const command = interaction.client.commands.get(interaction.commandName);
-        if (!command) return;
+        const commandName = interaction.commandName;
+        const key = `${interaction.guild.id}:${commandName}`
+        let command = interaction.client.commands.get(key);
 
+        if (!command)
+            command = interaction.client.commands.get(commandName);
+
+        if (!command) {
+            console.warn(`[WARN] Command '${commandName}' not found in map (key: ${key || commandName}).`);
+            if (!interaction.deferred && !interaction.replied) {
+                await interaction.reply({ content: 'Sorry, that command is not currently available.', ephemeral: true });
+            }
+            return;
+        }
         try {
-            await command.execute(interaction);
+            command.execute(interaction);
         } catch (error) {
-            console.error(`❌ Error executing command ${interaction.commandName}:`, error);
+            console.error(`❌ Error executing command ${commandName}: `, error);
             if (interaction.replied || interaction.deferred) {
                 await interaction.followUp({ content: 'There was an error while executing this command!', ephemeral: true });
             } else {
