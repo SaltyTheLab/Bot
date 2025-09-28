@@ -1,4 +1,4 @@
-import { InteractionContextType, PermissionFlagsBits, SlashCommandBuilder, EmbedBuilder } from "discord.js";
+import { InteractionContextType, PermissionFlagsBits, SlashCommandBuilder, EmbedBuilder, GuildMember } from "discord.js";
 import punishUser from "../moderation/punishUser.js";
 
 export const data = new SlashCommandBuilder()
@@ -18,9 +18,9 @@ export const data = new SlashCommandBuilder()
     );
 
 export async function execute(interaction) {
-    const target = await interaction.options.getMember('target');
+    const target = await interaction.options.getMember('target') ? await interaction.options.getMember('target') : await interaction.options.getUser('target');
     const reason = interaction.options.getString('reason');
-    const staffcheck = target.permissions.has(PermissionFlagsBits.ModerateMembers)
+    const staffcheck = target instanceof GuildMember ? target.permissions.has(PermissionFlagsBits.ModerateMembers) : null
 
     if (staffcheck) {
         interaction.reply({
