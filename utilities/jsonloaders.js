@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 
 const applicationsFilePath = path.join(process.cwd(), 'BotListeners', 'Extravariables', 'applications.json');
+const bansFilePath = path.join(process.cwd(), 'BotListeners', 'Extravariables', 'commandsbans.json');
 
 /**
  * Loads the applications data from the JSON file.
@@ -31,5 +32,62 @@ export async function saveApplications(applicationsObject) {
         console.log('Applications data saved.');
     } catch (error) {
         console.error('Failed to save applications data:', error);
+    }
+}
+
+export async function addBan(userId) {
+    let bans = [];
+
+    try {
+        // Read the file and parse the JSON content
+        const data = await fs.readFile(bansFilePath, 'utf8');
+        bans = JSON.parse(data);
+
+        // Ensure the parsed data is an array
+        if (!Array.isArray(bans)) {
+            console.error('❌ The bans file is not a valid JSON array. Resetting file.');
+            bans = [];
+        }
+    } catch (error) {
+        // Handle cases where the file doesn't exist
+        if (error.code === 'ENOENT') {
+            console.log('⚠️ Bans file not found. Creating a new one.');
+        } else {
+            // Log other parsing or reading errors
+            console.error('❌ Failed to read or parse the bans file:', error);
+        }
+    }
+
+    // Add the user ID to the array if it's not already there
+    if (!bans.includes(userId)) {
+        bans.push(userId);
+    }
+
+    try {
+        // Write the updated array back to the file
+        await fs.writeFile(bansFilePath, JSON.stringify(bans, null, 2), 'utf8');
+        console.log(`✅ User ${userId} has been successfully added to the command bans list.`);
+    } catch (error) {
+        console.error('❌ Failed to write to the bans file:', error);
+    }
+}
+
+export async function loadbans() {
+    const data = await fs.readFile(bansFilePath, 'utf8');
+    let bans = JSON.parse(data);
+
+    // Ensure the parsed data is an array
+    if (!Array.isArray(bans)) {
+        console.error('❌ The bans file is not a valid JSON array. Resetting file.');
+        bans = [];
+    }
+    return bans;
+}
+
+export async function saveBans(bansArray) {
+    try {
+        await fs.writeFile(bansFilePath, JSON.stringify(bansArray, null, 2), 'utf8');
+    } catch (error) {
+        console.error('❌ Failed to write to the bans file:', error);
     }
 }

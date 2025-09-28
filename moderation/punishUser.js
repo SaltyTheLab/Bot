@@ -4,8 +4,7 @@ import getNextPunishment from './punishments.js';
 import { addPunishment, getUser } from '../Database/databasefunctions.js';
 import logRecentCommand from '../WebsiteTool/recentcommands.js';
 import guildChannelMap from "../BotListeners/Extravariables/guildconfiguration.json" with {type: 'json'};
-import { commandbans } from '../BotListeners/Extravariables/mapsandsets.js';
-const BAN_CACHE_TIMEOUT = 15000;
+import { addBan } from '../utilities/jsonloaders.js';
 const THRESHOLD = 24 * 60 * 60 * 1000; // 24h
 const unitMap = { min: 60000, hour: 3600000, day: 86400000 };
 const LOG_COLORS = {
@@ -48,8 +47,7 @@ export default async function punishUser({
 
   if (banflag) {
     warnType = 'Ban'
-    commandbans.add(target);
-    setTimeout(() => commandbans.delete(target), BAN_CACHE_TIMEOUT);
+    addBan(target)
   }
   else if (duration > 0) {
     warnType = 'Mute'
