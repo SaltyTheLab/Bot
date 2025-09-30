@@ -1,6 +1,6 @@
-import { EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle, StringSelectMenuBuilder } from 'discord.js';
+import { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder } from 'discord.js';
 import guildChannelMap from "../BotListeners/Extravariables/guildconfiguration.json" with {type: 'json'};
-import IDs from '../embeds/EmbedIDs.json' with {type: 'json'}
+import embedIDs from '../embeds/embedIDs.json' with {type: 'json'}
 import getComparableEmbed from '../utilities/messagecomarator.js';
 import { writeFile } from 'fs/promises'
 import path from 'path';
@@ -9,7 +9,6 @@ const guildEmbedConfig = {
     "1231453115937587270": [
         { name: "rules", senderFunc: createRulesEmbed },
         { name: "mental", senderFunc: createMentalHealthEmbed },
-        { name: "appeal", senderFunc: createAppealEmbed },
         { name: "staffguide", senderFunc: createStaffGuideEmbed },
         { name: "getstream", senderFunc: createStreamRoleEmbed },
         { name: "getdividers", senderFunc: createDividersRoleEmbed },
@@ -33,11 +32,15 @@ const guildEmbedConfig = {
 // New function to handle the common tasks of sending and saving embed info
 async function sendEmbedAndSave(guild, messageIDs, embedName, embedData, guildChannels) {
     const channel = await guild.channels.fetch(guildChannels[embedName]);
-    const oldMessageIndex = messageIDs[guild.id].findIndex((message) => message.name === embedName)
-    if (oldMessageIndex !== -1) {
-        // Found an old message with the same name, so we remove it.
-        messageIDs[guild.id].splice(oldMessageIndex, 1);
-    }
+    try {
+        const oldMessageIndex = messageIDs[guild.id].findIndex((message) => message.name === embedName) ?? null;
+        if (oldMessageIndex && oldMessageIndex !== -1) {
+            // Found an old message with the same name, so we remove it.
+            messageIDs[guild.id].splice(oldMessageIndex, 1);
+        }
+        // eslint-disable-next-line no-empty
+    } catch { }
+
     const { embeds, components } = embedData;
     const msg = await channel.send({ embeds, components, fetchReply: true });
     if (embedData.reactions && embedData.reactions.length > 0) {
@@ -88,7 +91,8 @@ async function createRulesEmbed(guild) {
             '**9)** General chat channels are designated for English language discussions.For discussions in other languages, please utilize <#1235314089182625793> channel.',
             '**10)** Alternate accounts(alts) are only permitted if your primary account has been compromised(e.g.hacked, stolen) and verifiable proof is provided.Otherwise, the creation or use of alternate accounts is prohibited, as it may be interpreted as an attempt to evade bans or other disciplinary actions.',
             '**11)** Members are advised to check channel pins for supplementary rules and guidelines specific to each channel, which clarify appropriate and inappropriate content.',
-            '**12)** Any disregard for these server rules will result in moderation actions, the severity of which will depend on the nature and frequency of the infraction, and may include a permanent server ban.'].join('\n\n'))
+            '**12)** Selfies or other images that contain your full likeness will not be allowed, even in <#1302818403408674828>',
+            '**13)** Disregarding of these server rules will result in moderation actions, the severity of which will depend on the nature and frequency of the infraction, and may include a permanent server ban.'].join('\n\n'))
         .addFields(
             {
                 name: '**__NSFW Rules__** ', value: ['12. All art should be posted in <#1257424392586002613>.',
@@ -206,29 +210,7 @@ async function createMentalHealthEmbed(guild) {
         embeds: [mentalhealth]
     }
 }
-async function createAppealEmbed() {
-    const appealsembed = new EmbedBuilder()
-        .setTitle('Ticket Appeal Form')
-        .setDescription([
-            'You have been blacklisted from the Ticket system in my server, click above to access the form to appeal.',
-            '**__If you are caught again, you will lose these privileges permanently.__**',
-            '# click the button below to fill out the appeal form'
-        ].join('\n'))
-        .setFooter({ text: 'Salty\'s Cave Moderation' })
-        .setColor(0xFF5555);
 
-    const appealbutton = new ButtonBuilder()
-        .setLabel('Appeal Now')
-        .setStyle(ButtonStyle.Link)
-        .setURL('https://dyno.gg/form/d564422f');
-
-    const row = new ActionRowBuilder().addComponents(appealbutton);
-
-    return {
-        embeds: [appealsembed],
-        components: [row]
-    }
-}
 async function createStaffGuideEmbed(guild) {
     const staffguides = new EmbedBuilder()
         .setTitle('Staff Guidelines')
@@ -236,7 +218,7 @@ async function createStaffGuideEmbed(guild) {
             name: 'Salty\'s Cave',
             iconURL: guild.iconURL({ size: 1024, extension: 'png' }) || undefined
         })
-        .setDescription(['All moderation commands are to be executed within <#1307212814036893716> channel, utilizing <@1392656116428701726>\n',
+        .setDescription(['All moderation commands are to be executed within <#1307212814036893716> channel, utilizing <@1420927654701301951>\n',
 
             '\nScreenshots from<#1311483105206472745> and <#1262885297914515627> require prior approval from an Administrator or a higher-ranking staff member before being shared. When capturing such screenshots, ensure that only the information directly relevant to the user\'s request is included.\n',
 
@@ -640,7 +622,7 @@ async function BarkCreateRulesEmbed(guild) {
         )
         .addFields({
             name: 'AutoMod:', value: [
-                'AutoMod(<@1392656116428701726>) Functions:',
+                'AutoMod(<@1420927654701301951>) Functions:',
                 '* Caps(minimun ten length)',
                 '* everyone ping',
                 '* bad words',
@@ -699,7 +681,7 @@ async function BarkCreateDirtyEmbed(guild) {
 }
 export async function embedsenders(client, guildIds) {
     let embedTasks = [];
-    let messageIDs = IDs;
+    let messageIDs = embedIDs;
 
     for (const id of guildIds) {
         const guild = client.guilds.cache.get(id)
@@ -745,8 +727,7 @@ export async function embedsenders(client, guildIds) {
                             await Promise.all(reactionPromises)
                         }
 
-                    } else
-                        console.log(`Message '${embedName}' has the same content.`);
+                    }
                 } catch (error) {
                     console.error(`❌ Failed to update or fetch message '${embedName}':`, error);
                 }
