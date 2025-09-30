@@ -2,11 +2,11 @@ import { EmbedBuilder, AuditLogEvent } from "discord.js";
 import guildChannelMap from "./Extravariables/guildconfiguration.json" with {type: 'json'};
 
 export async function guildMemberRemove(member) {
-    const guildId = member.guild.id
-    const modChannels = guildChannelMap[guildId].modChannels
+    const guild = member.guild
+    const modChannels = guildChannelMap[guild.id].modChannels
     const [welcomeChannel, muteLogChannel] = [
-        member.guild.channels.cache.get(modChannels.welcomeChannel),
-        member.guild.channels.cache.get(modChannels.mutelogChannel)
+        guild.channels.cache.get(modChannels.welcomeChannel),
+        guild.channels.cache.get(modChannels.mutelogChannel)
     ]
     if (!welcomeChannel) {
         console.warn('⚠️ Welcome channel not found.');
@@ -20,7 +20,7 @@ export async function guildMemberRemove(member) {
 
     const auditLogTypes = [AuditLogEvent.MemberKick, AuditLogEvent.MemberPrune];
     const auditLogs = await Promise.all(
-        auditLogTypes.map(type => member.guild.fetchAuditLogs({ type, limit: 1 }))
+        auditLogTypes.map(type => guild.fetchAuditLogs({ type, limit: 1 }))
     );
 
     const kickEntry = auditLogs[0].entries.find(entry => entry.target?.id === member.user.id && Date.now() - entry.createdTimestamp < 5000);
@@ -63,9 +63,9 @@ export async function guildMemberRemove(member) {
 
     const leaveembed = new EmbedBuilder()
         .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
-        .setDescription(`<@${member.id}> left ${member.guild.name}.`)
+        .setDescription(`<@${member.id}> left ${guild.name}.`)
         .addFields({
-            name: `Joined ${member.guild.name}:`,
+            name: `Joined ${guild.name}:`,
             value: member.joinedAt
                 ? `<t:${Math.floor(member.joinedAt.getTime() / 1000)}:F>`
                 : 'Unknown',

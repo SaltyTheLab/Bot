@@ -9,12 +9,12 @@
             "banlogChannel": "1256029364768997406",
             "appealChannel": "1269407374825881600",
             "applicationChannel": "1411452661907062916",
-            "adminChannel": "1257411106520043680"
+            "adminChannel": "1257411106520043680",
+            "applyChannel": "1411435140164616252"
         },
         "publicChannels": {
             "rules": "1235295566356025354",
             "mental": "1390128922712342659",
-            "appeal": "1272261219805298729",
             "staffguide": "1262533685002113155",
             "getroles": "1235323618582466621",
             "getstream": "1235323618582466621",
@@ -71,7 +71,7 @@
             "spamthreshold": 5,
             "Duplicatespamthreshold": 3,
             "capsratio": 0.7,
-            "mediathreshold": 5,
+            "mediathreshold": 1,
             "capscheckminlength": 20,
             "messagethreshold": 15
         }
@@ -134,7 +134,7 @@
             "spamthreshold": 5,
             "Duplicatespamthreshold": 3,
             "capsratio": 0.7,
-            "mediathreshold": 5,
+            "mediathreshold": 1,
             "capscheckminlength": 20,
             "messagethreshold": 15
         }
@@ -149,7 +149,8 @@
             "namelogChannel": "1408174310903910420",
             "appealChannel": "1409015785468203101",
             "applicationChannel": "1411500568630788326",
-            "adminChannel": "1412523674346717315"
+            "adminChannel": "1412523674346717315",
+            "applyChannel": "1411500933157752862"
         },
         "publicChannels": {
             "rules": "1388104789514129468",
@@ -172,7 +173,7 @@
             "spamthreshold": 5,
             "Duplicatespamthreshold": 3,
             "capsratio": 0.7,
-            "mediathreshold": 5,
+            "mediathreshold": 1,
             "capscheckminlength": 20,
             "messagethreshold": 15
         }

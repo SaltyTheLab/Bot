@@ -14,13 +14,10 @@ export async function interactionCreate(interaction) {
     if (interaction.isChatInputCommand()) {
         const commandName = interaction.commandName;
         const key = `${interaction.guild.id}:${commandName}`
-        let command = interaction.client.commands.get(key);
-
-        if (!command)
-            command = interaction.client.commands.get(commandName);
+        let command = interaction.client.commands.get(key) ?? interaction.client.commands.get(commandName);
 
         if (!command) {
-            console.warn(`[WARN] Command '${commandName}' not found in map (key: ${key || commandName}).`);
+            console.warn(`[WARN] Command '${commandName}' not found in map ( ${commandName}).`);
             if (!interaction.deferred && !interaction.replied) {
                 await interaction.reply({ content: 'Sorry, that command is not currently available.', ephemeral: true });
             }
@@ -230,7 +227,7 @@ export async function interactionCreate(interaction) {
                     { name: 'Age Range:', value: `${application.Agerange}`, inline: false },
                     { name: 'Prior Experience:', value: `${application.Experience}`, inline: false },
                     { name: 'Have you been warned/muted/kicked/banned before?(be honest)', value: `${application.History}`, inline: false },
-                    { name: 'Timezone:', value: `${application.Stayed}`, inline: false },
+                    { name: 'Timezone:', value: `${application.Timezone}`, inline: false },
                     { name: `How long have you been a member in ${guild.name}?`, value: `${application.Stayed}` },
                     { name: `How active are you in ${guild.name}?`, value: `${application.Activity}`, inline: false },
                     { name: 'Why do you want to be a mod?:', value: `${application.why}`, inline: false },
@@ -494,7 +491,7 @@ export async function interactionCreate(interaction) {
 
             const staffbreakrule = new TextInputBuilder()
                 .setCustomId('staffrulebreak')
-                .setLabel('A moderator is breaking a rule')
+                .setLabel('Staff is failing to follow the rules')
                 .setPlaceholder('What is your course of action')
                 .setRequired(true)
                 .setStyle(TextInputStyle.Paragraph)
@@ -502,7 +499,7 @@ export async function interactionCreate(interaction) {
 
             const illegalcontent = new TextInputBuilder()
                 .setCustomId('illegal')
-                .setLabel('A user share illegal content')
+                .setLabel('A user shares illegal content')
                 .setPlaceholder('What are the steps you take?')
                 .setRequired(true)
                 .setStyle(TextInputStyle.Paragraph)
@@ -527,7 +524,7 @@ export async function interactionCreate(interaction) {
 
             const questionOne = new TextInputBuilder()
                 .setCustomId('why')
-                .setLabel('Why do you want to be a mod?')
+                .setLabel('Why pick you & Tell us about yourself')
                 .setRequired(true)
                 .setStyle(TextInputStyle.Paragraph)
                 .setMaxLength(500)
@@ -548,7 +545,7 @@ export async function interactionCreate(interaction) {
 
             const questionFour = new TextInputBuilder()
                 .setCustomId('staffissues')
-                .setLabel('Disagreement with a staff punishment')
+                .setLabel('You disagree with a staff punishment...')
                 .setPlaceholder('What would you do?')
                 .setRequired(true)
                 .setStyle(TextInputStyle.Paragraph)
@@ -700,7 +697,7 @@ export async function interactionCreate(interaction) {
                 .setPlaceholder('Put your experience here or N/A')
                 .setRequired(true)
                 .setStyle(TextInputStyle.Paragraph)
-                .setMaxLength(250)
+                .setMaxLength(300)
 
             const questionTwo = new TextInputBuilder()
                 .setCustomId('punishments')

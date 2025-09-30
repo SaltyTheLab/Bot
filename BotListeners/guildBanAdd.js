@@ -40,9 +40,7 @@ async function sendMassBanEmbed(executorId, guild, channel) {
 export async function guildBanAdd(ban) {
     const bans = await loadbans();
     const user = ban.user
-    const userId = ban.user.id
-    const banIndex = bans.includes(userId)
-    if (banIndex) {
+    if (bans.includes(user.id)) {
         bans.pop();
         saveBans(bans)
         return;

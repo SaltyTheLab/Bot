@@ -9,13 +9,13 @@ const fifteenMinutesInMs = 15 * 60 * 1000
 export async function guildMemberAdd(member) {
     const owner = await member.guild.fetchOwner();
     const user = member.user;
-    const guildId = member.guild.id
-    const modChannels = guildChannelMap[guildId].modChannels;
-    const publicChannels = guildChannelMap[guildId].publicChannels;
+    const guild = member.guild
+    const modChannels = guildChannelMap[guild.id].modChannels;
+    const publicChannels = guildChannelMap[guild.id].publicChannels;
     const [welcomeChannel, generalChannel, mutechannel] = [
-        await member.guild.channels.fetch(modChannels.welcomeChannel),
-        await member.guild.channels.fetch(publicChannels.generalChannel),
-        await member.guild.channels.fetch(modChannels.mutelogChannel),
+        await guild.channels.fetch(modChannels.welcomeChannel),
+        await guild.channels.fetch(publicChannels.generalChannel),
+        await guild.channels.fetch(modChannels.mutelogChannel),
     ]
 
     // Define account creation date and two days in milliseconds
@@ -53,7 +53,7 @@ export async function guildMemberAdd(member) {
 
     try {// search old invites first and comapre values of snapshot to new list
         invite = newInvites.find(i => {
-            const key = `${guildId}-${i.code}`;
+            const key = `${guild.id}-${i.code}`;
             return oldInvites.has(key) && oldInvites.get(key) < i.uses;
         });
         if (invite) {
@@ -83,7 +83,7 @@ export async function guildMemberAdd(member) {
 
     // update the shared invites map with the new invites and their current uses.
     newInvites.forEach(i => {
-        const key = `${guildId}-${i.code}`;
+        const key = `${guild.id}-${i.code}`;
         invites.set(key, i.uses);
     });
 

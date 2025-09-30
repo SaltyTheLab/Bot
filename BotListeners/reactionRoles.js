@@ -1,4 +1,4 @@
-import embedIDs from '../embeds/EmbedIDs.json' with {type: 'json'}
+import embedIDs from '../embeds/embedIDs.json' with {type: 'json'}
 import guildconfig from "./Extravariables/guildconfiguration.json" with {type: 'json'};
 import { getblacklist } from '../Database/databasefunctions.js';
 /**
@@ -35,8 +35,12 @@ async function handleReactionChange(reaction, user, action = 'add') {
     console.log(`⚠️ No role mapped to emoji: ${emoji}`);
     return;
   }
-
-  const blacklist = await getblacklist(user.id, reaction.message.guild.id)
+  let blacklist;
+  try {
+    blacklist = await getblacklist(user.id, reaction.message.guild.id)
+  } catch {
+    return;
+  }
 
   // attempt to modify the users roles
   if (blacklist.find(r => r === roleID))
