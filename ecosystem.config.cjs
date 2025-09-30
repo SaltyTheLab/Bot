@@ -1,7 +1,7 @@
 module.exports = {
   apps: [{
     name: "Febot",
-    script: "dist//main-bot-min.js --name 'Febot-Prod'",
+    script: "index.js",
     watch: false,
     max_memory_restart: "1G",
     env: {

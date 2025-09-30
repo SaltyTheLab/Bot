@@ -1,10 +1,10 @@
 import { Client, GatewayIntentBits, Collection, Options } from 'discord.js';
 import { config } from 'dotenv';
 import { embedsenders } from './embeds/embeds.js';
+import { loadCommandsToClient, loadListeners, register } from './deploy-cmds.js';
 import cacheInteractiveMessages from './utilities/cacheInteractiveMessages.js';
 import connectToMongoDB from './Database/database.js';
 import initializeInvites from './utilities/initializeInvites.js';
-import { loadCommandsToClient, loadListeners, register } from './deploy-cmds.js';
 import cron from 'node-cron';
 import clearExpiredWarns from './utilities/clearExpiredWarns.js';
 import invites from './BotListeners/Extravariables/mapsandsets.js';
@@ -39,12 +39,11 @@ async function main() {
   await loadCommandsToClient(client);
   await register();
   cron.schedule('0 0 * * *', async () => { await clearExpiredWarns(usersCollection) });
-  // Run initial setup that needs guilds
   const guildIDs = GUILD_ID.split(',').map(id => id.trim());
   await embedsenders(client, guildIDs);
   for (const guildId of guildIDs) {
     const guild = client.guilds.cache.get(guildId);
-    if (guild) { // Check if guild exists to prevent errors
+    if (guild) {
       await initializeInvites(guild);
       await cacheInteractiveMessages(guild);
     }
@@ -56,4 +55,4 @@ async function main() {
   console.log('-----------------------------------');
   console.log(`✅ Logged in as ${client.user.tag}`);//output for debugging
 }
-main().catch(console.error);//run main loop
+await main().catch(console.error);//run main loop

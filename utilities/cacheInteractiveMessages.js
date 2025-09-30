@@ -1,13 +1,13 @@
-import EmbedIDs from '../embeds/embedIDs.json' with {type: 'json'}
+import embedIDs from '../embeds/embedIDs.json' with {type: 'json'}
 export default async function cacheInteractiveMessages(guild) {
     console.log('Attempting to cache all stored embeds...'); // Updated log
 
     // Iterate directly through the main array from the imported JSON config
-    if (typeof EmbedIDs !== 'object' || EmbedIDs.length === 0) {
+    if (typeof embedIDs !== 'object' || embedIDs.length === 0) {
         console.log("ℹ️ EmbedIDs.json is not an object. No embeds to cache.");
         return;
     }
-    const guildEmbeds = EmbedIDs[guild.id];
+    const guildEmbeds = embedIDs[guild.id];
     if (!guildEmbeds || guildEmbeds.length === 0) {
         console.log(`ℹ️ No embeds found for guild ${guild.id}. Skipping cache.`);
         return;

@@ -106,5 +106,30 @@
   {
     "brand": "Nvidia",
     "image": "Database\\images\\Nvidia.png"
-  }
+  },
+  {
+    "brand": "Waze",
+    "image": "Database\\images\\waze.png"
+  },
+  {
+    "brand": "Harley Davidson",
+    "image": "Database\\images\\Harley Davidson.png"
+  },
+  {
+    "brand": "Borderlands",
+    "image": "Database\\images\\borderlands.png"
+  },
+  {
+    "brand": "Paramount",
+    "image": "Database\\images\\Paramount.png"
+  },
+  {
+    "brand": "Dominos",
+    "image": "Database\\images\\Dominos.png"
+  },
+  {
+    "brand": "Nickelodeon",
+    "image": "Database\\images\\Nickelodeon.png"
+  },
+  {}
 ]

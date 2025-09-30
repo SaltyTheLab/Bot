@@ -12,7 +12,6 @@ document.addEventListener('DOMContentLoaded', () => {
         automodSection: document.getElementById('AutomodSection'),
         uploadConfigBtn: document.getElementById('uploadConfigBtn'),
         fileInput: document.getElementById('fileInput'),
-        addModChannelBtn: document.getElementById('addModChannelBtn'),
         addPublicChannelBtn: document.getElementById('addPublicChannelBtn'),
         addExclusionBtn: document.getElementById('addExclusionBtn'),
         addReactionBtn: document.getElementById('addReactionBtn'),
@@ -137,7 +136,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     break;
                 }
-                default: { // 'public', 'exclusion', 'reaction', 'role'
+                case 'reaction': {
                     const nameInput = div.querySelector('input[data-channel-name]');
                     const idInput = div.querySelector('input[data-channel-id]');
                     if (nameInput && idInput) {
@@ -147,6 +146,18 @@ document.addEventListener('DOMContentLoaded', () => {
                             if (id.includes(',')) {
                                 id = id.split(',').map(item => item.trim());
                             }
+                            values[name] = id;
+                        }
+                    }
+                    break;
+                }
+                default: { // 'public', 'exclusion', 'role'
+                    const nameInput = div.querySelector('input[data-channel-name]');
+                    const idInput = div.querySelector('input[data-channel-id]');
+                    if (nameInput && idInput) {
+                        name = nameInput.value.trim();
+                        id = idInput.value.trim();
+                        if (name) {
                             values[name] = id;
                         }
                     }

@@ -1,8 +1,10 @@
 import { SlashCommandBuilder, InteractionContextType, StringSelectMenuOptionBuilder, StringSelectMenuBuilder, ActionRowBuilder } from "discord.js";
 import { loadApplications, saveApplications } from "../utilities/jsonloaders.js";
 const ages = [
+    { label: '12 or under', range: '12 or under' },
+    { label: '13 to 15', range: '13-15' },
     { label: '16 to 17', range: '16-17' },
-    { label: '18 and over', range: '18+' }
+    { label: '18 or over', range: '18 or over' }
 ]
 export const data = new SlashCommandBuilder()
     .setName('apply')

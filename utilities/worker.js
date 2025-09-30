@@ -1,12 +1,12 @@
 import { parentPort } from 'node:worker_threads';
-import fs from 'node:fs/promises';
-import path from 'node:path'
+import { readdir } from 'node:fs/promises';
+import { join } from 'node:path';
 async function findFiles(dir) {
   const filePaths = []
   try {
-    const dirents = await fs.readdir(dir, { withFileTypes: true });
+    const dirents = await readdir(dir, { withFileTypes: true });
     for (const dirent of dirents) {
-      const fullPath = path.join(dir, dirent.name);
+      const fullPath = join(dir, dirent.name);
       if (dirent.isFile() && dirent.name.endsWith('.js'))
         filePaths.push(fullPath);
     }
@@ -24,7 +24,7 @@ parentPort.on('message', async (msg) => {
     const globalFilePaths = await findFiles(globalCommandsPath);
     const guildCommands = {};
     for (const guildId of guildIds) {
-      const guildCommandsPath = path.join(botRoot, 'commands', 'guilds', guildId);
+      const guildCommandsPath = join(botRoot, 'commands', 'guilds', guildId);
       guildCommands[guildId] = await findFiles(guildCommandsPath)
     }
     parentPort.postMessage({

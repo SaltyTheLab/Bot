@@ -1,13 +1,11 @@
 import { REST, Routes } from 'discord.js';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { readdir } from 'node:fs/promises';
 import { CLIENT_ID, GUILD_ID, TOKEN } from './index.js';
 import { Worker } from 'node:worker_threads'
-import fs from 'node:fs/promises'
 
 const botRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)));
-
-
 
 async function getCommandData(filePaths) {
     const commandsData = [];
@@ -63,15 +61,12 @@ export async function register() {
         }
 
         const globalCommandsJSON = await getCommandData(msg.globalData);
-        console.log('test')
         // --- 1. Deploy Global Commands ---
         try {
-            console.log('test b')
             const data = await rest.put(
                 Routes.applicationCommands(CLIENT_ID),
                 { body: globalCommandsJSON }
             );
-            console.log('test c')
             console.log(`✅ Successfully loaded ${data.length} global application (/) commands.`);
         } catch (err) {
             console.error(`❌ Unable to register global commands with Discord API: `, err);
@@ -169,10 +164,10 @@ export async function loadCommandsToClient(client) {
     });
 }
 
-async function findFiles(dir) {
+export async function findFiles(dir) {
     const filePaths = [];
     try {
-        const dirents = await fs.readdir(dir, { withFileTypes: true });
+        const dirents = await readdir(dir, { withFileTypes: true });
         for (const dirent of dirents) {
             const fullPath = path.join(dir, dirent.name);
             if (dirent.isFile() && dirent.name.endsWith('.js')) {
