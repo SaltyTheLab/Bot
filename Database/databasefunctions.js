@@ -26,19 +26,19 @@ export async function getUser(userId, guildId, modflag = false) {
       console.log(`[getUser] Successfully inserted and retrieved new user: ${userId} in guild ${guildId}`);
     } catch (error) {
       console.error(`❌ [getUser] Error inserting new user ${userId} in guild ${guildId}:`, error);
-      return { userData: { userId, xp: 0, level: 1, coins: 100, guildId } };
+      return { userId, xp: 0, level: 1, coins: 100, guildId, notes: [], punishments: [], blacklist: [], totalmessages: 0 };
     }
   };
   return userData;
 }
 
 export async function getUserforappeal(userId) {
-  let userData = await usersCollection.find({ userId: userId }, { Projection: { userId: 1, punishments: 1, guildId: 1 } }).toArray()
+  let userData = await usersCollection.find({ userId: userId }, { projection: { userId: 1, punishments: 1, guildId: 1 } }).toArray()
   return userData
 }
 
 export async function getdeniedappeals(userId, guildId) {
-  const appeal = await appeals.find({ userId: userId, guildId: guildId }, { Projection: { denied: 1 } }).toArray()
+  const appeal = await appeals.find({ userId: userId, guildId: guildId }, { projection: { denied: 1 } }).toArray()
   return appeal;
 }
 
@@ -126,7 +126,7 @@ export async function appealsinsert(userId, guildId, banreason, justification, e
 }
 export async function appealsget(userId, guildId) {
   const appeallist = await appeals.find({ userId: userId, guildId: guildId, pending: 1 },
-    { Projection: { reason: 1, justification: 1, extra: 1 } }).toArray()
+    { projection: { reason: 1, justification: 1, extra: 1 } }).toArray()
   return appeallist;
 }
 export async function appealupdate(userId, guildId, approved) {
