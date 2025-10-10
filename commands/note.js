@@ -64,6 +64,7 @@ export async function execute(interaction) {
     const targetUser = interaction.options.getUser('target')
     const note = interaction.options.getString('note')
     const moderatorUser = interaction.user;
+    const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator)
     const guildId = interaction.guild.id
 
     switch (command) {
@@ -130,19 +131,27 @@ export async function execute(interaction) {
                         break;
                     case 'del':
                         try {
-                            await deleteNote(targetUser.id, interaction.guild.id, noteIdToDelete);
-                            allnotes = await viewNotes(targetUser.id, interaction.guild.id);
+                            const twoDays = 48 * 60 * 60 * 1000
+                            if (currentnote.timestamp - Date.now() < twoDays || isAdmin) {
+                                await deleteNote(targetUser.id, interaction.guild.id, noteIdToDelete);
+                                allnotes = await viewNotes(targetUser.id, interaction.guild.id);
 
-                            if (allnotes.length === 0) {
-                                replyMessage = await replyMessage.edit({
-                                    embeds: [
-                                        new EmbedBuilder()
-                                            .setDescription(`All notes for ${targetUser} have been deleted`)
-                                    ],
-                                    components: []
-                                });
-                                collector.stop();
-                                return;
+                                if (allnotes.length === 0) {
+                                    replyMessage = await replyMessage.edit({
+                                        embeds: [
+                                            new EmbedBuilder()
+                                                .setDescription(`All notes for ${targetUser} have been deleted`)
+                                        ],
+                                        components: []
+                                    });
+                                    collector.stop();
+                                    return;
+                                }
+                            } else {
+                                interaction.reply({
+                                    content: `${interaction.user}, please contact an admin to delete this note as two days have passed.`,
+                                    ephemeral: true
+                                })
                             }
                             currentIndex = Math.min(currentIndex, allnotes.length - 1)
                         } catch (error) {
