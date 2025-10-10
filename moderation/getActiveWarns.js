@@ -1,6 +1,37 @@
-import Weights from './violationWeights.json' with {type: 'json'};
-import { getActiveWarns } from '../Database/databasefunctions.js';
 
+import { getActiveWarns } from '../Database/databasefunctions.js';
+const Weights = {
+  "violationWeights": [
+    {
+      "type": "forbiddenWord",
+      "Weight": 1
+    },
+    {
+      "type": "invite",
+      "Weight": 2
+    },
+    {
+      "type": "everyonePing",
+      "Weight": 2
+    },
+    {
+      "type": "spam",
+      "Weight": 1
+    },
+    {
+      "type": "mediaViolation",
+      "Weight": 1
+    },
+    {
+      "type": "CapSpam",
+      "Weight": 1
+    },
+    {
+      "type": "isNewUser",
+      "Weight": 0.9
+    }
+  ]
+}
 const violationWeights = new Map(Weights.violationWeights.map(w => [w.type.toLowerCase(), w.Weight]));
 
 export default async function getWarnStats(userId, guildId, newViolationType = []) {
