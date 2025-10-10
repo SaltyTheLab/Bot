@@ -97,7 +97,7 @@ export async function getPunishments(userId, guildId) {
 
 export async function unwarn(userId, guildId) {
   const userdata = await usersCollection.findOne({ userId, guildId })
-  const warns = userdata.punishments.filter(e => e.type == 'Warn')
+  const warns = userdata.punishments.filter(e => e.type == 'Warn' && e.active == 1)
   const recentwarn = warns[warns.length - 1]._id.toString()
   await usersCollection.updateOne({ userId: userId, guildId: guildId },
     { $pull: { "punishments": { _id: ObjectId.createFromHexString(recentwarn) } } }
@@ -162,13 +162,6 @@ export async function removeblacklist(userId, guildId, roleId) {
 }
 
 //───── Admin ─────
-export async function clearmodlogs(userId, guildId) {
-  const result = await usersCollection.updateOne(
-    { userId, guildId },
-    { $set: { punishments: [] } }
-  );
-  return result.modifiedCount > 0;
-}
 export async function deletePunishment(userId, guildId, id) {
   await usersCollection.updateOne(
     { userId, guildId },
