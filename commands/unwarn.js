@@ -4,7 +4,7 @@ import { unwarn } from "../Database/databasefunctions.js";
 export const data = new SlashCommandBuilder()
     .setName('unwarn')
     .setDescription('removes a users most recent warn')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+    .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
     .setContexts(InteractionContextType.Guild)
     .addUserOption(opt =>
         opt.setName('target').setDescription('User to remove warn from').setRequired(true)

@@ -3,7 +3,7 @@ import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, InteractionCont
 export const data = new SlashCommandBuilder()
     .setName('unmute')
     .setDescription('Unmutes a member')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+    .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
     .setContexts([InteractionContextType.Guild])
     .addUserOption(opt =>
         opt.setName('target').setDescription('User to unmute').setRequired(true))
