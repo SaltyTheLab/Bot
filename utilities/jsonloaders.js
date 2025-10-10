@@ -1,14 +1,13 @@
 import fs from 'fs/promises';
 import path from 'path';
 
-const applicationsFilePath = path.join(process.cwd(), 'BotListeners', 'Extravariables', 'applications.json');
-const bansFilePath = path.join(process.cwd(), 'BotListeners', 'Extravariables', 'commandsbans.json');
 
 /**
  * Loads the applications data from the JSON file.
  * @returns {Promise<object>} The applications object.
  */
 export async function loadApplications() {
+    const applicationsFilePath = path.join(process.cwd(), 'BotListeners', 'Extravariables', 'applications.json');
     try {
         const data = await fs.readFile(applicationsFilePath, 'utf8');
         return JSON.parse(data);
@@ -26,6 +25,7 @@ export async function loadApplications() {
  * @param {object} applicationsObject The object to save.
  */
 export async function saveApplications(applicationsObject) {
+    const applicationsFilePath = path.join(process.cwd(), 'BotListeners', 'Extravariables', 'applications.json');
     try {
         const data = JSON.stringify(applicationsObject, null, 2);
         await fs.writeFile(applicationsFilePath, data);
@@ -37,7 +37,7 @@ export async function saveApplications(applicationsObject) {
 
 export async function addBan(userId) {
     let bans = [];
-
+    const bansFilePath = path.join(process.cwd(), 'BotListeners', 'Extravariables', 'commandsbans.json');
     try {
         // Read the file and parse the JSON content
         const data = await fs.readFile(bansFilePath, 'utf8');
@@ -73,6 +73,7 @@ export async function addBan(userId) {
 }
 
 export async function loadbans() {
+    const bansFilePath = path.join(process.cwd(), 'BotListeners', 'Extravariables', 'commandsbans.json');
     const data = await fs.readFile(bansFilePath, 'utf8');
     let bans = JSON.parse(data);
 
@@ -85,9 +86,23 @@ export async function loadbans() {
 }
 
 export async function saveBans(bansArray) {
+    const bansFilePath = path.join(process.cwd(), 'BotListeners', 'Extravariables', 'commandsbans.json');
     try {
         await fs.writeFile(bansFilePath, JSON.stringify(bansArray, null, 2), 'utf8');
     } catch (error) {
         console.error('❌ Failed to write to the bans file:', error);
+    }
+}
+
+export async function load(filepath) {
+    const data = JSON.parse(await fs.readFile(filepath, 'utf8'));
+    return data;
+}
+
+export async function save(filepath, data) {
+    try {
+        fs.writeFile(filepath, JSON.stringify(data))
+    } catch (err) {
+        console.error(`❌ Failed to write to ${filepath}:`, err);
     }
 }
