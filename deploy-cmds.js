@@ -98,8 +98,6 @@ export async function register() {
 
 export async function loadCommandsToClient(client) {
     const guildIds = client.guilds.cache.map(guild => guild.id);
-    console.log('loading commands...');
-    console.log(`Target Guild IDs: [${guildIds.join(', ')}]`); // Log to confirm guild IDs are present
     client.commands.clear();
 
     return new Promise((resolve, reject) => {
@@ -121,7 +119,6 @@ export async function loadCommandsToClient(client) {
                             const command = await import(pathToFileURL(filePath).href);
                             if (command?.data?.name && typeof command.execute === 'function') {
                                 client.commands.set(command.data.name, command);
-                                console.log(`registered global command ${command.data.name}`)
                             } else {
                                 console.warn(`[WARN] Invalid global command file during reload: ${filePath}`);
                             }
@@ -131,7 +128,6 @@ export async function loadCommandsToClient(client) {
                     }
 
                     for (const guildId in msg.guildData) {
-                        console.log(`Loading commands for guild: ${guildId}`) // Your 'test' log is now more descriptive
                         const guildCommandPaths = msg.guildData[guildId];
 
                         for (const filePath of guildCommandPaths) {
@@ -140,7 +136,6 @@ export async function loadCommandsToClient(client) {
                                 if (command.data.name && typeof command.execute === 'function') {
                                     const key = `${guildId}:${command.data.name}`
                                     client.commands.set(key, command);
-                                    console.log(`registered guild command ${command.data.name}`)
                                 } else
                                     console.warn(`[WARN] Invalid guild command file during reload: ${filePath}`);
                             } catch (err) {
