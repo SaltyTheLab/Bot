@@ -93,7 +93,6 @@ export default async function AutoMod(client, message) {
   // get previous activewarnings and warn weight of new warn
   const { activeWarnings, currentWarnWeight } = await getWarnStats(userId, guild.id, evaluationResult.violations);
 
-
   let { duration, unit } = getNextPunishment(activeWarnings.length + currentWarnWeight);
   const multiplier = unitMap[unit]
   duration = duration * multiplier;
