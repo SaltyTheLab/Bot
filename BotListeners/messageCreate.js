@@ -3,28 +3,15 @@ import { getUser, saveUser } from '../Database/databasefunctions.js';
 import AutoMod from '../moderation/autoMod.js';
 import { MessageType } from 'discord.js';
 import guildChannelMap from "./Extravariables/guildconfiguration.json" with {type: 'json'};
-//setup constants and common triggers 
-let counting = 0;
-let lastuser;
-let lastmessages;
-let countingChannel;
-let restart = true;
 export async function messageCreate(client, message) {
   if (message.author.bot || !message.guild || !message.member)
     return;
-  const publicChannels = guildChannelMap[message.guild.id].publicChannels
   const sentbystaff = message.member.permissions.has('ModerateMembers')
-
-  //check for counting channel
-  if (publicChannels?.countingChannel) {
-    countingChannel = publicChannels.countingChannel;
-    let CountingObject = await message.guild.channels.fetch(countingChannel)
-    lastmessages = await CountingObject.messages.fetch({ limit: 5 });
-  }
-
+  const countingState = client.countingState
   //convert message to all lowercase and remove all spaces 
   const userId = message.author.id;
   const lowerContent = message.content.toLowerCase().split(/\s/);
+  const guildId = message.guild.id
 
   if (lowerContent.includes('bark'))
     message.reply('bark')
@@ -55,54 +42,42 @@ export async function messageCreate(client, message) {
   if (lowerContent.includes('lazy'))
     message.reply('Get up then!!')
 
+  const countingChannel = guildChannelMap[guildId].publicChannels.countingChannel;
+  if (message.channel.id === countingChannel) {
+    const number = parseInt(message.content.trim());
+    const currentCount = countingState.getCount(guildId)
+    const lastUser = countingState.getLastUser(guildId)
+    const expectedNumber = currentCount + 1
+    const keysArray = countingState.getkeys(guildId);
 
-  if ((message.type === MessageType.Default || message.type === MessageType.Reply) && message.channel.id != countingChannel)
-    await applyUserXP(userId, message, message.guild.id);
-
-  if (countingChannel && message.channel.id === countingChannel) {// check for a counting channel and if exists fetch the last valid message
-    if (counting == 0 && restart == true) {
-      for (const message of lastmessages.values()) {
-        counting = parseInt(message.content) - 1;
-        if (!isNaN(counting) && !message.embeds.length > 0) {
-          lastmessages = [];
-          restart = null
-          break;
-        }
-      }
-    }
-    //check messages that are sent and compare them to the next number with a failsafe that tells the user that this channel is only for counting
-    const number = parseInt(message.content);
     if (!message.content.trim() || isNaN(number) || Number(message.content) !== number) {
       return;
     }
-    const countsaver = guildChannelMap[message.guild.id].countsaver
-    if (number == counting + 1 && lastuser != message.author.id) {
-      counting += 1;
-      lastuser = message.author.id;
+    if (number === expectedNumber && lastUser !== message.author.id) {
+      countingState.increaseCount(message.author.id, guildId);
       message.react('✅')
-    } else if (countsaver.length > 0) {
-      let lastsavior = countsaver[countsaver.length - 1]
-      message.reply({
-        embeds: [new EmbedBuilder()
-          .setDescription(`${lastsavior} had a key, count saved.`)
-          .setColor(0x009000)
-        ]
+      return;
+    } else if (keysArray && keysArray.length > 0) {
+      countingState.removekey(guildId)
+      await message.reply({
+        content: `1 key used, ${keysArray.length} keys left.`
       })
-      countsaver.pop();
+      return;
     }
     else {
-      message.reply({
-        embeds: [new EmbedBuilder()
-          .setDescription(lastuser == message.author.id ? `you already put a number down <@${message.author.id}>!(number reset)`
-            : `<@${message.author.id}> missed the count, it was supposed to be ${counting + 1}`)
-        ]
+      await message.reply({
+        content: lastUser == message.author.id ? `you already put a number down <@${message.author.id}>!(number reset)`
+          : `<@${message.author.id}> missed the count, it was supposed to be ${expectedNumber}`
       })
-      counting = 0;
-      lastuser = null;
+      countingState.reset(guildId);
       message.react('❌')
+      return;
     }
-    return;
   }
+
+  if ((message.type === MessageType.Default || message.type === MessageType.Reply))
+    await applyUserXP(userId, message, guildId);
+
   if (sentbystaff) return;
   await AutoMod(client, message);
 }

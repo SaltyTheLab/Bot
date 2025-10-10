@@ -1,6 +1,5 @@
 import { InteractionContextType, SlashCommandBuilder, EmbedBuilder } from "discord.js";
 import { getUser, saveUser } from '../../../Database/databasefunctions.js';
-import guildchannelmap from '../../../Botlisteners/Extravariables/guildconfiguration.json' with {type: 'json'}
 
 export const data = new SlashCommandBuilder()
     .setName('savecount')
@@ -8,8 +7,9 @@ export const data = new SlashCommandBuilder()
     .setContexts([InteractionContextType.Guild])
 
 export async function execute(interaction) {
-    const countsaver = guildchannelmap[interaction.guild.id].countsaver
+    const countingState = interaction.client.countingState;
     const userData = await getUser(interaction.user.id, interaction.guild.id);
+    const guildId = interaction.guild.id;
     if (userData.coins < 10) {
         interaction.reply({
             embeds: [new EmbedBuilder()
@@ -20,10 +20,10 @@ export async function execute(interaction) {
     }
     userData.coins -= 10;
     await saveUser({ userData })
-    countsaver.push(`${interaction.user.tag}`)
+    countingState.addkey(interaction.user.id, guildId)
     interaction.reply({
         embeds: [new EmbedBuilder()
-            .setDescription(interaction.user.tag + `, you now have ${countsaver.length} keys to save the count.`)
+            .setDescription(interaction.user.tag + `, you now have ${countingState[guildId].length} keys to save the count.`)
         ]
     })
 }
