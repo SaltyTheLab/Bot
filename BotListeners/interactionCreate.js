@@ -8,16 +8,16 @@ const appealinvites = {
     '1231453115937587270': 'https://discord.gg/xpYnPrSXDG',
     '1342845801059192913': 'https://discord.gg/nWj5KvgUt9'
 }
+let applications = await loadApplications()
 
 export async function interactionCreate(interaction) {
 
     if (interaction.isChatInputCommand()) {
         const commandName = interaction.commandName;
-        const key = `${interaction.guild.id}:${commandName}`
-        let command = interaction.client.commands.get(key) ?? interaction.client.commands.get(commandName);
+        let command = interaction.client.commands.get(commandName) ?? interaction.client.commands.get(`${interaction.guild.id}:${commandName}`)
 
         if (!command) {
-            console.warn(`[WARN] Command '${commandName}' not found in map ( ${commandName}).`);
+            console.warn(`[WARN] Command '${commandName}' not found in map.`);
             if (!interaction.deferred && !interaction.replied) {
                 await interaction.reply({ content: 'Sorry, that command is not currently available.', ephemeral: true });
             }
@@ -206,7 +206,7 @@ export async function interactionCreate(interaction) {
             appealsinsert(interaction.user.id, guildId, reason, justification, extra);
         }
         if (interaction.customId.startsWith('situations')) {
-            const applications = await loadApplications();
+            applications = await loadApplications();
             const application = applications[interaction.user.id]
             application.dmmember = interaction.fields.getTextInputValue('dmmember')
             application.argument = interaction.fields.getTextInputValue('arguments')
@@ -230,11 +230,11 @@ export async function interactionCreate(interaction) {
                     { name: 'Timezone:', value: `${application.Timezone}`, inline: false },
                     { name: `How long have you been a member in ${guild.name}?`, value: `${application.Stayed}` },
                     { name: `How active are you in ${guild.name}?`, value: `${application.Activity}`, inline: false },
-                    { name: 'Why do you want to be a mod?:', value: `${application.why}`, inline: false },
-                    { name: 'What is your definition of a troll?', value: `${application.trolldef}`, inline: false },
-                    { name: 'What is your definition of a raid?', value: `${application.raiddef}` },
-                    { name: 'You disagree with a staff punishment. What would you do?', value: `${application.staffissues}`, inline: false },
-                    { name: 'How would you handle a member report?', value: `${application.memberreport}`, inline: false },
+                    { name: 'Why do you want to be a mod?:', value: `${application.Why}`, inline: false },
+                    { name: 'What is your definition of a troll?', value: `${application.Trolldef}`, inline: false },
+                    { name: 'What is your definition of a raid?', value: `${application.Raiddef}` },
+                    { name: 'You disagree with a staff punishment. What would you do?', value: `${application.Staffissues}`, inline: false },
+                    { name: 'How would you handle a member report?', value: `${application.Memberreport}`, inline: false },
                     { name: 'A member messages you about being harrassed. How would you handle the situation?', value: `${application.dmmember}`, inline: false },
                     { name: 'Users are arguing in general chat. explain your de-escalation steps.', value: `${application.argument}`, inline: false },
                     { name: 'A member DMs you about a rule-breaking DM. What is your course of action?', value: `${application.ambiguous}`, inline: false },
@@ -252,31 +252,48 @@ export async function interactionCreate(interaction) {
             saveApplications(applications)
         }
         if (interaction.customId.startsWith('Defs, reasons, and issues')) {
-            const applications = await loadApplications()
+            applications = await loadApplications()
             const application = applications[interaction.user.id]
-            application.why = interaction.fields.getTextInputValue('why')
-            application.trolldef = interaction.fields.getTextInputValue('trolldef')
-            application.raiddef = interaction.fields.getTextInputValue('raiddef')
-            application.staffissues = interaction.fields.getTextInputValue('staffissues')
-            application.memberreport = interaction.fields.getTextInputValue('memberreport')
-            await saveApplications(applications);
-            const nextButton = new ButtonBuilder()
-                .setCustomId('next_modal_three')
-                .setLabel('Continue Application')
-                .setStyle(ButtonStyle.Primary);
+            if (application.Memberreport) {
+                const nextButton = new ButtonBuilder()
+                    .setCustomId('next_modal_three')
+                    .setLabel('skip section')
+                    .setStyle(ButtonStyle.Primary);
 
-            const row = new ActionRowBuilder()
-                .addComponents(nextButton);
+                const row = new ActionRowBuilder()
+                    .addComponents(nextButton);
 
-            await interaction.reply({
-                content: 'Part 2 of your application has been submitted! Click the button below to continue to the next section.',
-                components: [row],
-                ephemeral: true
-            });
+                await interaction.reply({
+                    content: 'You have already filled out this section. Click the button below to continue to the next section.',
+                    components: [row],
+                    ephemeral: true
+                });
+                return;
+            } else {
+                application.Why = interaction.fields.getTextInputValue('why')
+                application.Trolldef = interaction.fields.getTextInputValue('trolldef')
+                application.Raiddef = interaction.fields.getTextInputValue('raiddef')
+                application.Staffissues = interaction.fields.getTextInputValue('staffissues')
+                application.Memberreport = interaction.fields.getTextInputValue('memberreport')
+                await saveApplications(applications);
+                const nextButton = new ButtonBuilder()
+                    .setCustomId('next_modal_three')
+                    .setLabel('Continue Application')
+                    .setStyle(ButtonStyle.Primary);
 
+                const row = new ActionRowBuilder()
+                    .addComponents(nextButton);
+
+                await interaction.reply({
+                    content: 'Part 2 of your application has been submitted! Click the button below to continue to the next section.',
+                    components: [row],
+                    ephemeral: true
+                });
+
+            }
         }
         if (interaction.customId.startsWith('server')) {
-            const applications = await loadApplications()
+            applications = await loadApplications()
             const application = applications[interaction.user.id]
             application.Experience = interaction.fields.getTextInputValue('experience')
             application.History = interaction.fields.getTextInputValue('punishments')
@@ -516,57 +533,74 @@ export async function interactionCreate(interaction) {
             interaction.showModal(situationmodal)
         }
         if (interaction.customId.startsWith('next_modal_two')) {
+            applications = await loadApplications();
+            const application = applications[interaction.user.id]
 
-            const questionsTwo = new ModalBuilder()
-                .setCustomId('Defs, reasons, and issues')
-                .setTitle('Definitions, Why mod, and Staff issues (2/3)')
+            if (application.Memberreport) {
+                const nextButton = new ButtonBuilder()
+                    .setCustomId('next_modal_three')
+                    .setLabel('skip part 2')
+                    .setStyle(ButtonStyle.Primary);
+
+                const row = new ActionRowBuilder()
+                    .addComponents(nextButton);
+
+                await interaction.reply({
+                    content: 'You have already filled out this part. Click the button below to continue to the next section.',
+                    components: [row],
+                    ephemeral: true
+                });
+            } else {
+                const questionsTwo = new ModalBuilder()
+                    .setCustomId('Defs, reasons, and issues')
+                    .setTitle('Definitions, Why mod, and Staff issues (2/3)')
 
 
-            const questionOne = new TextInputBuilder()
-                .setCustomId('why')
-                .setLabel('Why pick you & Tell us about yourself')
-                .setRequired(true)
-                .setStyle(TextInputStyle.Paragraph)
-                .setMaxLength(500)
+                const questionOne = new TextInputBuilder()
+                    .setCustomId('why')
+                    .setLabel('Why pick you & Tell us about yourself')
+                    .setRequired(true)
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setMaxLength(500)
 
-            const questionTwo = new TextInputBuilder()
-                .setCustomId('trolldef')
-                .setLabel('What is your definition of a troll?')
-                .setRequired(true)
-                .setStyle(TextInputStyle.Short)
-                .setMaxLength(65)
+                const questionTwo = new TextInputBuilder()
+                    .setCustomId('trolldef')
+                    .setLabel('What is your definition of a troll?')
+                    .setRequired(true)
+                    .setStyle(TextInputStyle.Short)
+                    .setMaxLength(65)
 
-            const questionThree = new TextInputBuilder()
-                .setCustomId('raiddef')
-                .setLabel('What is your definition of a raid?')
-                .setRequired(true)
-                .setStyle(TextInputStyle.Short)
-                .setMaxLength(65)
+                const questionThree = new TextInputBuilder()
+                    .setCustomId('raiddef')
+                    .setLabel('What is your definition of a raid?')
+                    .setRequired(true)
+                    .setStyle(TextInputStyle.Short)
+                    .setMaxLength(65)
 
-            const questionFour = new TextInputBuilder()
-                .setCustomId('staffissues')
-                .setLabel('You disagree with a staff punishment...')
-                .setPlaceholder('What would you do?')
-                .setRequired(true)
-                .setStyle(TextInputStyle.Paragraph)
-                .setMaxLength(300)
+                const questionFour = new TextInputBuilder()
+                    .setCustomId('staffissues')
+                    .setLabel('You disagree with a staff punishment...')
+                    .setPlaceholder('What would you do?')
+                    .setRequired(true)
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setMaxLength(300)
 
-            const questionFive = new TextInputBuilder()
-                .setCustomId('memberreport')
-                .setLabel('How would you handle a member report?')
-                .setPlaceholder('Describe the steps you would take to investigate and resolve it')
-                .setRequired(true)
-                .setStyle(TextInputStyle.Paragraph)
-                .setMaxLength(300)
+                const questionFive = new TextInputBuilder()
+                    .setCustomId('memberreport')
+                    .setLabel('How would you handle a member report?')
+                    .setPlaceholder('Describe the steps you would take to investigate and resolve it')
+                    .setRequired(true)
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setMaxLength(300)
 
-            const firstActionRow = new ActionRowBuilder().addComponents(questionOne);
-            const secondActionRow = new ActionRowBuilder().addComponents(questionTwo);
-            const thirdActionRow = new ActionRowBuilder().addComponents(questionThree);
-            const fourthActionRow = new ActionRowBuilder().addComponents(questionFour);
-            const fifthActionRow = new ActionRowBuilder().addComponents(questionFive);
-
-            questionsTwo.addComponents(firstActionRow, secondActionRow, thirdActionRow, fourthActionRow, fifthActionRow);
-            interaction.showModal(questionsTwo);
+                const firstActionRow = new ActionRowBuilder().addComponents(questionOne);
+                const secondActionRow = new ActionRowBuilder().addComponents(questionTwo);
+                const thirdActionRow = new ActionRowBuilder().addComponents(questionThree);
+                const fourthActionRow = new ActionRowBuilder().addComponents(questionFour);
+                const fifthActionRow = new ActionRowBuilder().addComponents(questionFive);
+                questionsTwo.addComponents(firstActionRow, secondActionRow, thirdActionRow, fourthActionRow, fifthActionRow);
+                interaction.showModal(questionsTwo);
+            }
         }
     }
     if (interaction.isStringSelectMenu()) {
@@ -681,63 +715,79 @@ export async function interactionCreate(interaction) {
             await interaction.showModal(modal);
         }
         if (interaction.customId.startsWith('select_age')) {
-            const applications = await loadApplications();
+            applications = await loadApplications();
             const application = applications[interaction.user.id]
+            if (application.Activity) {
+                const nextButton = new ButtonBuilder()
+                    .setCustomId('next_modal_two')
+                    .setLabel('skip Part 1')
+                    .setStyle(ButtonStyle.Primary);
 
-            application.Agerange = interaction.values[0];
-            await saveApplications(applications);
-            const guild = interaction.client.guilds.cache.get(application.guild)
-            const questionModalOne = new ModalBuilder()
-                .setCustomId('server')
-                .setTitle('Experience and Activity (1/3)')
+                const row = new ActionRowBuilder()
+                    .addComponents(nextButton);
+                interaction.reply({
+                    content: 'You have already filled out the first part. Click the button below to continue to the next section.',
+                    components: [row],
+                    ephemeral: true
+                })
+                return;
+            } else {
+                application.Agerange = interaction.values[0];
 
-            const questionOne = new TextInputBuilder()
-                .setCustomId('experience')
-                .setLabel('Please put down any prior mod experience')
-                .setPlaceholder('Put your experience here or N/A')
-                .setRequired(true)
-                .setStyle(TextInputStyle.Paragraph)
-                .setMaxLength(300)
+                await saveApplications(applications);
+                const guild = interaction.client.guilds.cache.get(application.guild)
+                const questionModalOne = new ModalBuilder()
+                    .setCustomId('server')
+                    .setTitle('Experience and Activity (1/3)')
 
-            const questionTwo = new TextInputBuilder()
-                .setCustomId('punishments')
-                .setLabel('Have you been warned/muted/kicked/banned?')
-                .setPlaceholder('be honest and you do not need too much detail')
-                .setRequired(true)
-                .setStyle(TextInputStyle.Short)
-                .setMaxLength(100)
+                const questionOne = new TextInputBuilder()
+                    .setCustomId('experience')
+                    .setLabel('Please put down any prior mod experience')
+                    .setPlaceholder('Put your experience here or N/A')
+                    .setRequired(true)
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setMaxLength(300)
 
-            const questionThree = new TextInputBuilder()
-                .setCustomId('timezone')
-                .setLabel('What is your timezone?')
-                .setRequired(true)
-                .setStyle(TextInputStyle.Short)
-                .setPlaceholder('If unknown, put your current time')
-                .setMaxLength(8)
+                const questionTwo = new TextInputBuilder()
+                    .setCustomId('punishments')
+                    .setLabel('Have you been warned/muted/kicked/banned?')
+                    .setPlaceholder('be honest and you do not need too much detail')
+                    .setRequired(true)
+                    .setStyle(TextInputStyle.Short)
+                    .setMaxLength(100)
 
-            const questionFour = new TextInputBuilder()
-                .setCustomId('length')
-                .setLabel(`Time you been a member in ${guild.name}?`)
-                .setStyle(TextInputStyle.Short)
-                .setRequired(true)
-                .setMaxLength(25)
+                const questionThree = new TextInputBuilder()
+                    .setCustomId('timezone')
+                    .setLabel('What is your timezone?')
+                    .setRequired(true)
+                    .setStyle(TextInputStyle.Short)
+                    .setPlaceholder('If unknown, put your current time')
+                    .setMaxLength(8)
 
-            const questionFive = new TextInputBuilder()
-                .setCustomId('activity')
-                .setLabel(`How active are you in ${guild.name}`)
-                .setStyle(TextInputStyle.Short)
-                .setRequired(true)
-                .setMaxLength(150)
+                const questionFour = new TextInputBuilder()
+                    .setCustomId('length')
+                    .setLabel(`Time you been a member in ${guild.name}?`)
+                    .setStyle(TextInputStyle.Short)
+                    .setRequired(true)
+                    .setMaxLength(25)
 
-            const firstActionRow = new ActionRowBuilder().addComponents(questionOne)
-            const secondActionRow = new ActionRowBuilder().addComponents(questionTwo)
-            const thirdActionRow = new ActionRowBuilder().addComponents(questionThree)
-            const fourthActionRow = new ActionRowBuilder().addComponents(questionFour)
-            const fifthActionRow = new ActionRowBuilder().addComponents(questionFive)
+                const questionFive = new TextInputBuilder()
+                    .setCustomId('activity')
+                    .setLabel(`How active are you in ${guild.name}`)
+                    .setStyle(TextInputStyle.Short)
+                    .setRequired(true)
+                    .setMaxLength(150)
 
-            questionModalOne.addComponents(firstActionRow, secondActionRow, thirdActionRow, fourthActionRow, fifthActionRow)
-            interaction.showModal(questionModalOne)
 
+                const firstActionRow = new ActionRowBuilder().addComponents(questionOne)
+                const secondActionRow = new ActionRowBuilder().addComponents(questionTwo)
+                const thirdActionRow = new ActionRowBuilder().addComponents(questionThree)
+                const fourthActionRow = new ActionRowBuilder().addComponents(questionFour)
+                const fifthActionRow = new ActionRowBuilder().addComponents(questionFive)
+
+                questionModalOne.addComponents(firstActionRow, secondActionRow, thirdActionRow, fourthActionRow, fifthActionRow)
+                interaction.showModal(questionModalOne)
+            }
         }
     }
 }
