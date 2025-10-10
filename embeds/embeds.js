@@ -26,7 +26,8 @@ const guildEmbedConfig = {
     "1342845801059192913": [
         { name: "rules", senderFunc: BarkCreateRulesEmbed },
         { name: "getroles", senderFunc: BarkCreateReactionEmbed },
-        { name: "dirty", senderFunc: BarkCreateDirtyEmbed }
+        { name: "dirty", senderFunc: BarkCreateDirtyEmbed },
+        { name: "staffguide", senderFunc: BarkCreateStaffGuidelines }
     ]
 };
 // New function to handle the common tasks of sending and saving embed info
@@ -38,8 +39,9 @@ async function sendEmbedAndSave(guild, messageIDs, embedName, embedData, guildCh
             // Found an old message with the same name, so we remove it.
             messageIDs[guild.id].splice(oldMessageIndex, 1);
         }
-        // eslint-disable-next-line no-empty
-    } catch { }
+    } catch (err) {
+        console.log(`error sending embed for ${embedName}: `, err)
+    }
 
     const { embeds, components } = embedData;
     const msg = await channel.send({ embeds, components, fetchReply: true });
@@ -62,15 +64,6 @@ async function sendEmbedAndSave(guild, messageIDs, embedName, embedData, guildCh
         messageId: msg.id,
         channelid: channel.id,
     });
-
-    try {
-        const jsonString = JSON.stringify(messageIDs, null, 4); // null, 4 for nice formatting
-        await writeFile(messagepath, jsonString, 'utf8');
-        console.log('✅ Successfully saved message IDs to disk.');
-    } catch (error) {
-        console.error('❌ Failed to save message IDs to disk:', error);
-    }
-
 }
 async function createRulesEmbed(guild) {
     const rules = new EmbedBuilder()
@@ -210,7 +203,6 @@ async function createMentalHealthEmbed(guild) {
         embeds: [mentalhealth]
     }
 }
-
 async function createStaffGuideEmbed(guild) {
     const staffguides = new EmbedBuilder()
         .setTitle('Staff Guidelines')
@@ -679,6 +671,23 @@ async function BarkCreateDirtyEmbed(guild) {
         reactions: react
     }
 }
+async function BarkCreateStaffGuidelines(guild) {
+    const guide = new EmbedBuilder()
+        .setThumbnail(guild.iconURL({ size: 1024, extension: 'png' }))
+        .setAuthor({ name: guild.name })
+        .setTitle('__**Staff Guidelines**__')
+        .setDescription([
+            'Welcome to the staff team of Bark!',
+            'Below are some guidelines to help you familiarize yourself with the commands of <@1420927654701301951>',
+            '[click here](https://discord.com/channels/1342845801059192913/1423832190919114826/1423834091102666924)\nTHE ROLES\nINFORMATION\nPROCEDURE\nHUMAN ERROR\n',
+            '[click here](https://discord.com/channels/1342845801059192913/1423834519345299568/1423834854906265791)\nBOT COMMANDS\nBAN APPEALS\nTICKETS\nFEBOT IS DOWN'
+        ].join('\n'))
+        .setFooter({ text: guild.name, iconURL: guild.iconURL({ size: 1024, extension: 'png' }) })
+
+    return {
+        embeds: [guide]
+    }
+}
 export async function embedsenders(client, guildIds) {
     let embedTasks = [];
     let messageIDs = embedIDs;
@@ -702,16 +711,26 @@ export async function embedsenders(client, guildIds) {
             const { name: embedName, senderFunc } = embedConfig;
             const existingEmbedInfo = messageIDs[guild.id]?.find((embed) => embed.name === embedName);
 
+            if (!existingEmbedInfo) {
+                console.log(`missing embed for ${embedName}, adding to queue...`);
+
+                // Await the data, then add the send task.
+                embedTasks.push(async () => {
+                    const embedData = await senderFunc(guild);
+                    // Assumes sendEmbedAndSave is an async function that returns a Promise
+                    await sendEmbedAndSave(guild, messageIDs, embedName, embedData, guildChannels);
+                });
+
+                // No need to continue to the update logic, as a new message is being sent.
+                continue;
+            }
             embedTasks.push(async () => {
-                const embedData = await senderFunc(guild);
-                if (!existingEmbedInfo) {
-                    console.log(`missing embed for ${embedName}, adding to queue...`)
-                    embedTasks.push(sendEmbedAndSave(guild, messageIDs, embedName, embedData, guildChannels));
-                }
                 try {
+                    const embedData = await senderFunc(guild); // Get data for comparison/update
                     const channel = await guild.client.channels.fetch(existingEmbedInfo.channelid);
                     const message = await channel.messages.fetch(existingEmbedInfo.messageId);
 
+                    // Assuming getComparableEmbed is defined and works correctly
                     const existingEmbedString = getComparableEmbed(message.embeds[0]);
                     const newEmbedString = getComparableEmbed(embedData.embeds[0].data);
 
@@ -719,20 +738,31 @@ export async function embedsenders(client, guildIds) {
                         await message.edit({
                             embeds: embedData.embeds,
                             ...(embedData.components && { components: embedData.components })
-                        })
+                        });
                         console.log(`✅ Message '${embedName}' updated successfully.`);
+
+                        // Handle reactions
                         if (embedData.reactions) {
                             await message.reactions.removeAll();
                             const reactionPromises = embedData.reactions.map(reaction => message.react(reaction));
-                            await Promise.all(reactionPromises)
+                            await Promise.all(reactionPromises);
                         }
-
-                    }
+                    } else
+                        console.log(`message ${embedName} has the same content`);
                 } catch (error) {
                     console.error(`❌ Failed to update or fetch message '${embedName}':`, error);
                 }
             });
         }
     }
-    await Promise.allSettled(embedTasks.map(task => task()));
+    if (embedTasks.length > 0) {
+        await Promise.allSettled(embedTasks.map(task => task()));
+        try {
+            const jsonString = JSON.stringify(messageIDs, null, 4); // null, 4 for nice formatting
+            await writeFile(messagepath, jsonString, 'utf8');
+            console.log('✅ Successfully saved message IDs to disk.');
+        } catch (error) {
+            console.error('❌ Failed to save message IDs to disk:', error);
+        }
+    }
 }
