@@ -98,17 +98,14 @@ export async function execute(interaction) {
         };
         isCPU = true
     } else if (subcommand === 'user') {
-        const opponent = interaction.options.getUser('opponent');
+        player2 = interaction.options.getUser('opponent');;
         if (player1.id === player2.id) {
             return interaction.reply({
                 content: "You can't play against yourself.",
                 ephemeral: true
             })
         }
-        player2 = opponent;
     }
-
-
 
     let currentplayer = Math.random() < 0.5 ? player1 : player2;
 
