@@ -14,14 +14,14 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
     const userId = interaction.user.id;
     const guild = interaction.guild;
-    const applications = await loadApplications();
+    let applications = await loadApplications();
     if ((!Object.hasOwn(applications, userId))) {
         applications[userId] = {}
+        applications[userId].guild = guild.id
+        applications[userId].Agerange = null
+        saveApplications(applications)
     }
-
-    applications[userId].guild = guild.id
-    await saveApplications(applications);
-
+    applications = await loadApplications();
     const ageoptions = ages.map(age => new StringSelectMenuOptionBuilder()
         .setLabel(age.label)
         .setValue(age.range))
