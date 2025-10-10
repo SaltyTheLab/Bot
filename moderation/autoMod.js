@@ -93,33 +93,14 @@ export default async function AutoMod(client, message) {
   // get previous activewarnings and warn weight of new warn
   const { activeWarnings, currentWarnWeight } = await getWarnStats(userId, guild.id, evaluationResult.violations);
 
-  // calculate mute duration and unit
+
   let { duration, unit } = getNextPunishment(activeWarnings.length + currentWarnWeight);
   const multiplier = unitMap[unit]
   duration = duration * multiplier;
-
-  // common arguments for all commands
-  const commonPayload = {
-    interaction: interaction,
-    guild: guild,
-    target: author,
-    moderatorUser: client.user,
-    reason: reasonText,
-    channel: channel,
-    isAutomated: true
-  };
-
-  // issue the mute/warn/ban
-  if ((activeWarnings.length > 2 || currentWarnWeight >= 4) && isNewUser == true) {
-    punishUser({ ...commonPayload, banflag: true });
-  } else {
-    await punishUser({
-      ...commonPayload,
-      currentWarnWeight: currentWarnWeight,
-      duration: duration,
-      unit: unit
-    });
-  }
+  if ((activeWarnings.length > 2 || currentWarnWeight > 3) && isNewUser == true)
+    punishUser({ interaction: interaction, guild: guild, target: author.id, moderatorUser: client.user, reason: reasonText, channel: channel, isAutomated: true, banflag: true });
+  else
+    await punishUser({ interaction: interaction, guild: guild, target: author.id, moderatorUser: client.user, reason: reasonText, channel: channel, isAutomated: true, currentWarnWeight: currentWarnWeight, duration: duration, unit: unit });
   if (violationFlags.isGeneralSpam || violationFlags.isDuplicateSpam)
     clearSpamFlags(userId);
 }
