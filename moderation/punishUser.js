@@ -45,6 +45,7 @@ export default async function punishUser({ interaction, guild, target, moderator
       commandTitle = `${userTag} was issued a warning`
       dmDescription = `<@${targetUser.id}>, you were given a \`warning\` in ${guild.name}.`
       logAuthor = `${moderatorUser.tag} warned a member`
+      logChannel = guild.channels.cache.get(guildChannelMap[guild.id].modChannels.mutelogChannel);
       action = Promise.resolve();
       break;
   }
@@ -73,11 +74,18 @@ export default async function punishUser({ interaction, guild, target, moderator
 
   const { activeWarnings } = await getWarnStats(targetUser.id, guild.id);
 
-  const refrences = activeWarnings.slice(0, 10).map((punishment, index) => {
-    if (punishment.refrence) {
-      return `[Case ${index + 1}](${punishment.refrence})`
-    }
-  })
+  const refrences = warnType === 'Ban' ?
+    activeWarnings.filter(r => r.type === 'Ban').map((punishment, index) => {
+      if (punishment.refrence) {
+        return `[Case ${index + 1}](${punishment.refrence})`
+      }
+    }).filter(Boolean)
+    :
+    activeWarnings.slice(0, 10).map((punishment, index) => {
+      if (punishment.refrence) {
+        return `[Case ${index + 1}](${punishment.refrence})`
+      }
+    }).filter(Boolean);
 
   const { label } = getNextPunishment(activeWarnings.length);
 
