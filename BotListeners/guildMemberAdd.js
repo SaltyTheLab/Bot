@@ -1,138 +1,87 @@
 import { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } from "discord.js";
+import { load, save } from "../utilities/jsonloaders.js";
 import guildChannelMap from "./Extravariables/guildconfiguration.json" with {type: 'json'};
-import invites from "./Extravariables/mapsandsets.js";
 const fifteenMinutesInMs = 15 * 60 * 1000
-/**
- * Handles the guildMemberAdd event to log new members and their inviter.
- * @param {import("discord.js").GuildMember} member The new member.
- */
 export async function guildMemberAdd(member) {
+    const arrayToMap = (arr) => new Map(arr.map(item => [item.key, item.uses]));
+    const mapToArray = (map) => Array.from(map.entries()).map(([key, uses]) => ({ key, uses }));
     const owner = await member.guild.fetchOwner();
     const user = member.user;
     const guild = member.guild
-    const modChannels = guildChannelMap[guild.id].modChannels;
-    const publicChannels = guildChannelMap[guild.id].publicChannels;
+    const vanitycode = await member.guild.fetchVanityData();
+    let invites = arrayToMap(await load("./BotListeners/Extravariables/invites.json"));
     const [welcomeChannel, generalChannel, mutechannel] = [
-        await guild.channels.fetch(modChannels.welcomeChannel),
-        await guild.channels.fetch(publicChannels.generalChannel),
-        await guild.channels.fetch(modChannels.mutelogChannel),
+        await guild.channels.fetch(guildChannelMap[guild.id].modChannels.welcomeChannel),
+        await guild.channels.fetch(guildChannelMap[guild.id].publicChannels.generalChannel),
+        await guild.channels.fetch(guildChannelMap[guild.id].modChannels.mutelogChannel),
     ]
 
-    // Define account creation date and two days in milliseconds
-    const twoDaysInMs = 2 * 24 * 60 * 60 * 1000;
-
-    // Check if account is less than two days old
-    const accountAgeInMs = Date.now() - user.createdTimestamp;
-
-    // Kick member if account is less than two days old
-    if (accountAgeInMs < twoDaysInMs) {
-        try {
-            await member.kick({ reason: `Account under the age of 2 days` });
-            const kickmessage = new EmbedBuilder()
-                .setTitle('A member was auto-kicked')
-                .addFields(
-                    { name: '**User**', value: `${member}`, inline: true },
-                    { name: '**tag**', value: `\`${user.tag}\``, inline: true },
-                    { name: '**Reason**', value: "`Account under the age of 2 days`" },
-                    { name: '**Account created:**', value: `<t:${Math.floor(user.createdTimestamp / 1000)}:R>` }
-                );
-            await mutechannel.send({ embeds: [kickmessage] });
-            return; // Exit if member was kicked
-        } catch (error) {
-            console.error(`Failed to auto-kick member ${user.tag}:`, error);
-        }
-    }
-
-    // Fetch invites and find the inviter if the member wasn't auto-kicked
-    const oldInvites = new Map(invites)
-    const newInvites = await member.guild.invites.fetch();
-
-    let inviter = null;
-    let invite = null;
-    let isPersistentInvite = false;
-
-    try {// search old invites first and comapre values of snapshot to new list
-        invite = newInvites.find(i => {
-            const key = `${guild.id}-${i.code}`;
-            return oldInvites.has(key) && oldInvites.get(key) < i.uses;
-        });
-        if (invite) {
-            inviter = invite.inviter;
-            isPersistentInvite = true;
-            console.log(`Found persistent inviter: ${inviter ? inviter.tag : 'Unknown'} via ${invite.code}`);
-        } else {
-            // check for one time use invites and ones already deleted
-            let usedInviteCode = Array.from(oldInvites.keys()).find(key => {
-                const code = key.split('-')[1];
-                return !newInvites.some(i => i.code === code);
-            });
-            if (usedInviteCode) {
-                const allInvites = await member.guild.invites.fetch();
-                invite = allInvites.find(i => i.code === usedInviteCode.split('-')[1]);
-                if (invite) {
-                    inviter = invite.inviter;
-                    console.log(`Found one-time invite: ${invite.code} and inviter: ${inviter ? inviter.tag : 'Unknown'}`);
-                }
-            } else {
-                console.log('No invite found.')
-            }
-        };
-    } catch (error) {
-        console.error("Error finding inviter:", error);
-    }
-
-    // update the shared invites map with the new invites and their current uses.
-    newInvites.forEach(i => {
-        const key = `${guild.id}-${i.code}`;
-        invites.set(key, i.uses);
-    });
-
-    // Build and send embeds
     const welcomeEmbed = new EmbedBuilder()
         .setColor(0x00FF99)
         .setDescription(`${member} joined the Server!`)
         .setThumbnail(user.displayAvatarURL({ dynamic: true }))
-        .addFields(
-            { name: 'Discord Join Date:', value: `<t:${Math.floor(member.joinedAt.getTime() / 1000)}>`, inline: true }
-        )
-    // Add the inviter field to the welcome embed
-    if (inviter) {
-        console.log(`Inviter found for embed: ${inviter.tag}`);
-        welcomeEmbed.setFooter({
-            text: `Invited by: ${inviter.tag} | ${invite.code}`,
-            iconURL: inviter.displayAvatarURL({ dynamic: true })
-        });
-    }
-    welcomeEmbed.setTimestamp()
-    const generalEmbed = new EmbedBuilder()
-        .setColor(0x00FF99)
-        .setDescription(`Welcome ${member} to the Cave!`)
-        .setThumbnail(user.displayAvatarURL({ dynamic: true }))
-        .addFields(
-            { name: 'Discord Join Date:', value: `<t:${Math.floor(user.createdAt.getTime() / 1000)}:R>`, inline: true }
-        );
+        .addFields({ name: 'Discord Join Date:', value: `<t:${Math.floor(member.joinedAt.getTime() / 1000)}>`, inline: true })
+        .setTimestamp()
 
-    // Create the ban button with the inviter's ID included
-    const banButton = new ButtonBuilder()
-        .setCustomId(isPersistentInvite && inviter.id !== owner.user.id ? `inviter_ban_delete_invite_${member.id}_${inviter.id}_${invite.code}` : `inviter_ban_delete_invite_${member.id}_no inviter_no invite code`)
-        .setLabel(isPersistentInvite && inviter.id !== owner.user.id ? '🔨 Ban User & Delete Invite' : '🔨 Ban')
-        .setStyle(ButtonStyle.Danger)
-        .setDisabled(false);
+    const newInvites = await member.guild.invites.fetch();
+    let inviter = null;
+    let invite = null;
+    let isPersistentInvite = false;
+
+    invite = newInvites.find(i => {
+        const oldUses = invites.get(`${guild.id}-${i.code}`) || 0;
+        return i.uses === oldUses + 1;
+    });
 
     const actionRow = new ActionRowBuilder()
-        .addComponents(banButton);
-    const introductionembed = new EmbedBuilder()
-        .setTitle('Hi there!')
-        .setDescription(`Im febot, I am dming you since it will open a dm with me. Below is a shiny blue button labeled commands. /appeal is the only one you can use here.\n`)
-    await generalChannel.send({ embeds: [generalEmbed] });
+        .addComponents(new ButtonBuilder()
+            .setCustomId(isPersistentInvite && inviter.id !== owner.user.id ? `inviter_ban_delete_invite_${member.id}_${inviter.id}_${invite.code}` : `inviter_ban_delete_invite_${member.id}_no inviter_no invite code`)
+            .setLabel(isPersistentInvite && inviter.id !== owner.user.id ? '🔨 Ban User & Delete Invite' : '🔨 Ban')
+            .setStyle(ButtonStyle.Danger)
+            .setDisabled(false)
+        );
+
+    if (invite) { inviter = invite.inviter; isPersistentInvite = true; }
+
+    inviter ? welcomeEmbed.setFooter({ text: `Invited by: ${inviter.tag} | ${invite.code}`, iconURL: inviter.displayAvatarURL({ dynamic: true }) })
+        : welcomeEmbed.setFooter({ text: vanitycode ? `user used the vanity url: ${vanitycode.code}` : '' })
+
+    newInvites.forEach(i => { invites.set(`${guild.id}-${i.code}`, i.uses); });
+    await save("./BotListeners/Extravariables/invites.json", mapToArray(invites))
+
+    await generalChannel.send({
+        embeds: [new EmbedBuilder()
+            .setColor(0x00FF99)
+            .setDescription(`Welcome ${member} to the Cave!`)
+            .setThumbnail(user.displayAvatarURL({ dynamic: true }))
+            .addFields({ name: 'Discord Join Date:', value: `<t:${Math.floor(user.createdAt.getTime() / 1000)}:R>`, inline: true })
+        ]
+    });
+
     const message = await welcomeChannel.send({ embeds: [welcomeEmbed], components: [actionRow] });
+    const twoDaysInMs = 2 * 24 * 60 * 60 * 1000;
+    const accountAgeInMs = Date.now() - user.createdTimestamp;
+
+    if (accountAgeInMs < twoDaysInMs) {
+        await member.kick({ reason: `Account under the age of 2 days` });
+        const kickmessage = new EmbedBuilder()
+            .setTitle('A member was auto-kicked')
+            .setThumbnail(user.displayAvatarURL({ dynamic: true }))
+            .setDescription(`**User:**${member}\n**tag:**\`${user.tag}\`\n**Reason":**Account under the age of 2 days\n\n**Account created:**<t:${Math.floor(user.createdTimestamp / 1000)}:R>`)
+        await mutechannel.send({ embeds: [kickmessage] });
+        return;
+    }
+
+    const introductionembed = new EmbedBuilder()
+        .setTitle(`Hi there! Welcome to ${guild.name}`)
+        .setThumbnail(guild.iconURL({ size: 1024, extension: 'png' }))
+        .setDescription(`Im febot, I am dming you since it will open a dm with me. Below is a shiny blue button labeled commands. /appeal is the only one you can use here.\n\n Be sure to get some roles in ${guild.name} role claim channel.\n\n`)
+
     if (!user.bot)
         try {
-            const dmChannel = await user.createDM();
-            await dmChannel.send({ embeds: [introductionembed] })
-        } catch (error) {
-            console.log('Could not dm this user.', error)
-        }
+            const dmChannel = await user.createDM(); await dmChannel.send({ embeds: [introductionembed] })
+        } catch (error) { console.log('Could not dm this user.', error) }
+
     setTimeout(async () => {
         const buttonComponent = message.components[0];
         if (buttonComponent && !buttonComponent.disabled) {
@@ -148,4 +97,3 @@ export async function guildMemberAdd(member) {
         }
     }, fifteenMinutesInMs)
 }
-
