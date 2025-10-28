@@ -1,25 +1,15 @@
 import { MongoClient } from 'mongodb';
-
-const uri = "mongodb://localhost:27017";
-
-const dbName = "Database";
-
 let db;
-let client;
-
-export default async function connectToMongoDB() {
-  if (db) {
-    return db
-  }
-
+async function connectToMongoDB() {
   try {
-    client = new MongoClient(uri);
+    const client = new MongoClient("mongodb://localhost:27017");
     await client.connect();
     console.log("Connected to MongoDB successfully!");
-    db = client.db(dbName);
-    return db;
+    db = client.db("Database");
   } catch (error) {
     console.error("Failed to connect to MongoDB:", error);
     process.exit(1);
   }
 }
+await connectToMongoDB()
+export default db;

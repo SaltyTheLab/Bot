@@ -1,16 +1,8 @@
 import { ObjectId } from "mongodb";
-import connectToMongoDB from "./database.js";
+import db from "./database.js";
 
-let db;
-let appeals;
-let usersCollection;
-async function initializeDb() {
-  db = await connectToMongoDB();
-  usersCollection = db.collection('users');
-  appeals = db.collection('appeals');
-};
-
-initializeDb();
+const appeals = db.collection('appeals');
+const usersCollection = db.collection('users');
 
 // ───── USER XP/LEVEL SYSTEM ─────
 //fetch or create the user in the data base
@@ -20,14 +12,9 @@ export async function getUser(userId, guildId, modflag = false) {
     const newUser = {
       userId: userId, xp: 0, level: 1, coins: 100, guildId: guildId, notes: [], punishments: [], blacklist: [], totalmessages: 0
     }
-    try {
-      await usersCollection.insertOne(newUser);
-      userData = newUser;
-      console.log(`[getUser] Successfully inserted and retrieved new user: ${userId} in guild ${guildId}`);
-    } catch (error) {
-      console.error(`❌ [getUser] Error inserting new user ${userId} in guild ${guildId}:`, error);
-      return { userId, xp: 0, level: 1, coins: 100, guildId, notes: [], punishments: [], blacklist: [], totalmessages: 0 };
-    }
+    await usersCollection.insertOne(newUser);
+    userData = newUser;
+    console.log(`[getUser] Successfully inserted and retrieved new user: ${userId} in guild ${guildId}`);
   };
   return userData;
 }
@@ -147,20 +134,12 @@ export async function getblacklist(userid, guildId) {
   return userData.blacklist
 }
 
-export async function addblacklist(userId, guildId, roleId) {
+export async function editblacklist(userId, guildId, roleId, action = 'pull') {
   const filter = { userId: userId, guildId: guildId };
-  const update = { $push: { blacklist: roleId } };
-
+  const update = action == 'push' ? { $push: { blacklist: roleId } }
+    : { $pull: { blacklist: roleId } };
   await usersCollection.updateOne(filter, update);
 }
-
-export async function removeblacklist(userId, guildId, roleId) {
-  const filter = { userId: userId, guildId: guildId };
-  const update = { $pull: { blacklist: roleId } }
-
-  await usersCollection.updateOne(filter, update);
-}
-
 //───── Admin ─────
 export async function deletePunishment(userId, guildId, id) {
   await usersCollection.updateOne(
