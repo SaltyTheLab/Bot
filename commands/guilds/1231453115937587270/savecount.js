@@ -23,7 +23,7 @@ export async function execute(interaction) {
     countingState.addkey(interaction.user.id, guildId)
     interaction.reply({
         embeds: [new EmbedBuilder()
-            .setDescription(interaction.user.tag + `, you now have ${countingState[guildId].length} keys to save the count.`)
+            .setDescription(interaction.user.tag + `, key created.`)
         ]
     })
 }
