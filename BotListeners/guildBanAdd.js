@@ -1,48 +1,32 @@
 import { EmbedBuilder, AuditLogEvent } from "discord.js";
+import { load, save } from "../utilities/jsonloaders.js";
 import guildChannelMap from "./Extravariables/guildconfiguration.json" with {type: 'json'};
-import { loadbans, saveBans } from "../utilities/jsonloaders.js";
 const recentBans = new Map();
-
-async function sendMassBanEmbed(executorId, guild, channel) {
+async function sendMassBanEmbed(executorId, channel) {
     const entry = recentBans.get(executorId);
     const { executor, bans } = entry;
-    const isMassban = bans.length > 1;
-    const title = isMassban ? `Mass Ban: ${bans.length} Members Banned` : `Member Banned`;
-    const banlog = new EmbedBuilder()
-        .setAuthor({
-            name: `${executor?.tag} ${isMassban ? `mass banned` : `banned a member`}`,
-            iconURL: executor?.displayAvatarURL({ dynamic: true })
-        })
-        .setTitle(title)
-        .setColor(0x900000)
-        .setTimestamp()
-    if (isMassban) {
-        const description = bans.map(ban => [`**Tag**: \`${ban.userTag}\``, `**ID**:\`${ban.userId}\``, `**Reason**:\`${ban.reason}\``].join('\n')).join('\n\n');
-        banlog
-            .setDescription(description)
-            .setFooter({ text: `Banned by ${executor?.tag}`, iconURL: executor.displayAvatarURL({ dynamic: true }) });
-    } else {
-        const singleBan = bans[0];
-        banlog
-            .setThumbnail(await guild.client.users.fetch(singleBan.userId).then(u => u.displayAvatarURL({ dynamic: true })))
-            .setDescription(
-                [
-                    `**User**:${singleBan.user}`,
-                    `**Tag**: \`${singleBan.userTag}\``,
-                    `**ID**:\`${singleBan.userId}\`\n`,
-                    `**Reason**:\`${singleBan.reason}\``
-                ].join('\n')
-            )
+    if (bans.length > 1) {
+        const banlog = new EmbedBuilder()
+            .setAuthor({
+                name: `${executor?.tag} ${`mass banned`}`,
+                iconURL: executor?.displayAvatarURL({ dynamic: true })
+            })
+            .setTitle(`Mass Ban: ${bans.length} Members Banned`)
+            .setDescription(bans.map(ban => [`**Tag**: \`${ban.userTag}\``, `**ID**:\`${ban.userId}\``, `**Reason**:\`${ban.reason}\``].join('\n')).join('\n\n'))
+            .setColor(0x900000)
+            .setFooter({ text: `Banned by ${executor?.tag}`, iconURL: executor.displayAvatarURL({ dynamic: true }) })
+            .setTimestamp()
+
+        await channel.send({ embeds: [banlog] })
+        recentBans.delete(executorId);
     }
-    await channel.send({ embeds: [banlog] })
-    recentBans.delete(executorId);
 }
 export async function guildBanAdd(ban) {
-    const bans = await loadbans();
+    const bans = await load("BotListeners/Extravariables/commandsbans.json");
     const user = ban.user
     if (bans.includes(user.id)) {
         bans.pop();
-        saveBans(bans)
+        save("BotListeners/Extravariables/commandsbans.json", bans)
         return;
     }
     const guild = ban.guild;
@@ -71,12 +55,12 @@ export async function guildBanAdd(ban) {
             const entry = recentBans.get(executorId);
             entry.bans.push(banData);
             clearTimeout(entry.timeout)
-            entry.timeout = setTimeout(() => sendMassBanEmbed(executorId, guild, banlogChannel), 3000)
+            entry.timeout = setTimeout(() => sendMassBanEmbed(executorId, banlogChannel), 3000)
         } else {
             const newEntry = {
                 executor: banEntry.executor,
                 bans: [banData],
-                timeout: setTimeout(() => sendMassBanEmbed(executorId, guild, banlogChannel), 3000)
+                timeout: setTimeout(() => sendMassBanEmbed(executorId, banlogChannel), 3000)
             }
             recentBans.set(executorId, newEntry)
         }
@@ -84,5 +68,3 @@ export async function guildBanAdd(ban) {
         console.error(`Error processing ban for ${user.tag}:`, error)
     }
 }
-
-
