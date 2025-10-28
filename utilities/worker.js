@@ -1,6 +1,6 @@
 import { parentPort } from 'node:worker_threads';
 import { readdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 async function findFiles(dir) {
   const filePaths = []
   try {
@@ -21,7 +21,7 @@ async function findFiles(dir) {
 parentPort.on('message', async (msg) => {
   try {
     const { globalCommandsPath, guildIds, botRoot } = msg;
-    const globalFilePaths = await findFiles(globalCommandsPath);
+    const globalFilePaths = await findFiles(resolve(botRoot, globalCommandsPath));
     const guildCommands = {};
     for (const guildId of guildIds) {
       const guildCommandsPath = join(botRoot, 'commands', 'guilds', guildId);
@@ -33,6 +33,11 @@ parentPort.on('message', async (msg) => {
       guildData: guildCommands
     });
   } catch (err) {
+    console.error('--- WORKER CRASHED ---');
+    console.error('Error in worker thread:', err);
+    console.error('-----------------------');
+
     parentPort.postMessage({ success: false, error: err.message });
   }
-});
+}
+);
