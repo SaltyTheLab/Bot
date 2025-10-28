@@ -80,7 +80,7 @@ export default async function punishUser({ interaction = null, guild, target, mo
 
   switch (warnType) {
     case 'Ban':
-      bans.push(target);
+      bans.push(targetUser.id);
       await save("BotListeners/Extravariables/commandsbans.json", bans)
       commandTitle = `${userTag} was banned`;
       dmDescription = `${targetUser}, you have been \`banned\` from ** ${guild.name} **.\n\n ** Reason **: \n\`${reason}\`\nPlease use /appeal to appeal your ban.\n\n Incase if I do not have a mutual server with you, you can use this invite link: https://discord.gg/Aszq4EDB`
