@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle, InteractionContextType, ComponentType } from "discord.js";
 import { getUser, saveUser } from "../Database/databasefunctions.js";
-import path from 'node:path'
-import logos from '../Database/logos.json' with {type: 'json'}
+import { resolve } from 'node:path';
+import { load } from "../utilities/jsonloaders.js";
 
 function getRandomColor() {
     const randomHex = Math.floor(Math.random() * 16777215)
@@ -22,6 +22,7 @@ export const data = new SlashCommandBuilder()
     .setDescription('Guess the logo');
 
 export async function execute(interaction) {
+    const logos = await load('Database/logos.json');
     // Pick a random logo as the correct answer
     const logo = logos[Math.floor(Math.random() * logos.length)];
     // Filter out the correct logo and pick 3 distractors
@@ -49,7 +50,7 @@ export async function execute(interaction) {
     const message = await interaction.reply({
         embeds: [quiry.setImage('attachment://logo.png')],
         files: [
-            { attachment: path.resolve(`./${logo.image}`), name: 'logo.png' }
+            { attachment: resolve(`./${logo.image}`), name: 'logo.png' }
         ],
         components: [buttons],
         fetchReply: true
