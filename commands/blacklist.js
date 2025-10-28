@@ -1,5 +1,5 @@
 import { EmbedBuilder, SlashCommandBuilder, InteractionContextType, PermissionFlagsBits } from "discord.js";
-import { getblacklist, addblacklist, removeblacklist } from "../Database/databasefunctions.js";
+import { getblacklist, editblacklist } from "../Database/databasefunctions.js";
 
 export const data = new SlashCommandBuilder()
     .setName('blacklist')
@@ -51,7 +51,7 @@ export async function execute(interaction) {
             const role = interaction.options.getRole('role')
             const commandembed = new EmbedBuilder().setDescription(`${role} was blacklisted from ${user}`)
             if (!blacklist.includes(role.id)) {
-                await addblacklist(user.id, interaction.guild.id, role.id)
+                await editblacklist(user.id, interaction.guild.id, role.id, 'pull')
                 await targetUser.roles.remove(role)
             } else
                 commandembed.setDescription(`${role} is already blacklisted from ${user}`)
@@ -60,10 +60,9 @@ export async function execute(interaction) {
         }
         case 'remove': {
             const role = interaction.options.getRole('role')
-            removeblacklist(user.id, interaction.guild.id, role.id)
+            editblacklist(user.id, interaction.guild.id, role.id)
             const commandembed = new EmbedBuilder()
                 .setDescription(`${role} was removed from ${user} blacklist`)
-
             interaction.reply({ embeds: [commandembed] })
         }
     }
