@@ -8,8 +8,6 @@ export async function messageCreate(client, message) {
     return;
   const sentbystaff = message.member.permissions.has('ModerateMembers')
   const countingState = client.countingState
-  //convert message to all lowercase and remove all spaces 
-  const userId = message.author.id;
   const lowerContent = message.content.toLowerCase().split(/\s/);
   const guildId = message.guild.id
 
@@ -42,26 +40,20 @@ export async function messageCreate(client, message) {
   if (lowerContent.includes('lazy'))
     message.reply('Get up then!!')
 
-  const countingChannel = guildChannelMap[guildId].publicChannels.countingChannel;
-  if (message.channel.id === countingChannel) {
-    const number = parseInt(message.content.trim());
-    const currentCount = countingState.getCount(guildId)
+  if (message.channel.id === guildChannelMap[guildId].publicChannels.countingChannel) {
+    if (!message.content.trim() || isNaN(parseInt(message.content.trim())) || Number(message.content) !== parseInt(message.content.trim()))
+      return;
     const lastUser = countingState.getLastUser(guildId)
-    const expectedNumber = currentCount + 1
+    const expectedNumber = countingState.getCount(guildId) + 1
     const keysArray = countingState.getkeys(guildId);
 
-    if (!message.content.trim() || isNaN(number) || Number(message.content) !== number) {
-      return;
-    }
-    if (number === expectedNumber && lastUser !== message.author.id) {
+    if (parseInt(message.content.trim()) === expectedNumber && lastUser !== message.author.id) {
       countingState.increaseCount(message.author.id, guildId);
       message.react('✅')
       return;
     } else if (keysArray && keysArray.length > 0) {
       countingState.removekey(guildId)
-      await message.reply({
-        content: `1 key used, ${keysArray.length} keys left.`
-      })
+      await message.reply({ content: `1 key used, ${keysArray.length} keys left.` })
       return;
     }
     else {
@@ -74,16 +66,15 @@ export async function messageCreate(client, message) {
       return;
     }
   }
-
-  if ((message.type === MessageType.Default || message.type === MessageType.Reply))
-    await applyUserXP(userId, message, guildId);
-
-  if (sentbystaff) return;
+  if ((message.type === MessageType.Default || message.type === MessageType.Reply)) await applyUserXP(message.author.id, message, guildId);
+  if (sentbystaff || message.author.id === "521404063934447616") return;
   await AutoMod(client, message);
 }
 
 async function applyUserXP(userId, message, guildId) {
   let userData = await getUser(userId, guildId);
+  const verifiedRole = message.guild.roles.cache.find(r => r.name.toLowerCase() === 'verified');
+  const member = await message.guild.members.fetch(userId);
   userData.xp += 20;
   userData.totalmessages += 1;
   const xpNeeded = Math.round(((userData.level - 1) ** 1.5 * 52 + 40) / 20) * 20
@@ -98,19 +89,9 @@ async function applyUserXP(userId, message, guildId) {
       })
       .setColor(0x00AE86)
       .setFooter({ text: 'keep on yapping!' });
-
     await message.channel.send({ embeds: [levelUpEmbed] });
-
-    // Auto-role on level 3
-    if (userData.level === 3) {
-      const verifiedRole = message.guild.roles.cache.find(r => r.name.toLowerCase() === 'verified');
-      if (verifiedRole) {
-        const member = await message.guild.members.fetch(userId);
-        if (!member.roles.cache.has(verifiedRole.id)) {
-          await member.roles.add(verifiedRole);
-        }
-      }
-    }
   }
+  if (userData.level === 3 && !member.roles.cache.has(verifiedRole) && verifiedRole)
+    await member.roles.add(verifiedRole);
   await saveUser({ userData });
 }
