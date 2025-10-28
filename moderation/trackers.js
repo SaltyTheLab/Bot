@@ -1,14 +1,25 @@
 import { LRUCache } from 'lru-cache';
 import Denque from 'denque';
 import guildChannelMap from "../BotListeners/Extravariables/guildconfiguration.json" with {type: 'json'};
-const hourInMs = 60 * 60 * 1000
 const userMessageTrackers = new LRUCache({
-  max: 500,
-  ttl: hourInMs,
+  max: 200,
+  ttl: 30 * 60 * 1000,
   updateAgeOnGet: true,
 });
+const initialTrackerState = () => ({ total: 0, mediaCount: 0, timestamps: new Denque(), duplicateCounts: new Map(), recentMessages: new Denque() })
 
+function getOrCreateTracker(userId) {
+  let tracker = userMessageTrackers.get(userId) ?? initialTrackerState();
+  if (!userMessageTrackers.has(userId)) userMessageTrackers.set(userId, tracker);
+  return tracker;
+}
 export default function updateTracker(userId, message) {
+  const settings = guildChannelMap[message.guild.id].automodsettings ?? null;
+  const mediaexclusions = guildChannelMap[message.guild.id].mediaexclusions;
+  if (!settings) {
+    console.warn(`No automod settings found for guild ${message.guild.id}`);
+    return { isMediaViolation: false, isGeneralSpam: false, isDuplicateSpam: false, isCapSpam: false };
+  }
   const {
     spamwindow: GENERAL_SPAM_WINDOW,
     spamthreshold: GENERAL_SPAM_THRESHOLD,
@@ -17,54 +28,33 @@ export default function updateTracker(userId, message) {
     mediathreshold: mediathreshold,
     messagethreshold: messageThreshold,
     capscheckminlength: minLengthForCapsCheck
-  } = guildChannelMap[message.guild.id].automodsettings;
+  } = settings;
   const now = Date.now();
-  const exclusions = guildChannelMap[message.guild.id].exclusions;
   const content = message.content;
   let isCapSpam = false;
-
-  let tracker = userMessageTrackers.get(userId);
-  if (!tracker) {
-    tracker = {
-      total: 0,
-      mediaCount: 0,
-      timestamps: new Denque(),
-      duplicateCounts: new Map(),
-      recentMessages: new Denque()
-    };
-    userMessageTrackers.set(userId, tracker);
-  }
-  const mostRecentTimestamp = tracker.timestamps.peekBack();
-  if (mostRecentTimestamp && (now - mostRecentTimestamp > hourInMs)) {
-    tracker.total = 0;
-    tracker.mediaCount = 0;
-    tracker.timestamps.clear();
-    tracker.duplicateCounts.clear();
-    tracker.recentMessages.clear();
-  }
+  const tracker = getOrCreateTracker(userId);
 
   tracker.total += 1;
 
-  // cap spam check method
   if (content.length >= minLengthForCapsCheck) {
-    const noEmotes = content.replace(/[<a?:[a-zA-Z0-9_]+:\d+>/g, '');
-    const lettersOnly = noEmotes.replace(/[^a-zA-Z]/g, '')
+    const lettersOnly = content.replace(/[<a?:[a-zA-Z0-9_]+:\d+>/g, '').replace(/[^a-zA-Z]/g, '')
     const upperCaseCount = (lettersOnly.match(/[A-Z]/g) || []).length
-    if (upperCaseCount > 3) {
-      const upperRatio = lettersOnly.length > 0 ? upperCaseCount / lettersOnly.length : 0;
+    if (upperCaseCount > 3 && lettersOnly.length > 0) {
+      const upperRatio = upperCaseCount / lettersOnly.length;
       isCapSpam = upperRatio > capsthreshold;
     }
   }
 
   const hasMediaContent = hasMedia(message);
-  //media check for message and flag it if true
-  if (hasMediaContent && !Object.values(exclusions).includes(message.channel.parentId) && !Object.values(exclusions).includes(message.channel.id)) {
+  const isExcluded = Object.values(mediaexclusions).some(id => id === message.channel.parentId || id === message.channel.id)
+
+  if (hasMediaContent && !isExcluded) {
     tracker.mediaCount += 1;
   }
 
   // Track timestamps for general spam
   tracker.timestamps.push(now);
-  while (tracker.timestamps.length && now - tracker.timestamps.peekFront() > GENERAL_SPAM_WINDOW) {
+  while (tracker.timestamps.length && (now - tracker.timestamps.peekFront() > GENERAL_SPAM_WINDOW)) {
     tracker.timestamps.shift();
   }
 
@@ -91,27 +81,19 @@ export default function updateTracker(userId, message) {
   if (isMediaViolation)
     tracker.mediaCount = 0;
 
+  if (wasGeneralSpam)
+    tracker.recentMessages.clear();
+
+  if (isDuplicateSpam)
+    tracker.duplicateCounts.clear();
+
   if (tracker.total >= messageThreshold) {
     tracker.total = 0;
     tracker.mediaCount = 0;
     tracker.timestamps.clear();
   }
-  //if spam detected, flag it and clear out recentMessages array
-  if (wasGeneralSpam)
-    tracker.recentMessages.clear();
-
-  if (isDuplicateSpam) {
-    tracker.duplicateCounts.clear();
-  }
-
-  userMessageTrackers.set(userId, tracker);
-  //send the flags out of the function
-  return {
-    isMediaViolation,
-    isGeneralSpam: wasGeneralSpam,
-    isDuplicateSpam: isDuplicateSpam,
-    isCapSpam
-  };
+  userMessageTrackers.set(userId, tracker)
+  return { isMediaViolation, isGeneralSpam: wasGeneralSpam, isDuplicateSpam: isDuplicateSpam, isCapSpam };
 }
 
 function hasMedia(message) {
@@ -131,6 +113,7 @@ export function clearSpamFlags(userId) {
   if (tracker) {
     tracker.timestamps.clear();
     tracker.recentMessages.clear();
+    tracker.duplicateCounts.clear();
     userMessageTrackers.set(userId, tracker);
   }
 }

@@ -1,48 +1,51 @@
 import punishUser from './punishUser.js';
-import getNextPunishment from './punishments.js';
-import getWarnStats from './getActiveWarns.js';
 import updateTracker, { clearSpamFlags } from './trackers.js';
-import guildChannelMap from "../BotListeners/Extravariables/guildconfiguration.json" with {type: 'json'};
 import forbbidenWordsData from './forbiddenwords.json' with {type: 'json'};
-import interaction from 'discord.js'
+import { getActiveWarns, getUser } from '../Database/databasefunctions.js';
+import globalwordsData from './globalwords.json' with {type: 'json'}
+import guildChannelMap from "../BotListeners/Extravariables/guildconfiguration.json" with {type: 'json'};
 
-const forbiddenWords = new Set(forbbidenWordsData.forbiddenWords.map(w => w.toLowerCase()));
+const forbiddenWords = new Set(forbbidenWordsData.map(w => w.toLowerCase()));
+const globalwords = new Set(globalwordsData.map(w => w.toLowerCase()))
 const inviteRegex = /(https?:\/\/)?(www\.)?(discord\.gg|discord(app)?\.com\/invite)\/[a-zA-Z0-9-]+/i;
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
 
-function evaluateViolations({ hasInvite, matchedWord, everyonePing, isGeneralSpam, isDuplicateSpam, isMediaViolation, isNewUser, isCapSpam }) {
+function evaluateViolations({ hasInvite, globalword, matchedWord, everyonePing, isGeneralSpam, isDuplicateSpam, isMediaViolation, isNewUser, isCapSpam }) {
   const checks = [
-    { flag: hasInvite, type: 'invite', reason: 'Discord invite' },
-    { flag: matchedWord, type: 'forbiddenWord', reason: `Forbidden word "${matchedWord}"` },
-    { flag: everyonePing, type: 'everyonePing', reason: 'Mass ping' },
-    { flag: isGeneralSpam, type: 'spam', reason: 'Spamming' },
-    { flag: isDuplicateSpam, type: 'spam', reason: 'Spamming the same message' },
-    { flag: isMediaViolation, type: 'mediaViolation', reason: 'Media violation' },
-    { flag: isCapSpam, type: 'CapSpam', reason: 'Spamming Caps' },
-    { flag: isNewUser, type: 'isNewUser', reason: 'while new to the server.' },
+    { flag: hasInvite, type: 'invite', reason: 'Discord invite', Weight: 2 },
+    { flag: globalword, type: 'banned Word', reason: "Saying a slur", Weight: 2 },
+    { flag: matchedWord, type: 'nsfw Word', reason: `NSFW word "${matchedWord}"`, Weight: 1 },
+    { flag: everyonePing, type: 'everyoneping', reason: 'Mass ping', Weight: 2 },
+    { flag: isGeneralSpam, type: 'spam', reason: 'Spamming', Weight: 1 },
+    { flag: isDuplicateSpam, type: 'spam', reason: 'Spamming the same message', Weight: 1 },
+    { flag: isMediaViolation, type: 'mediaViolation', reason: 'Media violation', Weight: 1 },
+    { flag: isCapSpam, type: 'capspam', reason: 'Spamming Caps', Weight: 1 },
+    { flag: isNewUser, type: 'isNewUser', reason: 'while new to the server.', Weight: 0.9 },
   ];
-
-  const violations = checks
-    .filter(check => check.flag)
-    .map(({ type, reason }) => ({ type, reason }));
-
+  const activeChecks = checks.filter(check => check.flag)
+  const violations = activeChecks.map(({ type, reason }) => ({ type, reason }));
+  const totalWeight = Math.ceil(activeChecks.reduce((acc, check) => { return acc + check.Weight }, 0));
   return {
-    allReasons: violations.map(v => v.reason),
-    violations
+    allReasons: violations,
+    totalWeight
   };
 }
 
-const unitMap = { min: 60000, hour: 3600000, day: 86400000 };
 export default async function AutoMod(client, message) {
   const { author, content, member, guild, channel } = message;
   const userId = author.id;
   const exclusions = guildChannelMap[guild.id].exclusions;
   const messageWords = content.toLowerCase().split(/\s+/);
-  const violationFlags = updateTracker(userId, message);
 
+  let globalword = null;
   let matchedWord = null;
-  if (forbiddenWords.size > 0 && !Object.values(exclusions).includes(message.channel.parentId)
-    && !Object.values(exclusions).includes(message.channel.id)) {
+  for (const word of messageWords) {
+    if (globalwords.has(word)) {
+      globalword = word
+      break;
+    }
+  }
+  if (!Object.values(exclusions).some(id => id === message.channel.parentId || id === message.channel.id)) {
     for (const word of messageWords) {
       if (forbiddenWords.has(word)) {
         matchedWord = word;
@@ -51,34 +54,23 @@ export default async function AutoMod(client, message) {
     }
   }
 
-  //test message for red flags
   const [hasInvite, everyonePing, isNewUser] = [
     inviteRegex.test(content),
     message.mentions.everyone,
-    Date.now() - member.joinedTimestamp < TWO_DAYS_MS
+    Date.now() - member.joinedTimestamp < TWO_DAYS_MS && !getUser(userId, guild.id)
   ];
 
-  //variable to flag message for automod detection
-  const hasViolation = matchedWord || hasInvite || everyonePing ||
+  const violationFlags = updateTracker(userId, message);
+  const hasViolation = globalword || matchedWord || hasInvite || everyonePing ||
     violationFlags.isMediaViolation || violationFlags.isGeneralSpam || violationFlags.isDuplicateSpam || violationFlags.isCapSpam;
   if (!hasViolation) return;
+  const evaluationResult = evaluateViolations({ hasInvite, globalword, matchedWord, everyonePing, ...violationFlags, isNewUser });
+  globalword || matchedWord || hasInvite || everyonePing ? message.delete() : null;
 
-  //delete violating message and generate reason
-  const shouldDelete = matchedWord || hasInvite || everyonePing
-  const [evaluationResult] = await Promise.all([
-    evaluateViolations({ hasInvite, matchedWord, everyonePing, ...violationFlags, isNewUser }),
-    shouldDelete ? message.delete().catch(err => {
-      console.error(`Failed to delete message message: ${err.message}`);
-      return null;
-    }) : Promise.resolve(null),
-  ]);
+  if (!evaluationResult) return;
 
-  if (!evaluationResult || !evaluationResult.violations.length) return;
-
-  // append while new to the server if joined less then two days ago
   const reasons = evaluationResult.allReasons;
-  let reasonText;
-  let lastReason = null
+  let lastReason = null, reasonText
 
   if (reasons.length >= 2)
     lastReason = reasons.pop();
@@ -89,17 +81,10 @@ export default async function AutoMod(client, message) {
   else
     reasonText = `autoMod: ${reasons.join(', ')} and ${lastReason}`;
 
-
-  // get previous activewarnings and warn weight of new warn
-  const { activeWarnings, currentWarnWeight } = await getWarnStats(userId, guild.id, evaluationResult.violations);
-
-  let { duration, unit } = getNextPunishment(activeWarnings.length + currentWarnWeight);
-  const multiplier = unitMap[unit]
-  duration = duration * multiplier;
-  if ((activeWarnings.length > 2 || currentWarnWeight > 3) && isNewUser == true)
-    punishUser({ interaction: interaction, guild: guild, target: author.id, moderatorUser: client.user, reason: reasonText, channel: channel, isAutomated: true, banflag: true });
+  if ((await getActiveWarns(userId, guild.id).length > 2 || evaluationResult.totalWeight > 3 || everyonePing || hasInvite) && isNewUser == true)
+    punishUser({ guild: guild, target: author.id, moderatorUser: client.user, reason: reasonText, channel: channel, isAutomated: true, banflag: true });
   else
-    await punishUser({ interaction: interaction, guild: guild, target: author.id, moderatorUser: client.user, reason: reasonText, channel: channel, isAutomated: true, currentWarnWeight: currentWarnWeight, duration: duration, unit: unit });
+    await punishUser({ guild: guild, target: author.id, moderatorUser: client.user, reason: reasonText, channel: channel, isAutomated: true, automodWarnWeight: evaluationResult.totalWeight });
   if (violationFlags.isGeneralSpam || violationFlags.isDuplicateSpam)
     clearSpamFlags(userId);
 }
