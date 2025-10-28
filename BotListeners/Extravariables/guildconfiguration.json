@@ -27,10 +27,14 @@
             "countingChannel": "1406810924806832218"
         },
         "exclusions": {
+            "adultcatagorey": "1235309784685744308",
+            "tickets": "1269482672389099594"
+        },
+        "mediaexclusions": {
             "hobbies": "1262972525642649610",
             "media": "1311485962567548970",
-            "adultcatagorey": "1235309784685744308",
-            "artcatagory": "1423410099124437083"
+            "artcatagory": "1423410099124437083",
+            "tickets": "1269482672389099594"
         },
         "reactions": {
             "💻": "1235323729936908379",
@@ -95,6 +99,7 @@
         "exclusions": {
             "adultcatagorey": "1347589981513711656"
         },
+        "mediaexclusions": {},
         "reactions": {
             "🔴": "1347447588919443557",
             "🟣": "1347447590928519199",
@@ -162,7 +167,13 @@
         "exclusions": {
             "adultcategory": "1388114900118667366",
             "botcommands": "1386308567866409182",
-            "mediacatagory": "1422743777424179210"
+            "createdtickets": "1427976189124808855",
+            "clamedtickets": "1427976190664380418"
+        },
+        "mediaexclusions": {
+            "mediacatagory": "1422743777424179210",
+            "createdtickets": "1427976189124808855",
+            "clamedtickets": "1427976190664380418"
         },
         "reactions": {
             "🔞": "1388113103081705502",
@@ -178,5 +189,13 @@
             "capscheckminlength": 20,
             "messagethreshold": 15
         }
+    },
+    "1410055430889275515": {
+        "modChannels": {},
+        "publicChannels": {},
+        "exclusions": {},
+        "mediaexclusions": {},
+        "roles": {},
+        "automodsettings": {}
     }
 }
