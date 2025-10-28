@@ -23,25 +23,11 @@
     "lint": "eslint .",
     "build": "npx @tailwindcss/cli -i ./input.css -o ./dist/output.css --minify",
     "watch": "npx @tailwindcss/cli -i ./input.css -o ./dist/output.css --watch",
-    "start": "pm2 start ecosystem.config.cjs",
+    "start": "pm2 start ecosystem.config.cjs --time ",
     "stop": "pm2 stop ecosystem.config.cjs",
     "dash": "pm2 dashboard",
-    "logs": "pm2 logs Febot --err --lines 200",
-    "kill": "pm2 kill"
-  },
-  "name": "bot",
-  "version": "1.0.0",
-  "description": "The extravariables folder contains the role ids that are associated with\r different reactions as well as the channel ids that are used through out\r the bot. Feel free to edit this to match your server's theme.",
-  "main": "index.js",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/SaltyTheLab/Bot.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/SaltyTheLab/Bot/issues"
-  },
-  "homepage": "https://github.com/SaltyTheLab/Bot#readme"
+    "errors": "pm2 logs Febot  --err --lines 200",
+    "kill": "pm2 kill",
+    "output": "pm2 logs Febot --out --lines 200"
+  }
 }
