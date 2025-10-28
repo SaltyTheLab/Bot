@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
         modChannelsSection: document.getElementById('modChannelsSection'),
         publicChannelsSection: document.getElementById('publicChannelsSection'),
         exclusionsSection: document.getElementById('exclusionsSection'),
+        mediaexclusionsSection: document.getElementById('mediaexclusionsSection'),
         reactionsSection: document.getElementById('reactionSection'),
         rolesSection: document.getElementById('stringSection'),
         automodSection: document.getElementById('AutomodSection'),
@@ -14,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
         fileInput: document.getElementById('fileInput'),
         addPublicChannelBtn: document.getElementById('addPublicChannelBtn'),
         addExclusionBtn: document.getElementById('addExclusionBtn'),
+        addMediaBtn: document.getElementById('addMediaBtn'),
         addReactionBtn: document.getElementById('addReactionBtn'),
         addStringBtn: document.getElementById('addStringBtn'),
         addAutoModBtn: document.getElementById('addAutomodBtn'),
@@ -50,6 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (allGuildConfigs[currentGuildId]) {
             configToRender = allGuildConfigs[currentGuildId]
             console.log(`Loading pre-existing config for guild: ${currentGuildId}`, configToRender);
+            console.log(configToRender)
         }
         else {
             configToRender = {
@@ -66,6 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 },
                 publicChannels: {},
                 exclusions: {},
+                mediaexclusions: {},
                 reactions: {},
                 roles: {},
                 automodsettings: {
@@ -85,10 +89,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderConfig(config) {
+
         const sections = {
             modChannels: 'mod',
             publicChannels: 'public',
             exclusions: 'exclusions',
+            mediaexclusions: 'media',
             reactions: 'reaction',
             roles: 'roles',
             automodsettings: 'automod'
@@ -96,6 +102,8 @@ document.addEventListener('DOMContentLoaded', () => {
         for (const key in sections) {
             if (Object.hasOwnProperty.call(config, key)) {
                 const containerId = key === 'automodsettings' ? 'automodSection' : `${key}Section`;
+                console.log(containerId)
+                console.log(elements[containerId], config[key], sections[key])
                 renderSection(elements[containerId], config[key], sections[key])
             }
         }
@@ -103,6 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function getSectionValues(container, type) {
+        console.log(container)
         const values = {};
         const divs = container.querySelectorAll('div');
         divs.forEach(div => {
@@ -169,6 +178,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     function renderSection(container, data, type) {
+        console.log(container)
         container.innerHTML = ''; // Clear the container first
         for (const key in data) {
             if (Object.hasOwnProperty.call(data, key)) {
@@ -236,15 +246,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function getFormValues() {
-        const { guildIdInput, modChannelsSection, publicChannelsSection, exclusionsSection, reactionsSection, rolesSection, automodSection } = elements;
+        const { guildIdInput, modChannelsSection, publicChannelsSection, mediaexclusionsSection, exclusionsSection, reactionsSection, rolesSection, automodSection } = elements;
         const guildId = guildIdInput.value.trim();
         const modChannels = getSectionValues(modChannelsSection, 'mod');
         const publicChannels = getSectionValues(publicChannelsSection, 'public');
         const exclusions = getSectionValues(exclusionsSection, 'exclusion');
+        const mediaexclusions = getSectionValues(mediaexclusionsSection, 'media')
         const reactions = getSectionValues(reactionsSection, 'reaction');
         const strings = getSectionValues(rolesSection, 'role');
         const automodsettings = getSectionValues(automodSection, 'automod');
-        return { guildId, config: { modChannels, publicChannels, exclusions, reactions, strings, automodsettings } };
+        return { guildId, config: { modChannels, publicChannels, exclusions, mediaexclusions, reactions, strings, automodsettings } };
     }
 
     function updateJsonPreview() {
@@ -369,6 +380,7 @@ document.addEventListener('DOMContentLoaded', () => {
     elements.fileInput.addEventListener('change', handleFileChange);
     elements.addPublicChannelBtn.addEventListener('click', () => createChannelInput(elements.publicChannelsSection, '', '', 'public'));
     elements.addExclusionBtn.addEventListener('click', () => createChannelInput(elements.exclusionsSection, '', '', 'exculsion'));
+    elements.addMediaBtn.addEventListener('click', () => createChannelInput(elements.mediaexclusionsSection, '', '', 'media'));
     elements.addReactionBtn.addEventListener('click', () => createChannelInput(elements.reactionsSection, '', '', 'reaction'));
     elements.addStringBtn.addEventListener('click', () => createChannelInput(elements.rolesSection, '', '', 'string'));
     elements.channelsContainer.addEventListener('input', updateJsonPreview)
