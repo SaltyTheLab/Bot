@@ -73,6 +73,10 @@
             data-target="exclusionsContent">
             Exclusions
           </button>
+          <button id="mediaTab" class="tab-btn px-4 py-2 text-gray-300 font-semibold border-b-2
+          border-transparent hover:border-blue-400" data-target="mediaContent">
+            Media Exclusions
+          </button>
           <button id="reactionsTab"
             class="tab-btn px-4 py-2 text-gray-300 font-semibold border-b-2 border-transparent hover:border-blue-400"
             data-target="reactionsContent">
@@ -106,7 +110,13 @@
               Add Channel Exclusion
             </button>
           </div>
-
+          <div id="mediaContent" class="tab-content bg-gray-700 p-4 rounded-xl space-y-4 shadow-inner hidden">
+            <div id="mediaexclusionsSection"></div>
+            <button id="addMediaBtn" class="mt-4 px-4 py-2 bg-blue-500 text-white
+          font-semibold rounded-lg hover: bg-blue-600 transition-colors">Add
+              Media Exclusion
+            </button>
+          </div>
           <div id="reactionsContent" class="tab-content bg-gray-700 p-4 rounded-xl space-y-4 shadow-inner hidden">
             <div id="reactionSection"></div>
             <button id="addReactionBtn"
