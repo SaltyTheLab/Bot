@@ -45,15 +45,10 @@ export async function messageCreate(client, message) {
       return;
     const lastUser = countingState.getLastUser(guildId)
     const expectedNumber = countingState.getCount(guildId) + 1
-    const keysArray = countingState.getkeys(guildId);
 
     if (parseInt(message.content.trim()) === expectedNumber && lastUser !== message.author.id) {
       countingState.increaseCount(message.author.id, guildId);
       message.react('✅')
-      return;
-    } else if (keysArray && keysArray.length > 0) {
-      countingState.removekey(guildId)
-      await message.reply({ content: `1 key used, ${keysArray.length} keys left.` })
       return;
     }
     else {
@@ -66,7 +61,7 @@ export async function messageCreate(client, message) {
       return;
     }
   }
-  if ((message.type === MessageType.Default || message.type === MessageType.Reply)) await applyUserXP(message.author.id, message, guildId);
+  if (message.type !== MessageType.UserJoin) await applyUserXP(message.author.id, message, guildId);
   if (sentbystaff || message.author.id === "521404063934447616") return;
   await AutoMod(client, message);
 }
