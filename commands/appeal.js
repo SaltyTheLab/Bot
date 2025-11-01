@@ -1,5 +1,5 @@
 import { InteractionContextType, SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder } from "discord.js";
-import { getUserforappeal } from "../Database/databasefunctions.js";
+import { getUserForAppeal } from "../Database/databasefunctions.js";
 
 export const data = new SlashCommandBuilder()
     .setContexts([InteractionContextType.BotDM])
@@ -7,7 +7,7 @@ export const data = new SlashCommandBuilder()
     .setDescription('This command is only for DMs for users who have been banned, do not use in servers.')
 
 export async function execute(interaction) {
-    const userbans = await getUserforappeal(interaction.user.id)
+    const userbans = await getUserForAppeal(interaction.user.id)
     if (!userbans || userbans.length === 0) {
         return interaction.reply('You do not have any recent ban records with our shared communities.');
     }
@@ -25,8 +25,6 @@ export async function execute(interaction) {
             }
         }
     }
-
-
     if (options.length == 0)
         return interaction.reply('I could not find any ban records for any servers i am in.')
     // Create the button

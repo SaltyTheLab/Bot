@@ -22,9 +22,8 @@ export async function messageDelete(message) {
         .setDescription([title, message.content || '_No content_\n', `[Event Link](${messageLink})`].join('\n'))
         .setThumbnail(message.author.displayAvatarURL())
         .setFooter({ text: `ID: ${message.id}` })
-        .setTimestamp();
-
-    if (imageAttachments.length > 0) mainEmbed.setImage(imageAttachments[0]);
+        .setTimestamp()
+    hasAttachment ? mainEmbed.setImage(imageAttachments[0]) : null
 
     const additionalImageEmbeds = imageAttachments.slice(1, 9).map(url =>
         new EmbedBuilder()
@@ -34,6 +33,6 @@ export async function messageDelete(message) {
             .setThumbnail(message.author.displayAvatarURL())
             .setFooter({ text: `ID: ${message.id}` })
             .setTimestamp()
-    );
-    await logChannel.send({ embeds: [mainEmbed, ...additionalImageEmbeds] });
+    )
+    await logChannel.send({ embeds: imageAttachments.length > 1 ? [mainEmbed, ...additionalImageEmbeds] : [mainEmbed] });
 };

@@ -2,7 +2,6 @@ import { EmbedBuilder } from 'discord.js';
 import guildChannelMap from "../BotListeners/Extravariables/guildconfiguration.json" with {type: 'json'};
 import { load, save } from '../utilities/jsonloaders.js';
 import { guildEmbedConfig } from './embedData.js';
-
 let messageIDs = await load('./embeds/embedIDs.json');
 function getComparableEmbed(embedData) {
     if (!embedData) return null;
@@ -86,13 +85,13 @@ export default async function embedsenders(guilds) {
             embedTasks.push(async () => {
                 try {
                     const embedData = generateEmbedData(configData, guild)
-                    if (!existingEmbedInfo) {
+                    const channel = await guild.client.channels.fetch(existingEmbedInfo.channelid) ?? null;
+                    const message = await channel.messages.fetch(existingEmbedInfo.messageId) ?? null;
+                    if (!existingEmbedInfo || !message) {
                         console.log(`missing embed for ${embedName}, adding to queue...`);
                         await sendEmbedAndSave(guild, messageIDs, embedName, embedData, guildChannels);
                         return;
                     }
-                    const channel = await guild.client.channels.fetch(existingEmbedInfo.channelid) ?? null;
-                    const message = await channel.messages.fetch(existingEmbedInfo.messageId) ?? null;
                     const existingEmbedString = getComparableEmbed(message.embeds[0]);
                     const newEmbedString = getComparableEmbed(embedData.embeds[0].data);
 
@@ -103,7 +102,6 @@ export default async function embedsenders(guilds) {
                         });
                         console.log(`✅ Message '${embedName}' updated successfully.`);
 
-                        // Handle reactions
                         if (embedData.reactions) {
                             await message.reactions.removeAll();
                             const reactionPromises = embedData.reactions.map(reaction => message.react(reaction));

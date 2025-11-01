@@ -58,12 +58,12 @@ export async function execute(interaction) {
 
     if (staffcheck) {
         interaction.reply({
-            embeds: [new EmbedBuilder()
-                .setAuthor({
-                    name: target.user.tag + ' is staff, please handle this with an admin, co-owner, or owner.', iconURL: target.displayAvatarURL({ dynamic: true })
-                })
-                .setColor('#4b0808')]
-            , ephemeral: true
+            embeds: [
+                new EmbedBuilder()
+                    .setAuthor({ name: target.user.tag + ' is staff, please handle this with an admin, co-owner, or owner.', iconURL: target.displayAvatarURL({ dynamic: true }) })
+                    .setColor('#4b0808')
+            ],
+            ephemeral: true
         })
         return;
     }
@@ -72,7 +72,7 @@ export async function execute(interaction) {
         case 'mute': {
             const duration = interaction.options.getInteger('duration')
             if (duration <= 0)
-                return interaction.reply({ content: '❌ Invalid duration or unit.', ephemeral: true });
+                return interaction.reply({ content: '❌ Invalid duration', ephemeral: true });
             if (target.communicationDisabledUntilTimestamp && target.communicationDisabledUntilTimestamp > Date.now())
                 return interaction.reply({ content: '⚠️ User is already muted.', ephemeral: true });
             break;

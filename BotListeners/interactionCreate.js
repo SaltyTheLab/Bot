@@ -1,6 +1,6 @@
 import { ButtonBuilder, ButtonStyle, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, EmbedBuilder, AuditLogEvent, PermissionFlagsBits } from "discord.js";
 import punishUser from "../moderation/punishUser.js";
-import { appealsinsert, appealsget, appealupdate, getdeniedappeals } from "../Database/databasefunctions.js";
+import { appealsinsert, appealsget, appealupdate } from "../Database/databasefunctions.js";
 import { load, save } from "../utilities/jsonloaders.js";
 import guildChannelMap from "./Extravariables/guildconfiguration.json" with {type: 'json'};
 const appealinvites = {
@@ -214,11 +214,11 @@ export async function interactionCreate(interaction) {
         }
     }
     if (interaction.isButton()) {
-        if (interaction.customId.startsWith('inviter_ban_delete_invite_')) {
+        if (interaction.customId.startsWith('ban_delete_invite_')) {
             const customIdParts = interaction.customId.split('_');
-            const memberToBan = await interaction.guild.members.fetch(customIdParts[4]).catch(() => null) ?? await interaction.client.users.fetch(customIdParts[4]).catch(() => null);
-            const inviterId = customIdParts[5];
-            const inviteCode = customIdParts[6];
+            const memberToBan = await interaction.guild.members.fetch(customIdParts[4]).catch(() => null) ?? await interaction.client.users.fetch(customIdParts[3]).catch(() => null);
+            const inviterId = customIdParts[4];
+            const inviteCode = customIdParts[5];
             const fiffteenMinutesInMs = 15 * 60 * 1000;
             const messageAge = Date.now() - interaction.message.createdTimestamp
 
@@ -569,12 +569,12 @@ export async function interactionCreate(interaction) {
         if (interaction.customId.startsWith('guild_appeal')) {
             const guildId = interaction.values[0];
             const appealslist = await appealsget(interaction.user.id, guildId)
-            const deniedappeals = await getdeniedappeals(interaction.user.id, guildId)
+            const deniedappeals = appealslist.filter(appeal => appeal.denied === 1)
             if (deniedappeals.length > 0) {
                 interaction.reply(`Your previous appeal has been denied.I'm sorry.`)
                 return;
             }
-            else if (appealslist && appealslist.length >= 1) {
+            else if (appealslist && appealslist.length > 0) {
                 interaction.reply(`You have already submitted an appeal, please be patient`)
                 return;
             }

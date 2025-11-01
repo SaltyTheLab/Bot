@@ -2,12 +2,11 @@ import { EmbedBuilder } from "discord.js";
 import guildChannelMap from "./Extravariables/guildconfiguration.json" with {type: 'json'};
 export async function guildMemberUpdate(oldMember, newMember) {
     const guild = oldMember.guild;
-    const modChannels = guildChannelMap[guild.id].modChannels
     //abort if user is the same nickname
     if (oldMember.nickname === newMember.nickname) return;
 
     //get namelogchannel
-    const logChannel = await guild.channels.fetch(modChannels.namelogChannel);
+    const logChannel = await guild.channels.fetch(guildChannelMap[guild.id].modChannels.namelogChannel);
     if (!logChannel) {
         console.warn('⚠️ Name log channel not found.');
         return;

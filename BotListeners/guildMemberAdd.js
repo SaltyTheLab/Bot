@@ -8,7 +8,12 @@ export async function guildMemberAdd(member) {
     const owner = await member.guild.fetchOwner();
     const user = member.user;
     const guild = member.guild
-    const vanitycode = await member.guild.fetchVanityData();
+    let vanitycode;
+    try {
+        vanitycode = await member.guild.fetchVanityData();
+    } catch {
+        console.log(`No vanity code found for ${member.guild.id} `)
+    }
     let invites = arrayToMap(await load("./BotListeners/Extravariables/invites.json"));
     const [welcomeChannel, generalChannel, mutechannel] = [
         await guild.channels.fetch(guildChannelMap[guild.id].modChannels.welcomeChannel),
@@ -35,7 +40,7 @@ export async function guildMemberAdd(member) {
 
     const actionRow = new ActionRowBuilder()
         .addComponents(new ButtonBuilder()
-            .setCustomId(isPersistentInvite && inviter.id !== owner.user.id ? `inviter_ban_delete_invite_${member.id}_${inviter.id}_${invite.code}` : `inviter_ban_delete_invite_${member.id}_no inviter_no invite code`)
+            .setCustomId(isPersistentInvite && inviter.id !== owner.user.id ? `ban_delete_invite_${member.id}_${inviter.id}_${invite.code}` : `ban_delete_invite_${member.id}_no inviter_no invite code`)
             .setLabel(isPersistentInvite && inviter.id !== owner.user.id ? '🔨 Ban User & Delete Invite' : '🔨 Ban')
             .setStyle(ButtonStyle.Danger)
             .setDisabled(false)
