@@ -9,31 +9,17 @@ const usersCollection = db.collection('users');
 export async function getUser(userId, guildId, modflag = false) {
   let userData = await usersCollection.findOne({ userId: userId, guildId: guildId });
   if (!userData && !modflag) {
-    const newUser = {
-      userId: userId, xp: 0, level: 1, coins: 100, guildId: guildId, notes: [], punishments: [], blacklist: [], totalmessages: 0
-    }
+    const newUser = { userId: userId, xp: 0, level: 1, coins: 100, guildId: guildId, notes: [], punishments: [], blacklist: [], totalmessages: 0 }
     await usersCollection.insertOne(newUser);
     userData = newUser;
-    console.log(`[getUser] Successfully inserted and retrieved new user: ${userId} in guild ${guildId}`);
   };
   return userData;
-}
-
-export async function getUserforappeal(userId) {
-  let userData = await usersCollection.find({ userId: userId }, { projection: { userId: 1, punishments: 1, guildId: 1 } }).toArray()
-  return userData
-}
-
-export async function getdeniedappeals(userId, guildId) {
-  const appeal = await appeals.find({ userId: userId, guildId: guildId }, { projection: { denied: 1 } }).toArray()
-  return appeal;
 }
 
 export async function getRank(userId, guildId) {
   const User = await usersCollection.findOne({ userId: userId, guildId: guildId });
   if (!User)
     return null;
-
   const rank = await usersCollection.countDocuments({
     guildId: guildId,
     $or: [
@@ -42,6 +28,9 @@ export async function getRank(userId, guildId) {
     ]
   });
   return rank + 1;
+}
+export async function leaderboard(guildId) {
+  return await usersCollection.find({ guildId: guildId }).limit(10).sort({ level: -1, xp: -1 }).toArray()
 }
 
 // update user stats
@@ -64,7 +53,7 @@ export async function addNote({ userId, moderatorId, note, guildId }) {
 }
 //view the notes of a user
 export async function viewNotes(userId, guildId) {
-  const userData = await usersCollection.findOne({ userId: userId, guildId: guildId });
+  const userData = await usersCollection.findOne({ userId, guildId }, { notes: 1 })
   return userData ? userData.notes.sort((a, b) => b.timestamp - a.timestamp) : [];
 }
 //remove a note from a user
@@ -76,27 +65,21 @@ export async function deleteNote(userId, guildId, id) {
 }
 
 // --- Moderation ---
-//get all warns and mutes for a specific user
-export async function getPunishments(userId, guildId) {
-  const userData = await usersCollection.findOne({ userId, guildId });
-  return userData ? userData.punishments.sort((a, b) => b.timestamp - a.timestamp) : [];
+export async function getPunishments(userId, guildId, active = false) {
+  const userData = await usersCollection.findOne({ userId, guildId }, { punishments: 1 })
+  return active ?
+    userData.punishments.sort((a, b) => b.timestamp - a.timestamp).filter(p => p.active === 1)
+    : userData.punishments.sort((a, b) => b.timestamp - a.timestamp);
 }
-
 export async function unwarn(userId, guildId) {
-  const userdata = await usersCollection.findOne({ userId, guildId })
-  const warns = userdata.punishments.filter(e => e.type == 'Warn' && e.active == 1)
+  const userdata = await usersCollection.findOne({ userId: userId, guildId: guildId }, { punishments: 1 })
+  const warns = userdata.filter(e => e.type == 'Warn' && e.active == 1)
   const recentwarn = warns[warns.length - 1]._id.toString()
   await usersCollection.updateOne({ userId: userId, guildId: guildId },
-    { $pull: { "punishments": { _id: ObjectId.createFromHexString(recentwarn) } } }
+    { $pull: { punishments: { _id: ObjectId.createFromHexString(recentwarn) } } },
   )
 }
 
-//get mutes and warns that are only active 
-export async function getActiveWarns(userId, guildId) {
-  const userData = await usersCollection.findOne({ userId, guildId });
-  if (!userData) return [];
-  return userData.punishments.filter(p => p.active === 1).sort((a, b) => b.timestamp - a.timestamp);
-}
 export async function addPunishment(userId, moderatorId, reason, durationMs, warnType, weight, channel, guildId, messagelink) {
   const newPunishment = {
     _id: new ObjectId(), userId: userId, moderatorId: moderatorId, reason: reason, duration: durationMs, timestamp: Date.now(), active: 1, weight: weight, type: warnType, channel: channel, guildId: guildId, refrence: messagelink
@@ -112,20 +95,19 @@ export async function appealsinsert(userId, guildId, banreason, justification, e
   await appeals.insertOne(newAppeal)
 }
 export async function appealsget(userId, guildId) {
-  const appeallist = await appeals.find({ userId: userId, guildId: guildId, pending: 1 },
-    { projection: { reason: 1, justification: 1, extra: 1 } }).toArray()
+  const appeallist = await appeals.findOne({ userId: userId, guildId: guildId },
+    { projection: { pending: 1, reason: 1, justification: 1, extra: 1 } }).toArray()
   return appeallist;
 }
 export async function appealupdate(userId, guildId, approved) {
   const filter = { userId: userId, guildId: guildId }
   const update = { $set: { pending: 0 } }
-  if (approved) {
-    update.$set.approved = 1;
-    update.$pull.userId.guildId;
-  }
-  else
-    update.$set.denied = 1;
-  await appeals.updateOne(filter, update)
+  if (approved) { await appeals.deleteOne(filter); return; }
+  else { update.$set.denied = 1; await appeals.updateOne(filter, update); return; }
+}
+export async function getUserForAppeal(userId) {
+  const data = await usersCollection.find({ userId: userId }, { projection: { punishments: 1, guildId: 1 } }).toArray()
+  return data.punishments.filter(p => p.type === 'Ban')
 }
 
 //───── blacklist functions ─────
