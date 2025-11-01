@@ -1,4 +1,4 @@
-import { EmbedBuilder, SlashCommandBuilder, InteractionContextType } from "discord.js";
+import { EmbedBuilder, SlashCommandBuilder, InteractionContextType, MessageFlags } from "discord.js";
 import { getUser, saveUser } from "../Database/databasefunctions.js";
 
 export const data = new SlashCommandBuilder()
@@ -14,7 +14,7 @@ export async function execute(interaction) {
     const userData = await getUser(user.id, interaction.guild.id);
     const coincount = interaction.options.getInteger('amount')
     if (coincount > userData.coins) {
-        interaction.reply({ content: `you cannot bet more than you have ${user}`, ephemeral: true })
+        interaction.reply({ content: `you cannot bet more than you have ${user}`, flags: MessageFlags.Ephemeral })
         return;
     }
     const bet = Math.random()

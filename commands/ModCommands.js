@@ -1,4 +1,4 @@
-import { InteractionContextType, PermissionFlagsBits, SlashCommandBuilder, EmbedBuilder, GuildMember } from "discord.js";
+import { InteractionContextType, PermissionFlagsBits, SlashCommandBuilder, GuildMember, MessageFlags } from "discord.js";
 import punishUser from "../moderation/punishUser.js";
 export const data = new SlashCommandBuilder()
     .setName('member')
@@ -50,20 +50,16 @@ export async function execute(interaction) {
     const staffcheck = target instanceof GuildMember ? target.permissions.has(PermissionFlagsBits.ModerateMembers) : null
     let banflag = false
     if (target.bot)
-        return interaction.reply({ content: 'You cannot ban a bot.', ephemeral: true });
+        return interaction.reply({ content: 'You cannot ban a bot.', flags: MessageFlags.Ephemeral });
 
     if (target.id === interaction.user.id) {
-        return interaction.reply({ content: '⚠️ You cannot execute mod commands on yourself.', ephemeral: true });
+        return interaction.reply({ content: '⚠️ You cannot execute mod commands on yourself.', flags: MessageFlags.Ephemeral });
     }
 
     if (staffcheck) {
         interaction.reply({
-            embeds: [
-                new EmbedBuilder()
-                    .setAuthor({ name: target.user.tag + ' is staff, please handle this with an admin, co-owner, or owner.', iconURL: target.displayAvatarURL({ dynamic: true }) })
-                    .setColor('#4b0808')
-            ],
-            ephemeral: true
+            content: `${target.user.tag} is staff, please handle this with an admin, co-owner, or owner.`,
+            flags: MessageFlags.Ephemeral
         })
         return;
     }
@@ -72,20 +68,19 @@ export async function execute(interaction) {
         case 'mute': {
             const duration = interaction.options.getInteger('duration')
             if (duration <= 0)
-                return interaction.reply({ content: '❌ Invalid duration', ephemeral: true });
+                return interaction.reply({ content: '❌ Invalid duration', flags: MessageFlags.Ephemeral });
             if (target.communicationDisabledUntilTimestamp && target.communicationDisabledUntilTimestamp > Date.now())
-                return interaction.reply({ content: '⚠️ User is already muted.', ephemeral: true });
+                return interaction.reply({ content: '⚠️ User is already muted.', flags: MessageFlags.Ephemeral });
             break;
         }
         case 'ban': {
-            if (interaction.member.permissions.has(PermissionFlagsBits.BanMembers)) {
-                banflag = true
-                break;
-            }
-            else
+            if (!interaction.member.permissions.has(PermissionFlagsBits.BanMembers))
                 return interaction.reply({ content: 'Jr mods do not have access to this command, please contact a mod or higher in the jr mod chat.' });
+            banflag = true
+            break;
         }
     }
+
     await punishUser({
         interaction: interaction,
         guild: interaction.guild,
@@ -93,9 +88,6 @@ export async function execute(interaction) {
         moderatorUser: interaction.user,
         reason: reason,
         channel: interaction.channel,
-        isAutomated: false,
-        automodWarnWeight: 1,
         banflag: banflag,
-        buttonflag: false
     });
 }

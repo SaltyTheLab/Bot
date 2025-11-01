@@ -53,12 +53,12 @@ export async function execute(interaction) {
             { attachment: resolve(`./${logo.image}`), name: 'logo.png' }
         ],
         components: [buttons],
-        fetchReply: true
+        withResponse: true
     },);
-    const collector = interaction.channel.createMessageComponentCollector(
+    const collector = message.resource.message.createMessageComponentCollector(
         {
             componentType: ComponentType.Button,
-            filter: i => i.message.id === message.id,
+            filter: i => i.message.id === message.resource.message.id,
             time: 15000
         }
     );

@@ -1,4 +1,4 @@
-import { EmbedBuilder, SlashCommandBuilder, PermissionFlagsBits, InteractionContextType, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
+import { EmbedBuilder, SlashCommandBuilder, PermissionFlagsBits, InteractionContextType, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from "discord.js";
 import { deleteNote, viewNotes, addNote, getUser } from "../Database/databasefunctions.js";
 
 export const data = new SlashCommandBuilder()
@@ -150,7 +150,7 @@ export async function execute(interaction) {
                             } else {
                                 interaction.reply({
                                     content: `${interaction.user}, please contact an admin to delete this note as two days have passed.`,
-                                    ephemeral: true
+                                    flags: MessageFlags.Ephemeral
                                 })
                             }
                             currentIndex = Math.min(currentIndex, allnotes.length - 1)
@@ -171,7 +171,6 @@ export async function execute(interaction) {
                 try {
                     if (replyMessage.embeds.length > 0 && replyMessage.components[0]) {
                         await replyMessage.edit({ components: [finalButtons] });
-                        console.log(`Note buttons for ${targetUser.tag} were disabled automatically.`);
                     }
                 } catch (error) {
                     console.error('Failed to disable buttons automatically:', error);

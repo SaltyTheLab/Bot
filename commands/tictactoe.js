@@ -118,12 +118,12 @@ export async function execute(interaction) {
     const sentMessage = await interaction.reply({
         embeds: [generateEmbed(`It's ${currentplayer}'s turn to move `)],
         components: generateButtons(gameBoard),
-        fetchReply: true
+        withResponse: true
     });
 
     const collector = interaction.channel.createMessageComponentCollector({
         ComponentType: ComponentType.Button,
-        filter: i => i.message.id === sentMessage.id,
+        filter: i => i.message.id === sentMessage.resource.message.id,
         time: 120000
     })
 

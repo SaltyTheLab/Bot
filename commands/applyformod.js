@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, InteractionContextType, StringSelectMenuOptionBuilder, StringSelectMenuBuilder, ActionRowBuilder } from "discord.js";
+import { SlashCommandBuilder, InteractionContextType, StringSelectMenuOptionBuilder, StringSelectMenuBuilder, ActionRowBuilder, MessageFlags } from "discord.js";
 import { save, load } from "../utilities/jsonloaders.js";
 const ages = [
     { label: '12 or under', range: '12 or under' },
@@ -39,6 +39,6 @@ export async function execute(interaction) {
     })
     interaction.reply({
         content: `check your dms <@${userId}>!`,
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
     })
 }

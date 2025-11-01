@@ -1,4 +1,4 @@
-import { ButtonBuilder, ButtonStyle, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, EmbedBuilder, AuditLogEvent, PermissionFlagsBits } from "discord.js";
+import { ButtonBuilder, ButtonStyle, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, EmbedBuilder, AuditLogEvent, PermissionFlagsBits, MessageFlags } from "discord.js";
 import punishUser from "../moderation/punishUser.js";
 import { appealsinsert, appealsget, appealupdate } from "../Database/databasefunctions.js";
 import { load, save } from "../utilities/jsonloaders.js";
@@ -164,7 +164,7 @@ export async function interactionCreate(interaction) {
                 await interaction.reply({
                     content: 'You have already filled out this section. Click the button below to continue to the next section.',
                     components: [row],
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
                 return;
             } else {
@@ -209,7 +209,7 @@ export async function interactionCreate(interaction) {
             interaction.reply({
                 content: 'Part 1 of your application has been submitted! Click the button below to continue to the next section.',
                 components: [row],
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             })
         }
     }
@@ -223,12 +223,12 @@ export async function interactionCreate(interaction) {
             const messageAge = Date.now() - interaction.message.createdTimestamp
 
             if (!interaction.member.permissions.has('BAN_MEMBERS')) {
-                await interaction.reply({ content: 'You do not have permission to ban members.', ephemeral: true });
+                await interaction.reply({ content: 'You do not have permission to ban members.', flags: MessageFlags.Ephemeral });
                 return;
             }
 
             if (messageAge > fiffteenMinutesInMs) {
-                await interaction.reply({ content: 'This ban button has expired (15 mins have already passed since they joined).', ephemeral: true });
+                await interaction.reply({ content: 'This ban button has expired (15 mins have already passed since they joined).', flags: MessageFlags.Ephemeral });
 
                 const originalMessage = interaction.message;
                 const banbuttonLabel = originalMessage.components[0].components[0].label;
@@ -253,11 +253,11 @@ export async function interactionCreate(interaction) {
             let finalMessage = ``;
 
             // Ban the user who just joined
-            await punishUser({ interaction: interaction, guild: interaction.guild, target: memberToBan, moderatorUser: interaction.user, reason: 'troll', channel: interaction.channel, isAutomated: false, automodWarnWeight: 1, banflag: true, buttonflag: true, messageid: messageid });
+            await punishUser({ interaction: interaction, guild: interaction.guild, target: memberToBan, moderatorUser: interaction.user, reason: 'troll', channel: interaction.channel, banflag: true, buttonflag: true, messageid: messageid });
             finalMessage = `Banned ${userToBan}.`;
             if (inviterId !== 'no inviter') {
                 const inviterMember = await interaction.guild.members.fetch(inviterId).catch(() => null);
-                await punishUser({ interaction: interaction, guild: interaction.guild, target: inviterId, moderatorUser: interaction.user, reason: 'troll', channel: interaction.channel, isAutomated: false, automodWarnWeight: 1, banflag: true, buttonflag: true, messageid: messageid });
+                await punishUser({ interaction: interaction, guild: interaction.guild, target: inviterId, moderatorUser: interaction.user, reason: 'troll', channel: interaction.channel, banflag: true, buttonflag: true, messageid: messageid });
                 finalMessage += `, inviter ${inviterMember.user.tag}.`;
             }
             if (inviteCode !== 'no invite code') {
@@ -306,7 +306,7 @@ export async function interactionCreate(interaction) {
             const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator)
             const Adminchannel = guildChannelMap[guild.id].modChannels.AdminChannel
             if (!isAdmin) {
-                interaction.reply({ content: `Please wait for an admin to make a decision. `, ephemeral: true })
+                interaction.reply({ content: `Please wait for an admin to make a decision. `, flags: MessageFlags.Ephemeral })
                 Adminchannel.send({ content: `Letting you know ${interaction.user} tried to jump the gun on an appeal.` })
                 return;
             }
@@ -563,7 +563,7 @@ export async function interactionCreate(interaction) {
                 replyContent = 'No role changes were made.';
             }
 
-            await interaction.editReply({ content: replyContent, ephemeral: true });
+            await interaction.editReply({ content: replyContent, flags: MessageFlags.Ephemeral });
             console.log(`✅ Roles updated for ${member.user.tag} via select menu.Added: [${rolesAdded.join(', ')}], Removed: [${rolesRemoved.join(', ')}]`);
         }
         if (interaction.customId.startsWith('guild_appeal')) {
@@ -633,7 +633,7 @@ export async function interactionCreate(interaction) {
                 interaction.reply({
                     content: 'You have already filled out the first part. Click the button below to continue to the next section.',
                     components: [row],
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 })
                 return;
             } else {

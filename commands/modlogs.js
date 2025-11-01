@@ -116,10 +116,11 @@ export async function execute(interaction) {
 
     replyMessage = await interaction.reply({
         embeds: [await buildLogEmbed(interaction, currentLog, currentIndex, allLogs.length)],
-        components: [await buildButtons(currentIndex, allLogs.length, isAdmin, currentLog._id)], fetchReply: true
+        components: [await buildButtons(currentIndex, allLogs.length, isAdmin, currentLog._id)],
+        withResponse: true
     });
 
-    const collector = replyMessage.createMessageComponentCollector({
+    const collector = replyMessage.resource.message.createMessageComponentCollector({
         filter: i => i.user.id === moderatorUser.id,
         time: fiveMinutesInMs
     });
@@ -142,7 +143,7 @@ export async function execute(interaction) {
                     allLogs = await getPunishments(targetUser.id, interaction.guild.id);
 
                     if (allLogs.length === 0) {
-                        replyMessage = await replyMessage.edit({
+                        replyMessage = await replyMessage.resource.message.edit({
                             embeds: [new EmbedBuilder()
                                 .setDescription(`All modlogs for ${targetUser} have been deleted.`)],
                             components: []
@@ -157,7 +158,7 @@ export async function execute(interaction) {
                 break;
         }
         currentLog = allLogs[currentIndex];
-        replyMessage = await replyMessage.edit({
+        replyMessage = await replyMessage.resource.message.edit({
             embeds: [await buildLogEmbed(interaction, currentLog, currentIndex, allLogs.length)],
             components: [await buildButtons(currentIndex, allLogs.length, isAdmin, currentLog._id)],
             fetchReply: true
