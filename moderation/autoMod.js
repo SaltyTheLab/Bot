@@ -7,10 +7,6 @@ import { LRUCache } from 'lru-cache';
 import Denque from 'denque';
 
 const userMessageTrackers = new LRUCache({ max: 200, ttl: 30 * 60 * 1000, updateAgeOnGet: true, });
-const forbiddenWords = new Set(forbbidenWordsData.map(w => w.toLowerCase()));
-const globalwords = new Set(globalwordsData.map(w => w.toLowerCase()))
-const inviteRegex = /(https?:\/\/)?(www\.)?(discord\.gg|discord(app)?\.com\/invite)\/[a-zA-Z0-9-]+/i;
-const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
 
 function getOrCreateTracker(userId, guildId) {
   const initialTrackerState = () => ({ total: 0, mediaCount: 0, timestamps: new Denque(), duplicateCounts: new Map(), recentMessages: new Denque() })
@@ -62,16 +58,16 @@ function updateTracker(userId, message) {
     }
   }
 
-  const isDuplicateSpam = (tracker.duplicateCounts.get(content) || 0) > DUPLICATE_SPAM_THRESHOLD;
-  const isMediaViolation = tracker.mediaCount > mediathreshold && tracker.total < messageThreshold;
-  const isGeneralSpam = tracker.timestamps.size() > GENERAL_SPAM_THRESHOLD;
-  const isCapSpam = upperRatio > capsthreshold;
-  if (isMediaViolation) tracker.mediaCount = 0;
-  if (isGeneralSpam) tracker.recentMessages.clear();
-  if (isDuplicateSpam) tracker.duplicateCounts.clear();
+  const DuplicateSpam = (tracker.duplicateCounts.get(content) || 0) > DUPLICATE_SPAM_THRESHOLD;
+  const MediaViolation = tracker.mediaCount > mediathreshold && tracker.total < messageThreshold;
+  const GeneralSpam = tracker.timestamps.size() > GENERAL_SPAM_THRESHOLD;
+  const CapSpam = upperRatio > capsthreshold;
+  MediaViolation ? tracker.mediaCount = 1 : null;
+  GeneralSpam ? tracker.recentMessages.clear() : null;
+  DuplicateSpam ? tracker.duplicateCounts.clear() : null;
   if (tracker.total >= messageThreshold) { tracker.total = 0; tracker.mediaCount = 0; tracker.timestamps.clear(); }
   userMessageTrackers.set(userId, tracker)
-  return { isMediaViolation, isGeneralSpam, isDuplicateSpam, isCapSpam };
+  return { MediaViolation, GeneralSpam, DuplicateSpam, CapSpam };
 }
 
 function hasMedia(message) {
@@ -91,7 +87,7 @@ function evaluateViolations(hasInvite, globalword, matchedWord, everyonePing, is
     { flag: hasInvite, type: 'invite', reason: 'Discord invite', Weight: 2 },
     { flag: globalword, type: 'banned Word', reason: "Saying a slur", Weight: 2 },
     { flag: matchedWord, type: 'nsfw Word', reason: `NSFW word "${matchedWord}"`, Weight: 1 },
-    { flag: everyonePing, type: 'everyoneping', reason: 'Mass ping', Weight: 2 },
+    { flag: everyonePing, type: 'everyoneping', reason: 'Mass pinging', Weight: 2 },
     { flag: isGeneralSpam, type: 'spam', reason: 'Spamming', Weight: 1 },
     { flag: isDuplicateSpam, type: 'spam', reason: 'Spamming the same message', Weight: 1 },
     { flag: isMediaViolation, type: 'mediaViolation', reason: 'Media violation', Weight: 1 },
@@ -104,6 +100,10 @@ function evaluateViolations(hasInvite, globalword, matchedWord, everyonePing, is
 }
 
 export default async function AutoMod(client, message) {
+  const forbiddenWords = new Set(forbbidenWordsData.map(w => w.toLowerCase()));
+  const globalwords = new Set(globalwordsData.map(w => w.toLowerCase()))
+  const inviteRegex = /(https?:\/\/)?(www\.)?(discord\.gg|discord(app)?\.com\/invite)\/[a-zA-Z0-9-]+/i;
+  const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
   const { author, content, member, guild, channel } = message;
   const messageWords = content.toLowerCase().split(/\s+/);
   const [hasInvite, everyonePing, isNewUser] = [
@@ -127,24 +127,24 @@ export default async function AutoMod(client, message) {
       }
     }
   }
-  const { isGeneralSpam, isDuplicateSpam, isCapSpam, isMediaViolation } = updateTracker(author.id, message);
-  const { reasons, totalWeight } = evaluateViolations(hasInvite, globalword, matchedWord, everyonePing, isGeneralSpam, isDuplicateSpam, isMediaViolation, isCapSpam, isNewUser);
+  const { GeneralSpam, DuplicateSpam, CapSpam, MediaViolation } = updateTracker(author.id, message);
+  const { reasons, totalWeight } = evaluateViolations(hasInvite, globalword, matchedWord, everyonePing, GeneralSpam, DuplicateSpam, MediaViolation, CapSpam, isNewUser);
   if (totalWeight == 0) return;
 
   globalword || matchedWord || hasInvite || everyonePing ? message.delete() : null;
-  let lastReason, reasonText;
+  let lastReason = null, reasonText;
 
   if (reasons.length >= 2)
     lastReason = reasons.pop();
   if (lastReason == 'while new to the server.')
     reasonText = `AutoMod: ${reasons.join(', ')} ${lastReason}`;
-  else if (reasons.length == 1)
-    reasonText = lastReason !== null ? `autoMod: ${reasons} and ${lastReason}` : `autoMod: ${reasons}`;
+  if (reasons.length === 1)
+    reasonText = lastReason !== null ? `AutoMod: ${reasons} and ${lastReason}` : `AutoMod: ${reasons}`;
   else
-    reasonText = `autoMod: ${reasons.join(', ')} and ${lastReason}`;
+    reasonText = `AutoMod: ${reasons.join(', ')} and ${lastReason}`;
 
   if ((await getPunishments(author.id, guild.id, true).length > 2 || totalWeight >= 3 || everyonePing || hasInvite) && isNewUser == true)
     punishUser({ guild: guild, target: author.id, moderatorUser: client.user, reason: reasonText, channel: channel, isAutomated: true, banflag: true });
   else
-    await punishUser({ guild: guild, target: author.id, moderatorUser: client.user, reason: reasonText, channel: channel, isAutomated: true, automodWarnWeight: totalWeight });
+    await punishUser({ guild: guild, target: author.id, moderatorUser: client.user, reason: reasonText, channel: channel, isAutomated: true, currentWarnWeight: totalWeight });
 }

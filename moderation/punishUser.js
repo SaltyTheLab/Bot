@@ -27,7 +27,7 @@ function getNextPunishment(weightedWarns) {
 
   return { type, duration, unit, label };
 }
-export default async function punishUser({ interaction = null, guild, target, moderatorUser, reason, channel, isAutomated = true, automodWarnWeight = 1, banflag = false, buttonflag = false, messageid = null
+export default async function punishUser({ interaction = null, guild, target, moderatorUser, reason, channel, isAutomated = false, currentWarnWeight = 1, banflag = false, buttonflag = false, messageid = null
 }) {
   const targetUser = await guild.members.fetch(target).catch(() => null) ?? await guild.client.users.fetch(target).catch(() => null);
   const userTag = targetUser instanceof GuildMember ? targetUser.user.tag : targetUser.tag
@@ -44,7 +44,6 @@ export default async function punishUser({ interaction = null, guild, target, mo
   let sentMessage = null;
   let warnType = banflag ? 'Ban' : (interaction && interaction.options.getSubcommand() === 'mute') ? 'Mute' : 'Warn';
   let durationMs = 0;
-  let currentWarnWeight = automodWarnWeight; // Default weight is 1 for manual warn
   let durationStr = '';
 
   if (!usercheck && interaction) {
@@ -99,7 +98,7 @@ export default async function punishUser({ interaction = null, guild, target, mo
   if (!buttonflag && isAutomated)
     sentMessage = await channel.send({ embeds: [commandEmbed] });
   else if (!isAutomated && sentMessage == null)
-    sentMessage = await interaction.reply({ embeds: [commandEmbed], fetchReply: true });
+    sentMessage = await interaction.reply({ embeds: [commandEmbed], withResponse: true });
 
   const messageLink = buttonmessage ?? `https://discord.com/channels/${guild.id}/${channel.id}/${sentMessage.id}`;
   const formattedReason = buttonflag ? `Button Ban: ${reason}`
