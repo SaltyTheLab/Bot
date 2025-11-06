@@ -86,7 +86,6 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
     const targetUser = interaction.options.getUser('user');
-    const moderatorUser = interaction.user;
     const fiveMinutesInMs = 5 * 60 * 1000;
     const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
     const usercheck = await getUser(targetUser.id, interaction.guild.id, true);
@@ -121,7 +120,7 @@ export async function execute(interaction) {
     });
 
     const collector = replyMessage.resource.message.createMessageComponentCollector({
-        filter: i => i.user.id === moderatorUser.id,
+        filter: i => i.user.id === interaction.user.id,
         time: fiveMinutesInMs
     });
 

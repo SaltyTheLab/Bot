@@ -180,11 +180,8 @@ export async function execute(interaction) {
             return;
         }
 
-        if (gameBoard[move] !== ' ') {
-            console.log(`Debug: User ${i.user.username} clicked button ${move}. The spot is already taken by ${gameBoard[move]}.`);
+        if (gameBoard[move] !== ' ')
             return i.reply({ content: "That cell is already taken! Please wait for the buttons to update before making your next move.", ephemeral: true });
-        }
-
         gameBoard[move] = playerMark;
 
         if (checkWinner(gameBoard, playerMark)) {
@@ -195,7 +192,7 @@ export async function execute(interaction) {
             })
             const userData = await getUser(currentplayer.id, interaction.guild.id)
             userData.coins += 100;
-            saveUser({ userData })
+            saveUser(currentplayer.id, interaction.guild.id, { userData })
             return;
         }
 
@@ -223,11 +220,10 @@ export async function execute(interaction) {
     });
 
     collector.on('end', (collected, reason) => {
-        if (reason === 'time') {
+        if (reason === 'time')
             interaction.editReply({
                 embeds: [generateEmbed(`The game ended due to inactivity.`, "Red")],
                 components: generateButtons(gameBoard, true)
             });
-        }
     });
 }

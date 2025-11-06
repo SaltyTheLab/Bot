@@ -10,7 +10,7 @@ export const data = new SlashCommandBuilder()
     )
 
 export async function execute(interaction) {
-    const user = await interaction.user;
+    const user = interaction.user;
     const userData = await getUser(user.id, interaction.guild.id);
     const coincount = interaction.options.getInteger('amount')
     if (coincount > userData.coins) {
@@ -39,7 +39,7 @@ export async function execute(interaction) {
         if (userData.coins < 0)
             userData.coins = 0
     }
-    saveUser({ userData });
+    await saveUser(user.id, interaction.guild.id, { userData });
     interaction.reply(
         {
             embeds: [result]
