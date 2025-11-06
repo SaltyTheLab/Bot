@@ -1,9 +1,10 @@
-import { EmbedBuilder, SlashCommandBuilder, } from "discord.js";
+import { EmbedBuilder, InteractionContextType, SlashCommandBuilder, } from "discord.js";
 import { leaderboard } from "../Database/databasefunctions.js";
 
 export const data = new SlashCommandBuilder()
     .setName(`leaderboard`)
     .setDescription(`Show the top ten users`)
+    .setContexts(InteractionContextType.Guild)
 
 export async function execute(interaction) {
     const board = await leaderboard(interaction.guild.id)

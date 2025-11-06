@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, InteractionContextType, StringSelectMenuOptionBuilder, StringSelectMenuBuilder, ActionRowBuilder, MessageFlags } from "discord.js";
-import { save, load } from "../utilities/jsonloaders.js";
+import { save, load } from "../utilities/fileeditors.js";
 const ages = [
     { label: '12 or under', range: '12 or under' },
     { label: '13 to 15', range: '13-15' },
@@ -12,16 +12,17 @@ export const data = new SlashCommandBuilder()
     .setContexts(InteractionContextType.Guild)
 
 export async function execute(interaction) {
+    const filepath = "Extravariables/applications.json"
     const userId = interaction.user.id;
     const guild = interaction.guild;
-    let applications = await load("BotListeners/Extravariables/applications.json");
+    let applications = await load(filepath);
     if ((!Object.hasOwn(applications, userId))) {
         applications[userId] = {}
         applications[userId].guild = guild.id
         applications[userId].Agerange = null
-        save("BotListeners/Extravariables/applications.json", applications)
+        save(filepath, applications)
     }
-    applications = await load("BotListeners/Extravariables/applications.json");
+    applications = await load(filepath);
     const ageoptions = ages.map(age => new StringSelectMenuOptionBuilder()
         .setLabel(age.label)
         .setValue(age.range))

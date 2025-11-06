@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle, InteractionContextType, ComponentType } from "discord.js";
 import { getUser, saveUser } from "../Database/databasefunctions.js";
 import { resolve } from 'node:path';
-import { load } from "../utilities/jsonloaders.js";
+import { load } from "../utilities/fileeditors.js";
 
 function getRandomColor() {
     const randomHex = Math.floor(Math.random() * 16777215)
@@ -87,7 +87,7 @@ export async function execute(interaction) {
         if (i.customId === logo.brand) {
             const userData = await getUser(interaction.user.id, interaction.guild.id);
             userData.coins += 20;
-            saveUser({ userData });
+            await saveUser(interaction.user.id, interaction.guild.id, { userData });
         }
         await i.update({
             components: [updatedButtons],

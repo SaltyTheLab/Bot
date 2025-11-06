@@ -1,6 +1,6 @@
 import { InteractionContextType, PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
-import { save, load } from "../utilities/jsonloaders.js";
-import guildChannelMap from "../BotListeners/Extravariables/guildconfiguration.json" with {type: 'json'};
+import { save, load } from "../utilities/fileeditors.js";
+import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'};
 export const data = new SlashCommandBuilder()
     .setName('applications')
     .setDescription('Open/close applications')
@@ -15,7 +15,7 @@ export const data = new SlashCommandBuilder()
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
 
 export async function execute(interaction) {
-    const filepath = "BotListeners/Extravariables/applications.json"
+    const filepath = "Extravariables/invites.json"
     const command = interaction.options.getSubcommand();
     const channel = interaction.guild.channels.cache.get(guildChannelMap[interaction.guild.id].modChannels.applyChannel)
     const everyone = interaction.guild.roles.everyone;
