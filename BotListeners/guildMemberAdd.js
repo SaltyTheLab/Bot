@@ -1,24 +1,19 @@
 import { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } from "discord.js";
-import { load, save } from "../utilities/jsonloaders.js";
-import guildChannelMap from "./Extravariables/guildconfiguration.json" with {type: 'json'};
+import { load, save } from "../utilities/fileeditors.js";
+import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'};
 const fifteenMinutesInMs = 15 * 60 * 1000
 export async function guildMemberAdd(member) {
+    const filepath = "../Extravariables/invites.json"
     const arrayToMap = (arr) => new Map(arr.map(item => [item.key, item.uses]));
     const mapToArray = (map) => Array.from(map.entries()).map(([key, uses]) => ({ key, uses }));
     const owner = await member.guild.fetchOwner();
     const user = member.user;
-    const guild = member.guild
-    let vanitycode;
-    try {
-        vanitycode = await member.guild.fetchVanityData();
-    } catch {
-        console.log(`No vanity code found for ${member.guild.id} `)
-    }
-    let invites = arrayToMap(await load("./BotListeners/Extravariables/invites.json"));
+    const guild = member.guild;
+    let invites = arrayToMap(await load(filepath));
     const [welcomeChannel, generalChannel, mutechannel] = [
-        await guild.channels.fetch(guildChannelMap[guild.id].modChannels.welcomeChannel),
-        await guild.channels.fetch(guildChannelMap[guild.id].publicChannels.generalChannel),
-        await guild.channels.fetch(guildChannelMap[guild.id].modChannels.mutelogChannel),
+        member.client.channels.cache.get(guildChannelMap[guild.id].modChannels.welcomeChannel),
+        member.client.channels.cache.get(guildChannelMap[guild.id].publicChannels.generalChannel),
+        member.client.channels.cache.get(guildChannelMap[guild.id].modChannels.mutelogChannel),
     ]
 
     const welcomeEmbed = new EmbedBuilder()
@@ -32,27 +27,24 @@ export async function guildMemberAdd(member) {
     let inviter = null;
     let invite = null;
     let isPersistentInvite = false;
-
     invite = newInvites.find(i => {
         const oldUses = invites.get(`${guild.id}-${i.code}`) || 0;
         return i.uses === oldUses + 1;
     });
 
+    if (invite) { inviter = invite.inviter; isPersistentInvite = true; }
     const actionRow = new ActionRowBuilder()
         .addComponents(new ButtonBuilder()
-            .setCustomId(isPersistentInvite && inviter.id !== owner.user.id ? `ban_delete_invite_${member.id}_${inviter.id}_${invite.code}` : `ban_delete_invite_${member.id}_no inviter_no invite code`)
+            .setCustomId(isPersistentInvite && inviter.id !== owner.user.id ? `ban_${member.id}_${inviter.id}_${invite.code}` : `ban_${member.id}_no inviter_no invite code`)
             .setLabel(isPersistentInvite && inviter.id !== owner.user.id ? '🔨 Ban User & Delete Invite' : '🔨 Ban')
             .setStyle(ButtonStyle.Danger)
             .setDisabled(false)
         );
-
-    if (invite) { inviter = invite.inviter; isPersistentInvite = true; }
-
-    inviter ? welcomeEmbed.setFooter({ text: `Invited by: ${inviter.tag} | ${invite.code}`, iconURL: inviter.displayAvatarURL({ dynamic: true }) })
-        : welcomeEmbed.setFooter({ text: vanitycode ? `user used the vanity url: ${vanitycode.code}` : '' })
+    if (inviter)
+        welcomeEmbed.setFooter({ text: `Invited by: ${inviter.tag} | ${invite.code}`, iconURL: inviter.displayAvatarURL({ dynamic: true }) })
 
     newInvites.forEach(i => { invites.set(`${guild.id}-${i.code}`, i.uses); });
-    await save("./BotListeners/Extravariables/invites.json", mapToArray(invites))
+    await save(filepath, mapToArray(invites))
 
     await generalChannel.send({
         embeds: [new EmbedBuilder()

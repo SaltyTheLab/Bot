@@ -1,12 +1,10 @@
-import guildChannelMap from "./Extravariables/guildconfiguration.json" with {type: 'json'};
+import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'};
 import { getblacklist } from '../Database/databasefunctions.js';
-import { load } from '../utilities/jsonloaders.js';
+import { load } from '../utilities/fileeditors.js';
 async function handleReactionChange(reaction, user, action = 'add') {
   const embedIDs = await load("embeds/EmbedIDs.json");
   if (user.bot) return;
-  const reactions = guildChannelMap[reaction.message.guild.id].reactions;
   const member = await reaction.message.guild.members.fetch(user.id);
-
   try {
     if (reaction.partial) reaction = await reaction.fetch();
     if (reaction.message && reaction.message.partial) await reaction.message.fetch();
@@ -15,26 +13,21 @@ async function handleReactionChange(reaction, user, action = 'add') {
     console.error(`❌ Failed to fetch reaction or user (${action}):`, err);
     return;
   }
-  const guildEmbeds = embedIDs[reaction.message.guild.id];
-  const isValidMessageId = guildEmbeds.some(embedInfo => embedInfo.messageId === reaction.message.id);
+  const isValidMessageId = embedIDs[reaction.message.guild.id].some(embedInfo => embedInfo.messageId === reaction.message.id);
 
   if (!isValidMessageId)
     return;
 
   const emoji = reaction.emoji.id || reaction.emoji.name;
-  const roleID = reactions[emoji];
+  const roleID = guildChannelMap[reaction.message.guild.id].reactions[emoji];
 
   if (!roleID) { console.log(`⚠️ No role mapped to emoji: ${emoji}`); return; }
 
   if (await getblacklist(user.id, reaction.message.guild.id).length > 0 && await getblacklist(user.id, reaction.message.guild.id).find(r => r === roleID))
     return;
 
-  try {
-    const rolesToModify = Array.isArray(roleID) ? roleID : [roleID];
-    await member.roles[action](rolesToModify);
-  } catch (err) {
-    console.error(`❌ Failed to ${action} role(s):`, err);
-  }
+  await member.roles[action]([roleID]).catch(err => console.error(`❌ Failed to ${action} role(s):`, err))
+
 }
 export async function messageReactionAdd(reaction, user) {
   await handleReactionChange(reaction, user, 'add');

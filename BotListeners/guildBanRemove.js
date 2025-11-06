@@ -1,11 +1,11 @@
 import { EmbedBuilder } from "discord.js";
-import guildChannelMap from "./Extravariables/guildconfiguration.json" with {type: 'json'};
+import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'};
 import { getPunishments } from "../Database/databasefunctions.js";
 
 export async function guildBanRemove(ban) {
     const user = ban.user
     const guild = ban.guild
-    const banlogChannel = await guild.channels.fetch(guildChannelMap[guild.id].modChannels.banlogChannel);
+    const banlogChannel = ban.client.channels.cache.get(guildChannelMap[guild.id].modChannels.banlogChannel);
     const punishments = await getPunishments(user.id, guild.id);
     const bans = punishments.filter(punishment => punishment.type === 'Ban');
 
@@ -13,7 +13,6 @@ export async function guildBanRemove(ban) {
         console.warn('⚠️ Ban log channel not found for unban.');
         return;
     }
-    // Create an embed for the unban
     const embed = new EmbedBuilder()
         .setColor(0x309eff) // A distinct color for unbans
         .setTitle('A member was unbanned')

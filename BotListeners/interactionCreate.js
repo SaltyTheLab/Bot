@@ -1,15 +1,15 @@
 import { ButtonBuilder, ButtonStyle, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, EmbedBuilder, AuditLogEvent, PermissionFlagsBits, MessageFlags } from "discord.js";
 import punishUser from "../moderation/punishUser.js";
 import { appealsinsert, appealsget, appealupdate } from "../Database/databasefunctions.js";
-import { load, save } from "../utilities/jsonloaders.js";
-import guildChannelMap from "./Extravariables/guildconfiguration.json" with {type: 'json'};
+import { load, save } from "../utilities/fileeditors.js";
+import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'};
 const appealinvites = {
     '1231453115937587270': 'https://discord.gg/xpYnPrSXDG',
     '1342845801059192913': 'https://discord.gg/nWj5KvgUt9'
 }
-const filepath = "./BotListeners/Extravariables/applications.json"
+const filepath = "Extravariables/applications.json"
+const invitefilepath = "Extravariables/invites.json"
 let applications = await load(filepath)
-const invitefilepath = "BotListeners/Extravariables/invites.json"
 let invites = await load(invitefilepath)
 
 export async function interactionCreate(interaction) {
@@ -17,11 +17,10 @@ export async function interactionCreate(interaction) {
     if (interaction.isChatInputCommand()) {
         const commandName = interaction.commandName;
         let command = interaction.client.commands.get(commandName) ?? interaction.client.commands.get(`${interaction.guild.id}:${commandName}`)
-
         if (!command) {
             console.warn(`[WARN] Command '${commandName}' not found in map.`);
             if (!interaction.deferred && !interaction.replied) {
-                await interaction.reply({ content: 'Sorry, that command is not currently available.', ephemeral: true });
+                await interaction.reply({ content: 'Sorry, that command is not currently available.', flags: MessageFlags.Ephemeral });
             }
             return;
         }
@@ -30,9 +29,9 @@ export async function interactionCreate(interaction) {
         } catch (error) {
             console.error(`❌ Error executing command ${commandName}: `, error);
             if (interaction.replied || interaction.deferred)
-                await interaction.followUp({ content: 'There was an error while executing this command!', ephemeral: true });
+                await interaction.followUp({ content: 'There was an error while executing this command!', flags: MessageFlags.Ephemeral });
             else
-                await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
+                await interaction.reply({ content: 'There was an error while executing this command!', flags: MessageFlags.Ephemeral });
         }
     }
     if (interaction.isModalSubmit()) {
@@ -44,8 +43,8 @@ export async function interactionCreate(interaction) {
             try {
                 const targetUserid = interaction.user.id
                 // Try to get the guild. This will fail if the bot is not a member.
-                const guild = await interaction.client.guilds.fetch(guildId);
-                const appealChannel = await guild.channels.fetch(guildChannelMap[guild.id].modChannels.appealChannel);
+                const guild = interaction.client.guilds.cache.get(guildId);
+                const appealChannel = interaction.client.channels.get(guildChannelMap[guild.id].modChannels.appealChannel);
                 const modRole = guild.roles.cache.find(role =>
                     ((role.permissions.has('KickMembers') || role.permissions.has('BanMembers'))) &&
                     role.name.toLowerCase().includes('mod') && !role.managed
@@ -55,7 +54,7 @@ export async function interactionCreate(interaction) {
                 if (!appealChannel) {
                     return await interaction.reply({
                         content: 'The appeal channel for that guild could not be found. Please contact a moderator directly.',
-                        ephemeral: true
+                        flags: MessageFlags.Ephemeral
                     });
                 }
                 const appealEmbed = new EmbedBuilder()
@@ -99,7 +98,7 @@ export async function interactionCreate(interaction) {
             } catch (error) {
                 console.error(`Failed to handle ban appeal for guild ID ${guildId}:`, error);
                 // Inform the user that the appeal could not be delivered
-                await interaction.reply({ content: 'The appeal could not be submitted. This may be because the bot is not in that guild. Please contact a moderator for that guild directly.', ephemeral: true });
+                await interaction.reply({ content: 'The appeal could not be submitted. This may be because the bot is not in that guild. Please contact a moderator for that guild directly.', flags: MessageFlags.Ephemeral });
             }
             appealsinsert(interaction.user.id, guildId, reason, justification, extra);
         }
@@ -185,7 +184,7 @@ export async function interactionCreate(interaction) {
                 await interaction.reply({
                     content: 'Part 2 of your application has been submitted! Click the button below to continue to the next section.',
                     components: [row],
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
 
             }
@@ -214,11 +213,11 @@ export async function interactionCreate(interaction) {
         }
     }
     if (interaction.isButton()) {
-        if (interaction.customId.startsWith('ban_delete_invite_')) {
+        if (interaction.customId.startsWith('ban_')) {
             const customIdParts = interaction.customId.split('_');
-            const memberToBan = await interaction.guild.members.fetch(customIdParts[4]).catch(() => null) ?? await interaction.client.users.fetch(customIdParts[3]).catch(() => null);
-            const inviterId = customIdParts[4];
-            const inviteCode = customIdParts[5];
+            const memberToBan = await interaction.guild.members.fetch(customIdParts[1]).catch(() => null) ?? await interaction.client.users.fetch(customIdParts[1]).catch(() => null);
+            const inviterId = customIdParts[2];
+            const inviteCode = customIdParts[3];
             const fiffteenMinutesInMs = 15 * 60 * 1000;
             const messageAge = Date.now() - interaction.message.createdTimestamp
 
@@ -246,20 +245,17 @@ export async function interactionCreate(interaction) {
                     return;
                 }
             }
-            const userToBan = await interaction.guild.members.fetch(memberToBan).catch(() => null)
-                ?? await interaction.client.users.fetch(memberToBan);
-
             const messageid = interaction.message.id;
             let finalMessage = ``;
 
-            // Ban the user who just joined
-            await punishUser({ interaction: interaction, guild: interaction.guild, target: memberToBan, moderatorUser: interaction.user, reason: 'troll', channel: interaction.channel, banflag: true, buttonflag: true, messageid: messageid });
-            finalMessage = `Banned ${userToBan}.`;
+            await punishUser({ interaction: interaction, guild: interaction.guild, target: memberToBan, moderatorUser: interaction.user, reason: 'troll', channel: interaction.channel, banflag: true, messageid: messageid });
+            finalMessage = `Banned <@${memberToBan}>`;
+
             if (inviterId !== 'no inviter') {
-                const inviterMember = await interaction.guild.members.fetch(inviterId).catch(() => null);
-                await punishUser({ interaction: interaction, guild: interaction.guild, target: inviterId, moderatorUser: interaction.user, reason: 'troll', channel: interaction.channel, banflag: true, buttonflag: true, messageid: messageid });
-                finalMessage += `, inviter ${inviterMember.user.tag}.`;
+                await punishUser({ interaction: interaction, guild: interaction.guild, target: inviterId, moderatorUser: interaction.user, reason: 'troll', channel: interaction.channel, banflag: true, messageid: messageid });
+                finalMessage += `, inviter <@${inviterId}>.`;
             }
+
             if (inviteCode !== 'no invite code') {
                 const invite = await interaction.guild.invites.fetch(inviteCode);
                 if (invite) {
@@ -269,10 +265,7 @@ export async function interactionCreate(interaction) {
                     await save(invitefilepath, invites)
                     await invite.delete()
                 }
-
                 finalMessage += ' Associated Invite was deleted'
-            } else {
-                finalMessage += ' No associated invite to delete.'
             }
 
             const finalreply = new EmbedBuilder()
@@ -297,11 +290,8 @@ export async function interactionCreate(interaction) {
             const customIdParts = interaction.customId.split('_')
             const action = customIdParts[1];
             const targetUser = await interaction.client.users.fetch(customIdParts[2])
-            const guild = await interaction.client.guilds.fetch(customIdParts[3]);
+            const guild = interaction.client.guilds.cache.get(customIdParts[3]);
             const appeals = await appealsget(targetUser.id, guild.id)
-            const reason = appeals[0].reason
-            const justification = appeals[0].justification
-            const extra = appeals[0].extra
             let outcome = false
             const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator)
             const Adminchannel = guildChannelMap[guild.id].modChannels.AdminChannel
@@ -318,9 +308,9 @@ export async function interactionCreate(interaction) {
                 .setColor(0x13cbd8)
                 .setTitle(`Ban appeal`)
                 .addFields(
-                    { name: 'Why did you get banned?', value: `${reason} ` },
-                    { name: 'Why do you believe that your appeal should be accepted?', value: `${justification} ` },
-                    { name: 'Is there anything else you would like us to know?', value: `${extra}` })
+                    { name: 'Why did you get banned?', value: `${appeals[0].reason} ` },
+                    { name: 'Why do you believe that your appeal should be accepted?', value: `${appeals[0].justification} ` },
+                    { name: 'Is there anything else you would like us to know?', value: `${appeals[0].extra}` })
                 .setFooter({ text: `User ID: ${targetUser.id} ` })
                 .setTimestamp()
             const response = new EmbedBuilder()
@@ -339,7 +329,7 @@ export async function interactionCreate(interaction) {
                         { name: 'Denied by:', value: `${interaction.user} `, inline: true })
                     break;
                 case 'approve': {
-                    let fetchedlogs = await guild.fetchAuditLogs({
+                    const fetchedlogs = await guild.fetchAuditLogs({
                         type: AuditLogEvent.MemberBanAdd,
                         limit: 25
                     })
@@ -453,7 +443,7 @@ export async function interactionCreate(interaction) {
                 await interaction.reply({
                     content: 'You have already filled out this part. Click the button below to continue to the next section.',
                     components: [row],
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
             } else {
                 const questionsTwo = new ModalBuilder()
@@ -510,7 +500,7 @@ export async function interactionCreate(interaction) {
     }
     if (interaction.isStringSelectMenu()) {
         if (interaction.customId === 'stream_role_select' || interaction.customId === 'Game_role_Select') {
-            await interaction.deferReply({ ephemeral: true })
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral })
             const member = interaction.member;
             const guildid = interaction.guild.id;
             const reactions = guildChannelMap[guildid].roles

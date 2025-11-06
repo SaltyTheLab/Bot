@@ -1,11 +1,9 @@
 import { EmbedBuilder } from "discord.js";
-import guildChannelMap from "./Extravariables/guildconfiguration.json" with {type: 'json'};
+import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'};
 export async function messageDelete(message) {
-    const guildId = message.guild.id;
-    const modChannels = guildChannelMap[guildId].modChannels
     if (!message.guild || message.partial || !message.author || message.author.bot) return;
 
-    const logChannel = message.guild.channels.cache.get(modChannels.deletedlogChannel);
+    const logChannel = message.guild.channels.cache.get(guildChannelMap[message.guild.id].modChannels.deletedlogChannel);
     if (!logChannel) return;
 
     const messageLink = `https://discord.com/channels/${message.guild.id}/${message.channel.id}/${message.id}`;

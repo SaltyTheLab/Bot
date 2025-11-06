@@ -2,12 +2,11 @@ import { EmbedBuilder } from '@discordjs/builders';
 import { getUser, saveUser } from '../Database/databasefunctions.js';
 import AutoMod from '../moderation/autoMod.js';
 import { MessageType } from 'discord.js';
-import guildChannelMap from "./Extravariables/guildconfiguration.json" with {type: 'json'};
+import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'};
 export async function messageCreate(client, message) {
   if (message.author.bot || !message.guild || !message.member)
     return;
   const sentbystaff = message.member.permissions.has('ModerateMembers')
-  const countingState = client.countingState
   const lowerContent = message.content.toLowerCase().split(/\s/);
   const guildId = message.guild.id
 
@@ -41,6 +40,7 @@ export async function messageCreate(client, message) {
     message.reply('Get up then!!')
 
   if (message.channel.id === guildChannelMap[guildId].publicChannels.countingChannel) {
+    const countingState = client.countingState
     if (!message.content.trim() || isNaN(parseInt(message.content.trim())) || Number(message.content) !== parseInt(message.content.trim()))
       return;
     const lastUser = countingState.getLastUser(guildId)
@@ -63,7 +63,7 @@ export async function messageCreate(client, message) {
   }
   if (message.type !== MessageType.UserJoin) await applyUserXP(message.author.id, message, guildId);
   if (sentbystaff || message.author.id === "521404063934447616") return;
-  await AutoMod(client, message);
+  await AutoMod(message);
 }
 
 async function applyUserXP(userId, message, guildId) {
@@ -88,5 +88,5 @@ async function applyUserXP(userId, message, guildId) {
   }
   if (userData.level === 3 && !member.roles.cache.has(verifiedRole) && verifiedRole)
     await member.roles.add(verifiedRole);
-  await saveUser({ userData });
+  await saveUser(userId, guildId, { userData });
 }

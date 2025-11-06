@@ -1,6 +1,6 @@
 import { EmbedBuilder, AuditLogEvent } from "discord.js";
-import { load, save } from "../utilities/jsonloaders.js";
-import guildChannelMap from "./Extravariables/guildconfiguration.json" with {type: 'json'};
+import { load, save } from "../utilities/fileeditors.js";
+import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'};
 const recentBans = new Map();
 async function sendMassBanEmbed(executorId, channel) {
     const entry = recentBans.get(executorId);
@@ -11,7 +11,7 @@ async function sendMassBanEmbed(executorId, channel) {
             iconURL: executor.displayAvatarURL({ dynamic: true })
         })
         .setTitle(`Mass Ban: ${bans.length} Members Banned`)
-        .setDescription(bans.map(ban => `**Tag**: \`${ban.userTag}\` **ID**: \`${ban.userId}\`\n**Reason**: \`${ban.reason}\``).join('\n\n'))
+        .setDescription(bans.map(ban => `**Tag**: \`${ban.userTag}\` \n**ID**: \`${ban.userId}\`\n**Reason**: \`${ban.reason}\``).join('\n\n'))
         .setColor(0x900000)
         .setFooter({ text: `Banned by ${executor.tag}`, iconURL: executor.displayAvatarURL({ dynamic: true }) })
         .setTimestamp()
@@ -20,19 +20,19 @@ async function sendMassBanEmbed(executorId, channel) {
     recentBans.delete(executorId);
 }
 export async function guildBanAdd(ban) {
-    const bans = await load("BotListeners/Extravariables/commandsbans.json");
+    const filepath = "Extravariables/commandsbans.json"
+    const bans = await load(filepath);
     const user = ban.user
     if (bans.includes(user.id)) {
-        save("BotListeners/Extravariables/commandsbans.json", [])
+        save(filepath, [])
         return;
     }
-    const guild = ban.guild;
-    const banlogChannel = await guild.channels.fetch(guildChannelMap[ban.guild.id].modChannels.banlogChannel);
+    const banlogChannel = await ban.guild.channels.fetch(guildChannelMap[ban.guild.id].modChannels.banlogChannel);
 
     if (!banlogChannel) return;
 
     try {
-        const auditLogs = await guild.fetchAuditLogs({ type: AuditLogEvent.MemberBanAdd, limit: 10 });
+        const auditLogs = await ban.guild.fetchAuditLogs({ type: AuditLogEvent.MemberBanAdd, limit: 10 });
         const banEntry = auditLogs.entries.find(entry => entry.target.id === user.id);
 
         if (!banEntry) {

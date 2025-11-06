@@ -1,11 +1,9 @@
 import { EmbedBuilder } from "discord.js";
-import guildChannelMap from "./Extravariables/guildconfiguration.json" with {type: 'json'};
+import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'};
 export async function messageUpdate(oldMessage, newMessage) {
-    const guildId = oldMessage.guild.id;
-    const modChannels = guildChannelMap[guildId].modChannels
     if (!oldMessage.guild || oldMessage.author?.bot || oldMessage.content === newMessage.content) return;
 
-    const logChannel = await oldMessage.guild.channels.fetch(modChannels.updatedlogChannel);
+    const logChannel = await oldMessage.guild.channels.fetch(guildChannelMap[oldMessage.guild.id].modChannels.updatedlogChannel);
     if (!logChannel) return;
     const messageLink = `https://discord.com/channels/${oldMessage.guild.id}/${oldMessage.channel.id}/${oldMessage.id}`;
 
