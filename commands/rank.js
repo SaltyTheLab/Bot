@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, AttachmentBuilder, InteractionContextType } from 'discord.js';
-import { getRank, getUser } from '../Database/databasefunctions.js';
+import { getUserRank } from '../Database/databasefunctions.js';
 import Canvas from 'canvas';
 
 export const data = new SlashCommandBuilder()
@@ -48,9 +48,7 @@ export async function generateRankCard(userData, targetUser, xpNeeded, rank) {
     const borderColor = '#3ba55d';
     const borderWidth = 1.5; // Thickness of the green border
 
-    // Load the avatar image first
-    const avatarUrl = targetUser.displayAvatarURL({ extension: 'png', size: 128 });
-    const avatar = await Canvas.loadImage(avatarUrl)
+    const avatar = await Canvas.loadImage(targetUser.displayAvatarURL({ extension: 'png', size: 128 }))
         .catch(err => {
             console.error(`Failed to load avatar for ${targetUser.tag}:`, err);
             // Fallback: draw a solid circle if avatar fails to load
@@ -62,14 +60,13 @@ export async function generateRankCard(userData, targetUser, xpNeeded, rank) {
         });
 
     // 1. Save the context state BEFORE applying the avatar clip.
-    // This allows us to restore it later, undoing the clip for other drawings.
     ctx.save();
 
     // 2. Create the circular clipping path for the avatar.
     ctx.beginPath();
     ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2);
     ctx.closePath();
-    ctx.clip(); // Apply the clip. Any drawing now will be confined to this circle.
+    ctx.clip();
 
     // 3. Draw the avatar image (it will automatically be clipped to the circle).
     if (avatar) {
@@ -77,13 +74,10 @@ export async function generateRankCard(userData, targetUser, xpNeeded, rank) {
     }
 
     // 4. Restore the context state. This removes the clipping path,
-    //    so subsequent drawings (text, progress bar) are not clipped.
     ctx.restore();
 
     // 5. Draw the green border *on top* of the avatar.
-    // This is a new path for the border.
     ctx.beginPath();
-    // The border circle should be slightly larger than the avatar circle.
     ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2 + borderWidth, 0, Math.PI * 2);
     ctx.lineWidth = borderWidth * 2; // Make the line thickness
     ctx.strokeStyle = borderColor;
@@ -154,24 +148,13 @@ export async function generateRankCard(userData, targetUser, xpNeeded, rank) {
 
 export async function execute(interaction) {
     try {
-        //delay the reply to give time 
         await interaction.deferReply();
-        //get the interaction user
         const targetUser = interaction.options.getUser('user') || interaction.user;
-        const userId = targetUser.id;
-        const guildId = interaction.guild.id
-        // *** Directly use the result from your existing getUser ***
-        const userData = await getUser(userId, guildId);
-        //abort if userdata doesn't exist or there are error in their data
-        if (!userData || userData.xp === undefined || userData.level === undefined) {
+        const { userData, rank } = await getUserRank(targetUser.id, interaction.guild.id);
+        if (!userData || userData.xp === undefined || userData.level === undefined)
             return interaction.editReply({ content: 'User data not found or incomplete. They might need to gain some XP first!', ephemeral: true });
-        }
-
-        //find user within all users for rank
         const xpNeeded = Math.round(((userData.level - 1) ** 1.5 * 52 + 40) / 20) * 20
-        const rank = await getRank(userId, guildId)
         const rankCard = await generateRankCard(userData, targetUser, xpNeeded, rank);
-
         await interaction.editReply({
             files: [rankCard]
         });

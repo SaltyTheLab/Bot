@@ -63,14 +63,13 @@ export async function execute(interaction) {
     const command = interaction.options.getSubcommand();
     const targetUser = interaction.options.getUser('target')
     const note = interaction.options.getString('note')
-    const moderatorUser = interaction.user;
     const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator)
     const guildId = interaction.guild.id
 
     switch (command) {
         case 'add': {
             try {
-                addNote({ userId: targetUser.id, moderatorId: moderatorUser.id, note: note, guildId: guildId })
+                addNote({ userId: targetUser.id, moderatorId: interaction.user.id, note: note, guildId: guildId })
             } catch (err) {
                 console.warn(`is not in the user database.`, err)
                 interaction.reply({ content: `${targetUser.tag} is not in the User Database` })
@@ -114,7 +113,7 @@ export async function execute(interaction) {
 
 
             const collector = replyMessage.createMessageComponentCollector({
-                filter: i => i.user.id === moderatorUser.id,
+                filter: i => i.user.id === interaction.user.id,
                 time: fiveMinutesInMs
             })
 
@@ -147,12 +146,12 @@ export async function execute(interaction) {
                                     collector.stop();
                                     return;
                                 }
-                            } else {
+                            } else
                                 interaction.reply({
                                     content: `${interaction.user}, please contact an admin to delete this note as two days have passed.`,
                                     flags: MessageFlags.Ephemeral
                                 })
-                            }
+
                             currentIndex = Math.min(currentIndex, allnotes.length - 1)
                         } catch (error) {
                             console.error(`Error deleting log ${noteIdToDelete}:`, error);
@@ -169,7 +168,7 @@ export async function execute(interaction) {
             collector.on('end', async () => {
                 const finalButtons = await buildNoteButtons(currentIndex, allnotes, currentnote._id, true);
                 try {
-                    if (replyMessage.embeds.length > 0 && replyMessage.components[0]) {
+                    if (replyMessage.embeds > 0 && replyMessage.components[0]) {
                         await replyMessage.edit({ components: [finalButtons] });
                     }
                 } catch (error) {
