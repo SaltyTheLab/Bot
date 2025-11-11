@@ -1,17 +1,6 @@
-import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle, ComponentType, InteractionContextType } from "discord.js";
+import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle, ComponentType, InteractionContextType, MessageFlags } from "discord.js";
 import { getUser, saveUser } from "../Database/databasefunctions.js";
 const board = Array(9).fill(' ');
-
-const winningConditions = [
-    [0, 1, 2],
-    [3, 4, 5],
-    [6, 7, 8],
-    [0, 3, 6],
-    [1, 4, 7],
-    [2, 5, 8],
-    [0, 4, 8],
-    [2, 4, 6]
-]
 
 function generateEmbed(description, color = 'Green') {
     return new EmbedBuilder()
@@ -44,6 +33,16 @@ function generateButtons(gameBoard, disabled = false) {
 }
 
 function checkWinner(gameBoard, player) {
+    const winningConditions = [
+        [0, 1, 2],
+        [3, 4, 5],
+        [6, 7, 8],
+        [0, 3, 6],
+        [1, 4, 7],
+        [2, 5, 8],
+        [0, 4, 8],
+        [2, 4, 6]
+    ]
     return winningConditions.some(condition => {
         return condition.every(index => {
             return gameBoard[index] === player
@@ -86,29 +85,25 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
     const subcommand = interaction.options.getSubcommand()
     const player1 = interaction.user;
-    let player2;
+    let player2 = null;
     let isCPU = false;
-
-    if (subcommand === 'cpu') {
-        player2 = {
-            id: 'CPU',
-            username: 'Computer',
-            toString: () => 'The **Computer**',
-            displayAvatarURL: () => 'https://i.imgur.com/8Xo9Q9Q.png'
-        };
-        isCPU = true
-    } else if (subcommand === 'user') {
-        player2 = interaction.options.getUser('opponent');;
-        if (player1.id === player2.id) {
-            return interaction.reply({
-                content: "You can't play against yourself.",
-                ephemeral: true
-            })
-        }
+    switch (subcommand) {
+        case 'cpu':
+            player2 = {
+                id: 'CPU',
+                username: 'Computer',
+                toString: () => 'The **Computer**',
+                displayAvatarURL: () => 'https://i.imgur.com/8Xo9Q9Q.png'
+            };
+            isCPU = true
+            break;
+        case 'user':
+            player2 = interaction.options.getUser('opponent');;
+            if (player1.id === player2.id)
+                return interaction.reply({ content: "You can't play against yourself.", flags: MessageFlags.Ephemeral })
+            break;
     }
-
     let currentplayer = Math.random() < 0.5 ? player1 : player2;
-
     const gameBoard = [...board];
     const players = new Map();
     players.set(player1.id, 'X');
@@ -139,7 +134,6 @@ export async function execute(interaction) {
                 });
             }
 
-
             if (checkDraw(gameBoard)) {
                 collector.stop('draw');
                 return interaction.editReply({
@@ -156,32 +150,20 @@ export async function execute(interaction) {
         }
     }
 
-    if (isCPU && currentplayer.id === player2.id) {
+    if (isCPU && currentplayer.id === player2.id)
         await cpuMoveHandler();
-    }
 
     collector.on('collect', async i => {
-        if (i.user.id !== player1.id && i.user.id !== player2.id) {
-            return i.reply({ content: 'You are not a participant in this game.', ephemeral: true })
-        }
-
-        if (i.user.id !== currentplayer.id) {
-            return i.reply({
-                content: 'It\'s not your turn!', ephemeral: true
-            })
-        }
+        if (i.user.id !== player1.id && i.user.id !== player2.id)
+            return i.reply({ content: 'You are not a participant in this game.', flags: MessageFlags.Ephemeral })
+        if (i.user.id !== currentplayer.id)
+            return i.reply({ content: 'It\'s not your turn!', flags: MessageFlags.Ephemeral })
 
         const move = parseInt(i.customId.split('-')[1]);
         const playerMark = players.get(currentplayer.id);
 
-        if (isNaN(move) || gameBoard[move] !== ' ') {
-            // Defer the update to prevent 'Interaction Failed' while waiting for the CPU
-            await i.deferUpdate();
-            return;
-        }
-
         if (gameBoard[move] !== ' ')
-            return i.reply({ content: "That cell is already taken! Please wait for the buttons to update before making your next move.", ephemeral: true });
+            return i.reply({ content: "That cell is already taken! Please wait for the buttons to update before making your next move.", flags: MessageFlags.Ephemeral });
         gameBoard[move] = playerMark;
 
         if (checkWinner(gameBoard, playerMark)) {
@@ -190,9 +172,11 @@ export async function execute(interaction) {
                 embeds: [generateEmbed(`${currentplayer} wins!!`, "Gold")],
                 components: generateButtons(gameBoard, true)
             })
-            const userData = await getUser(currentplayer.id, interaction.guild.id)
-            userData.coins += 100;
-            saveUser(currentplayer.id, interaction.guild.id, { userData })
+            if (!isCPU) {
+                const { userData } = await getUser(currentplayer.id, interaction.guild.id)
+                userData.coins += 100;
+                saveUser(currentplayer.id, interaction.guild.id, { userData })
+            }
             return;
         }
 
