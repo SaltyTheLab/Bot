@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, AttachmentBuilder, InteractionContextType } from 'discord.js';
-import { getUserRank } from '../Database/databasefunctions.js';
+import { getUser } from '../Database/databasefunctions.js';
 import Canvas from 'canvas';
 
 export const data = new SlashCommandBuilder()
@@ -33,7 +33,6 @@ function formatXP(xp) {
 export async function generateRankCard(userData, targetUser, xpNeeded, rank) {
     const canvas = Canvas.createCanvas(500, 150);
     const ctx = canvas.getContext('2d');
-
     const xpPercent = Math.min(userData.xp / xpNeeded, 1);
 
     // Background (Draw first, so everything else is on top)
@@ -69,9 +68,7 @@ export async function generateRankCard(userData, targetUser, xpNeeded, rank) {
     ctx.clip();
 
     // 3. Draw the avatar image (it will automatically be clipped to the circle).
-    if (avatar) {
-        ctx.drawImage(avatar, avatarX, avatarY, avatarSize, avatarSize);
-    }
+    avatar ? ctx.drawImage(avatar, avatarX, avatarY, avatarSize, avatarSize) : null
 
     // 4. Restore the context state. This removes the clipping path,
     ctx.restore();
@@ -150,7 +147,7 @@ export async function execute(interaction) {
     try {
         await interaction.deferReply();
         const targetUser = interaction.options.getUser('user') || interaction.user;
-        const { userData, rank } = await getUserRank(targetUser.id, interaction.guild.id);
+        const { userData, rank } = await getUser(targetUser.id, interaction.guild.id);
         if (!userData || userData.xp === undefined || userData.level === undefined)
             return interaction.editReply({ content: 'User data not found or incomplete. They might need to gain some XP first!', ephemeral: true });
         const xpNeeded = Math.round(((userData.level - 1) ** 1.5 * 52 + 40) / 20) * 20
