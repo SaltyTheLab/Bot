@@ -2,7 +2,7 @@ import { InteractionContextType, PermissionFlagsBits, SlashCommandBuilder, Guild
 import punishUser from "../moderation/punishUser.js";
 export const data = new SlashCommandBuilder()
     .setName('member')
-    .setDescription('Warn/Mute/Ban a member')
+    .setDescription('Warn/Mute/Ban/kick a member')
     .addSubcommand(command =>
         command.setName('warn').setDescription('Warn a member')
             .addUserOption(opt =>
@@ -41,6 +41,15 @@ export const data = new SlashCommandBuilder()
                 opt.setName('reason').setDescription('Reason for the ban').setRequired(true)
             )
     )
+    .addSubcommand(command =>
+        command.setName('kick').setDescription('Kick a user')
+            .addUserOption(opt =>
+                opt.setName('target').setDescription('The user to kick').setRequired(true)
+            )
+            .addStringOption(opt =>
+                opt.setName('reason').setDescription('Reason for the kick').setRequired(true)
+            )
+    )
     .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
     .setContexts([InteractionContextType.Guild])
 export async function execute(interaction) {
@@ -49,21 +58,15 @@ export async function execute(interaction) {
     const reason = interaction.options.getString('reason');
     const staffcheck = target instanceof GuildMember ? target.permissions.has(PermissionFlagsBits.ModerateMembers) : null
     let banflag = false
+    let kick = false
     if (target.bot)
         return interaction.reply({ content: 'You cannot ban a bot.', flags: MessageFlags.Ephemeral });
-
-    if (target.id === interaction.user.id) {
+    if (target.id === interaction.user.id)
         return interaction.reply({ content: '⚠️ You cannot execute mod commands on yourself.', flags: MessageFlags.Ephemeral });
-    }
-
     if (staffcheck) {
-        interaction.reply({
-            content: `${target.user.tag} is staff, please handle this with an admin, co-owner, or owner.`,
-            flags: MessageFlags.Ephemeral
-        })
+        interaction.reply({ content: `${target.user.tag} is staff, please handle this with an admin, co-owner, or owner.`, flags: MessageFlags.Ephemeral })
         return;
     }
-
     switch (command) {
         case 'mute': {
             const duration = interaction.options.getInteger('duration')
@@ -75,12 +78,14 @@ export async function execute(interaction) {
         }
         case 'ban': {
             if (!interaction.member.permissions.has(PermissionFlagsBits.BanMembers))
-                return interaction.reply({ content: 'Jr mods do not have access to this command, please contact a mod or higher in the jr mod chat.' });
+                return interaction.reply({ content: 'Jr mods do not have access to this command, please contact a mod or higher in the jr mod chat.', flags: MessageFlags.Ephemeral });
             banflag = true
             break;
         }
+        case 'kick':
+            kick = true
+            break;
     }
-
     await punishUser({
         interaction: interaction,
         guild: interaction.guild,
@@ -89,5 +94,6 @@ export async function execute(interaction) {
         reason: reason,
         channel: interaction.channel,
         banflag: banflag,
+        kick: kick
     });
 }

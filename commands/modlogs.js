@@ -1,14 +1,8 @@
 import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, InteractionContextType, ActionRowBuilder, ButtonStyle, ButtonBuilder } from 'discord.js';
 import { deletePunishment, getPunishments, getUser } from '../Database/databasefunctions.js';
 import logRecentCommand from '../WebsiteTool/recentcommands.js';
-
-const LOG_COLORS = {
-    Warn: 0xffcc00,
-    Mute: 0xff4444,
-    Ban: 0xd1b1bf
-};
-
 async function buildLogEmbed(interaction, log, idx, totalLogs) {
+    const LOG_COLORS = { Warn: 0xffcc00, Mute: 0xff4444, Ban: 0xd10000, Kick: 0x838383 };
     const [targetUser, moderator] = await Promise.all(
         [interaction.client.users.fetch(log.userId),
         interaction.client.users.fetch(log.moderatorId)
@@ -100,7 +94,6 @@ export async function execute(interaction) {
             ],
         });
     } else if (!allLogs.length) {
-        //return early with no modlogs found
         return interaction.reply({
             embeds: [
                 new EmbedBuilder()
@@ -112,7 +105,6 @@ export async function execute(interaction) {
 
     let currentIndex = 0;
     let currentLog = allLogs[currentIndex];
-
     replyMessage = await interaction.reply({
         embeds: [await buildLogEmbed(interaction, currentLog, currentIndex, allLogs.length)],
         components: [await buildButtons(currentIndex, allLogs.length, isAdmin, currentLog._id)],
