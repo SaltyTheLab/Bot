@@ -2,7 +2,7 @@ import punishUser from './punishUser.js';
 import forbbidenWordsData from './forbiddenwords.json' with {type: 'json'};
 import { getPunishments, getUser } from '../Database/databasefunctions.js';
 import globalwordsData from './globalwords.json' with {type: 'json'}
-import guildChannelMap from "../BotListeners/Extravariables/guildconfiguration.json" with {type: 'json'};
+import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'};
 import { LRUCache } from 'lru-cache';
 import Denque from 'denque';
 
@@ -14,6 +14,31 @@ function getOrCreateTracker(userId, guildId) {
   let tracker = userMessageTrackers.get(trackerkey) ?? initialTrackerState();
   if (!userMessageTrackers.has(trackerkey)) userMessageTrackers.set(trackerkey, tracker);
   return tracker;
+}
+function hasMedia(message) {
+  if ((!message.attachments || message.attachments.size === 0) && (!message.embeds || message.embeds.length === 0)) return false;
+  return (
+    message.attachments.size > 0 ||
+    message.embeds.some(embed => {
+      const urls = [embed.image?.url, embed.video?.url, embed.thumbnail?.url].filter(Boolean);
+      return urls.some(url => /\.(gif|jpe?g|png|mp4|webm)$/i.test(url));
+    }));
+}
+function evaluateViolations(hasInvite, globalword, matchedWord, everyonePing, isGeneralSpam, isDuplicateSpam, isMediaViolation, isCapSpam, isNewUser) {
+  const checks = [
+    { flag: hasInvite, type: 'invite', reason: 'Discord invite', Weight: 2 },
+    { flag: globalword, type: 'banned Word', reason: "Saying a slur", Weight: 2 },
+    { flag: matchedWord, type: 'nsfw Word', reason: `NSFW word "${matchedWord}"`, Weight: 1 },
+    { flag: everyonePing, type: 'everyoneping', reason: 'Mass pinging', Weight: 2 },
+    { flag: isGeneralSpam, type: 'spam', reason: 'Spamming', Weight: 1 },
+    { flag: isDuplicateSpam, type: 'spam', reason: 'Spamming the same message', Weight: 1 },
+    { flag: isMediaViolation, type: 'mediaViolation', reason: 'Media violation', Weight: 1 },
+    { flag: isCapSpam, type: 'capspam', reason: 'Spamming Caps', Weight: 1 },
+    { flag: isNewUser, type: 'isNewUser', reason: 'while new to the server.', Weight: 0.9 },
+  ];
+  const reasons = checks.filter(check => check.flag).map(check => check.reason);
+  const totalWeight = Math.ceil(checks.filter(check => check.flag).reduce((acc, check) => { return acc + check.Weight }, 0));
+  return { reasons, totalWeight };
 }
 function updateTracker(userId, message) {
   const settings = guildChannelMap[message.guild.id].automodsettings ?? null;
@@ -31,11 +56,11 @@ function updateTracker(userId, message) {
 
   if (content.length >= minLengthForCapsCheck) {
     const lettersOnly = content.replace(/[<a?:[a-zA-Z0-9_]+:\d+>/g, '').replace(/[^a-zA-Z]/g, '')
-    const upperCaseOnly = lettersOnly.match(/[A-Z]/g)
-    upperCaseOnly ? upperRatio = upperCaseOnly.length / lettersOnly.length : null
+    const upperCaseOnly = lettersOnly.match(/[A-Z]/g) ?? null
+    upperCaseOnly && upperCaseOnly.length > 10 ? upperRatio = upperCaseOnly.length / lettersOnly.length : null
   }
 
-
+  //media check for message and flag it if true
   if (hasMedia(message) && !Object.values(guildChannelMap[message.guild.id].mediaexclusions).some(id => id === message.channel.parentId || id === message.channel.id))
     tracker.mediaCount += 1;
 
@@ -53,9 +78,8 @@ function updateTracker(userId, message) {
     const count = tracker.duplicateCounts.get(oldMessage.content);
     if (count > 1) {
       tracker.duplicateCounts.set(oldMessage.content, count - 1);
-    } else {
+    } else
       tracker.duplicateCounts.delete(oldMessage.content);
-    }
   }
 
   const DuplicateSpam = (tracker.duplicateCounts.get(content) || 0) > DUPLICATE_SPAM_THRESHOLD;
@@ -69,47 +93,17 @@ function updateTracker(userId, message) {
   userMessageTrackers.set(userId, tracker)
   return { MediaViolation, GeneralSpam, DuplicateSpam, CapSpam };
 }
-
-function hasMedia(message) {
-  if ((!message.attachments || message.attachments.size === 0) && (!message.embeds || message.embeds.length === 0)) return false;
-
-  return (
-    message.attachments.size > 0 ||
-    message.embeds.some(embed => {
-      const urls = [embed.image?.url, embed.video?.url, embed.thumbnail?.url].filter(Boolean);
-      return urls.some(url => /\.(gif|jpe?g|png|mp4|webm)$/i.test(url));
-    })
-  );
-}
-
-function evaluateViolations(hasInvite, globalword, matchedWord, everyonePing, isGeneralSpam, isDuplicateSpam, isMediaViolation, isCapSpam, isNewUser) {
-  const checks = [
-    { flag: hasInvite, type: 'invite', reason: 'Discord invite', Weight: 2 },
-    { flag: globalword, type: 'banned Word', reason: "Saying a slur", Weight: 2 },
-    { flag: matchedWord, type: 'nsfw Word', reason: `NSFW word "${matchedWord}"`, Weight: 1 },
-    { flag: everyonePing, type: 'everyoneping', reason: 'Mass pinging', Weight: 2 },
-    { flag: isGeneralSpam, type: 'spam', reason: 'Spamming', Weight: 1 },
-    { flag: isDuplicateSpam, type: 'spam', reason: 'Spamming the same message', Weight: 1 },
-    { flag: isMediaViolation, type: 'mediaViolation', reason: 'Media violation', Weight: 1 },
-    { flag: isCapSpam, type: 'capspam', reason: 'Spamming Caps', Weight: 1 },
-    { flag: isNewUser, type: 'isNewUser', reason: 'while new to the server.', Weight: 0.9 },
-  ];
-  const reasons = checks.filter(check => check.flag).map(check => check.reason);
-  const totalWeight = Math.ceil(checks.filter(check => check.flag).reduce((acc, check) => { return acc + check.Weight }, 0));
-  return { reasons, totalWeight };
-}
-
-export default async function AutoMod(client, message) {
+export default async function AutoMod(message) {
   const forbiddenWords = new Set(forbbidenWordsData.map(w => w.toLowerCase()));
   const globalwords = new Set(globalwordsData.map(w => w.toLowerCase()))
   const inviteRegex = /(https?:\/\/)?(www\.)?(discord\.gg|discord(app)?\.com\/invite)\/[a-zA-Z0-9-]+/i;
   const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
-  const { author, content, member, guild, channel } = message;
+  const { author, content, member, guild, channel, client } = message;
   const messageWords = content.toLowerCase().split(/\s+/);
   const [hasInvite, everyonePing, isNewUser] = [
     inviteRegex.test(content),
     message.mentions.everyone,
-    Date.now() - member.joinedTimestamp < TWO_DAYS_MS && !getUser(author.id, guild.id)];
+    Date.now() - member.joinedTimestamp < TWO_DAYS_MS && !getUser(author.id, guild.id, true)];
   let globalword;
   let matchedWord;
 
@@ -143,8 +137,11 @@ export default async function AutoMod(client, message) {
   else
     reasonText = `AutoMod: ${reasons.join(', ')} and ${lastReason}`;
 
+  const commoninputs = {
+    guild: guild, target: author.id, moderatorUser: client.user, reason: reasonText, channel: channel, isAutomated: true
+  }
   if ((await getPunishments(author.id, guild.id, true).length > 2 || totalWeight >= 3 || everyonePing || hasInvite) && isNewUser == true)
-    punishUser({ guild: guild, target: author.id, moderatorUser: client.user, reason: reasonText, channel: channel, isAutomated: true, banflag: true });
+    punishUser({ ...commoninputs, banflag: true });
   else
-    await punishUser({ guild: guild, target: author.id, moderatorUser: client.user, reason: reasonText, channel: channel, isAutomated: true, currentWarnWeight: totalWeight });
+    await punishUser({ ...commoninputs, currentWarnWeight: totalWeight });
 }
