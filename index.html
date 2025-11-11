@@ -8,6 +8,27 @@
   <link href="/dist/output.css" rel="stylesheet">
   <script type="module" src="WebsiteTool/recentcommandshtml.js" defer></script>
   <script type="module" src="WebsiteTool/guildconfig.js" defer></script>
+  <script type="module" defer>
+    const tabs = document.querySelectorAll('.tab-btn');
+    const tabContents = document.querySelectorAll('.tab-content');
+
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        tabs.forEach(item => {
+          item.classList.remove('border-blue-400', 'text-blue-400');
+          item.classList.add('border-transparent', 'text-gray-300');
+        });
+        tabContents.forEach(content => {
+          content.classList.add('hidden');
+        });
+        const targetId = tab.getAttribute('data-target');
+        document.getElementById(targetId).classList.remove('hidden');
+        tab.classList.add('border-blue-400', 'text-blue-400');
+        tab.classList.remove('border-transparent', 'text-gray-300');
+      });
+    });
+    document.getElementById('modChannelsTab').click();
+  </script>
 </head>
 
 <body class="bg-gray-900 text-gray-100 min-h-half flex items-center p-4">
@@ -17,7 +38,7 @@
       <h2 class=" text-3l font-semibold text-red-400 justify-center"> Make sure
         to save your work and download the generated json config!!</h2>
 
-      <!-- Guild SelectioN -->
+      <!-- Guild Selection -->
       <div class="bg-gray-700 p-4 rounded-x1 shadow-inner">
         <label for="guildSelect" class="block text-gray-300 font-semibold mb-2"> Select
           Guild:</label>
@@ -87,14 +108,11 @@
             data-target="stringReactionsContent">
             String Reactions
           </button>
-
         </div>
-
         <div id="tabContentContainer" class="space-y-6">
           <div id="modChannelsContent" class="tab-content bg-gray-700 p-4 rounded-xl space-y-4 shadow-inner hidden">
             <div id="modChannelsSection"></div>
           </div>
-
           <div id="publicChannelsContent" class="tab-content bg-gray-700 p-4 rounded-xl space-y-4 shadow-inner hidden">
             <div id="publicChannelsSection"></div>
             <button id="addPublicChannelBtn"
@@ -102,7 +120,6 @@
               Add Public Channel
             </button>
           </div>
-
           <div id="exclusionsContent" class="tab-content bg-gray-700 p-4 rounded-xl space-y-4 shadow-inner hidden">
             <div id="exclusionsSection"></div>
             <button id="addExclusionBtn"
@@ -124,7 +141,6 @@
               Add Reaction
             </button>
           </div>
-
           <div id="stringReactionsContent" class="tab-content bg-gray-700 p-4 rounded-xl space-y-4 shadow-inner hidden">
             <div id="stringSection"></div>
             <button id="addStringBtn"
@@ -132,18 +148,13 @@
               Add String Reaction
             </button>
           </div>
-
           <div id="autoModContent" class="tab-content bg-gray-700 p-4 rounded-xl space-y-4 shadow-inner">
             <div id="AutomodSection"></div>
           </div>
-
         </div>
-
-
         <!-- Message Error Display-->
         <div id="messageBox" class="text-center p-3 rounded-lg hidden"></div>
       </div>
-
     </div>
 
     <div class='w-half bg-gray-900 text-gray-200 border border-gray-600 rounded-lg
@@ -164,27 +175,7 @@
         </div>
       </div>
     </div>
-    <script defer>
-      const tabs = document.querySelectorAll('.tab-btn');
-      const tabContents = document.querySelectorAll('.tab-content');
 
-      tabs.forEach(tab => {
-        tab.addEventListener('click', () => {
-          tabs.forEach(item => {
-            item.classList.remove('border-blue-400', 'text-blue-400');
-            item.classList.add('border-transparent', 'text-gray-300');
-          });
-          tabContents.forEach(content => {
-            content.classList.add('hidden');
-          });
-          const targetId = tab.getAttribute('data-target');
-          document.getElementById(targetId).classList.remove('hidden');
-          tab.classList.add('border-blue-400', 'text-blue-400');
-          tab.classList.remove('border-transparent', 'text-gray-300');
-        });
-      });
-      document.getElementById('modChannelsTab').click();
-    </script>
 </body>
 
 </html>
