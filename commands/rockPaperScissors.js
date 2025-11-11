@@ -9,9 +9,7 @@ export const data = new SlashCommandBuilder()
 export function execute(interaction) {
     let userWin = false;
     const menu = new EmbedBuilder()
-        .setTitle(
-            '**Pick your option**'
-        )
+        .setTitle('**Pick your option**')
         .setColor(0x00a900)
 
     const Rock = new ButtonBuilder()
@@ -70,7 +68,7 @@ export function execute(interaction) {
             .setDescription(`You chose **${userchoice}**.\nOpponent chose **${opponentchoice}**.`)
             .setColor(0xffa500);
         if (userWin) {
-            const userData = await getUser(interaction.user.id, interaction.guild.id)
+            const { userData } = await getUser(interaction.user.id, interaction.guild.id)
             userData.coins += 20;
             await saveUser(interaction.user.id, interaction.guild.id, { userData });
         }

@@ -67,9 +67,9 @@ export async function messageCreate(client, message) {
 }
 
 async function applyUserXP(userId, message, guildId) {
-  let userData = await getUser(userId, guildId);
+  let { userData, rank } = await getUser(userId, guildId);
   const verifiedRole = message.guild.roles.cache.find(r => r.name.toLowerCase() === 'verified');
-  const member = await message.guild.members.fetch(userId);
+  const member = message.member;
   userData.xp += 20;
   userData.totalmessages += 1;
   const xpNeeded = Math.round(((userData.level - 1) ** 1.5 * 52 + 40) / 20) * 20
@@ -83,7 +83,7 @@ async function applyUserXP(userId, message, guildId) {
         iconURL: message.author.displayAvatarURL({ dynamic: true })
       })
       .setColor(0x00AE86)
-      .setFooter({ text: 'keep on yapping!' });
+      .setFooter({ text: `you are #${rank} in ${message.guild.name}` });
     await message.channel.send({ embeds: [levelUpEmbed] });
   }
   if (userData.level === 3 && !member.roles.cache.has(verifiedRole) && verifiedRole)

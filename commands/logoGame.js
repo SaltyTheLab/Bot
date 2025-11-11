@@ -7,7 +7,6 @@ function getRandomColor() {
     const randomHex = Math.floor(Math.random() * 16777215)
     return `#${randomHex.toString(16).padStart(6, '0')}`
 }
-
 function shuffle(array) {
     for (let i = array.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -15,7 +14,6 @@ function shuffle(array) {
     }
     return array;
 }
-
 export const data = new SlashCommandBuilder()
     .setName('logos')
     .setContexts([InteractionContextType.Guild])
@@ -85,7 +83,7 @@ export async function execute(interaction) {
             );
         });
         if (i.customId === logo.brand) {
-            const userData = await getUser(interaction.user.id, interaction.guild.id);
+            const { userData } = await getUser(interaction.user.id, interaction.guild.id);
             userData.coins += 20;
             await saveUser(interaction.user.id, interaction.guild.id, { userData });
         }

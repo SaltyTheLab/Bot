@@ -30,7 +30,7 @@ export async function execute(interaction) {
         .setAuthor({ user: interaction.user, iconURL: interaction.user.displayAvatarURL({ dynamic: true }) })
     const command = interaction.options.getSubcommand();
     const target = interaction.options.getUser('target')
-    const userData = await getUser(target.id, interaction.guild.id)
+    const { userData } = await getUser(target.id, interaction.guild.id)
     switch (command) {
         case 'xp': {
             const xp = interaction.options.getNumber('xp')

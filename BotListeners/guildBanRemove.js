@@ -14,14 +14,14 @@ export async function guildBanRemove(ban) {
         return;
     }
     const embed = new EmbedBuilder()
-        .setColor(0x309eff) // A distinct color for unbans
+        .setColor(0x309eff)
         .setTitle('A member was unbanned')
         .setThumbnail(user.displayAvatarURL({ dynamic: true }))
         .setDescription([
             `**User**: ${user}`,
             `**Tag**: \`${user.tag}\``,
             `**Id**: \`${user.id}\`\n`,
-            `**Reason**: \`${bans.length > 0 ? bans[0].reason : 'No reasons provided'}\``
+            `**Reason**: \`${bans.length > 0 ? `Ban Command: ${bans[0].reason}` : 'No reasons provided'}\``
         ].join('\n'))
         .setTimestamp()
 

@@ -69,7 +69,7 @@ export async function execute(interaction) {
     switch (command) {
         case 'add': {
             try {
-                addNote({ userId: targetUser.id, moderatorId: interaction.user.id, note: note, guildId: guildId })
+                addNote(targetUser.id, interaction.user.id, note, guildId)
             } catch (err) {
                 console.warn(`is not in the user database.`, err)
                 interaction.reply({ content: `${targetUser.tag} is not in the User Database` })
@@ -168,9 +168,8 @@ export async function execute(interaction) {
             collector.on('end', async () => {
                 const finalButtons = await buildNoteButtons(currentIndex, allnotes, currentnote._id, true);
                 try {
-                    if (replyMessage.embeds > 0 && replyMessage.components[0]) {
+                    if (replyMessage.embeds > 0 && replyMessage.components[0])
                         await replyMessage.edit({ components: [finalButtons] });
-                    }
                 } catch (error) {
                     console.error('Failed to disable buttons automatically:', error);
                 }

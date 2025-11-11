@@ -1,9 +1,10 @@
 import { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } from "discord.js";
 import { load, save } from "../utilities/fileeditors.js";
 import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'};
-const fifteenMinutesInMs = 15 * 60 * 1000
+
 export async function guildMemberAdd(member) {
-    const filepath = "../Extravariables/invites.json"
+    const fifteenMinutesInMs = 15 * 60 * 1000
+    const filepath = "Extravariables/invites.json"
     const arrayToMap = (arr) => new Map(arr.map(item => [item.key, item.uses]));
     const mapToArray = (map) => Array.from(map.entries()).map(([key, uses]) => ({ key, uses }));
     const owner = await member.guild.fetchOwner();

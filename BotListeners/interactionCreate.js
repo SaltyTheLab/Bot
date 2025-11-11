@@ -8,9 +8,7 @@ const appealinvites = {
     '1342845801059192913': 'https://discord.gg/nWj5KvgUt9'
 }
 const filepath = "Extravariables/applications.json"
-const invitefilepath = "Extravariables/invites.json"
 let applications = await load(filepath)
-let invites = await load(invitefilepath)
 
 export async function interactionCreate(interaction) {
 
@@ -259,10 +257,9 @@ export async function interactionCreate(interaction) {
             if (inviteCode !== 'no invite code') {
                 const invite = await interaction.guild.invites.fetch(inviteCode);
                 if (invite) {
-                    invites = await load(invites)
-                    const key = `${invite.guild.id}-${invite.code}`;
-                    invites = invites.filter(inv => inv.key !== key)
-                    await save(invitefilepath, invites)
+                    let invites = await load("Extravariables/invites.json")
+                    invites = invites.filter(inv => inv.key !== `${invite.guild.id}-${invite.code}`)
+                    await save("Extravariables/invites.json", invites)
                     await invite.delete()
                 }
                 finalMessage += ' Associated Invite was deleted'
