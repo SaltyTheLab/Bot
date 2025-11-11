@@ -4,27 +4,22 @@ import { getUserForAppeal } from "../Database/databasefunctions.js";
 export const data = new SlashCommandBuilder()
     .setContexts([InteractionContextType.BotDM])
     .setName('appeal')
-    .setDescription('This command is only for DMs for users who have been banned, do not use in servers.')
+    .setDescription('Use this command to appeal bans from servers')
 
 export async function execute(interaction) {
     const userbans = await getUserForAppeal(interaction.user.id)
-    if (!userbans || userbans.length === 0) {
-        return interaction.reply('You do not have any recent ban records with our shared communities.');
-    }
     const options = []
-    for (const ban of userbans) {
-        let banentry = ban.punishments.filter(entry => entry.type === 'Ban')
-        if (banentry.length > 0) {
-            const guild = interaction.client.guilds.cache.get(ban.guildId);
-            if (guild) {
-                options.push({
-                    label: guild.name,
-                    value: guild.id,
-                    description: `Banned on: ${new Date(ban.punishments.timestamp).toLocaleDateString()}`
-                });
-            }
+    userbans.forEach(ban => {
+        const banentry = ban.punishments.filter(p => p.type === 'Ban') ?? null
+        const guild = interaction.client.guilds.cache.get(ban.guildId);
+        if (banentry.length !== 0) {
+            options.push({
+                label: guild.name,
+                value: guild.id,
+                description: `Banned on: ${new Date(ban.punishments.timestamp).toLocaleDateString()}`
+            });
         }
-    }
+    })
     if (options.length == 0)
         return interaction.reply('I could not find any ban records for any servers i am in.')
     const row = new ActionRowBuilder()
