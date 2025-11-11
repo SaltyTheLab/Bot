@@ -33,37 +33,27 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
     const command = interaction.options.getSubcommand();
     const targetUser = interaction.options.getMember('target');
-    const user = targetUser.user;
-    const blacklist = await getblacklist(user.id, interaction.guild.id)
+    const blacklist = await getblacklist(targetUser.id, interaction.guild.id)
     const list = blacklist.map(role => `<@&${role}>`).join(',')
-
+    const role = interaction.options.getRole('role') ?? null
+    const embed = new EmbedBuilder()
+        .setThumbnail(targetUser.user.displayAvatarURL({ dynamic: true }))
+        .setDescription(`${targetUser}'s blacklist\n\nblacklist: ${list.length > 0 ? list : 'empty'}`)
     switch (command) {
-        case 'show': {
-            const embed = new EmbedBuilder()
-                .setThumbnail(targetUser.user.displayAvatarURL({ dynamic: true }))
-                .setDescription(`${targetUser}'s blacklist\n\nblacklist: ${list}`)
-            if (list.length == 0)
-                embed.setDescription(`${user.tag} blacklist\n\nRoles: empty`)
-            interaction.reply({ embeds: [embed] })
+        case 'show':
             break;
-        }
-        case 'add': {
-            const role = interaction.options.getRole('role')
-            const commandembed = new EmbedBuilder().setDescription(`${role} was blacklisted from ${user}`)
+        case 'add':
+            embed.setDescription(`${role} was blacklisted from ${targetUser}`)
             if (!blacklist.includes(role.id)) {
-                await editblacklist(user.id, interaction.guild.id, role.id, 'pull')
+                await editblacklist(targetUser.id, interaction.guild.id, role.id, 'pull')
                 await targetUser.roles.remove(role)
             } else
-                commandembed.setDescription(`${role} is already blacklisted from ${user}`)
-            interaction.reply({ embeds: [commandembed] })
+                embed.setDescription(`${role} is already blacklisted from ${targetUser}`)
             break;
-        }
-        case 'remove': {
-            const role = interaction.options.getRole('role')
-            editblacklist(user.id, interaction.guild.id, role.id)
-            const commandembed = new EmbedBuilder()
-                .setDescription(`${role} was removed from ${user} blacklist`)
-            interaction.reply({ embeds: [commandembed] })
-        }
+        case 'remove':
+            editblacklist(targetUser.id, interaction.guild.id, role.id)
+            embed.setDescription(`${role} was removed from ${targetUser} blacklist`)
+            break;
     }
+    interaction.reply({ embeds: [embed] })
 }
