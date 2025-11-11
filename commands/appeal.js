@@ -1,5 +1,5 @@
 import { InteractionContextType, SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder } from "discord.js";
-import { getUserForAppeal } from "../Database/databasefunctions.js";
+import { appealsget } from "../Database/databasefunctions.js";
 
 export const data = new SlashCommandBuilder()
     .setContexts([InteractionContextType.BotDM])
@@ -7,7 +7,7 @@ export const data = new SlashCommandBuilder()
     .setDescription('Use this command to appeal bans from servers')
 
 export async function execute(interaction) {
-    const userbans = await getUserForAppeal(interaction.user.id)
+    const userbans = await appealsget(interaction.user.id)
     const options = []
     userbans.forEach(ban => {
         const banentry = ban.punishments.filter(p => p.type === 'Ban') ?? null
