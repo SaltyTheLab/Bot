@@ -1,5 +1,4 @@
 const commandHistory = document.getElementById('commandHistory');
-const maxCommands = 50;
 const searchInput = document.getElementById('searchInput');
 
 let recentCommands = [];
@@ -9,9 +8,7 @@ async function fetchRecentCommands() {
     try {
         const response = await fetch('WebsiteTool/recentCommandslog.json');
         if (!response.ok) throw new Error('Failed to fetch recent commands');
-        const commands = await response.json();
-        recentCommands = commands.slice(0, maxCommands);
-        filteredCommands = recentCommands;
+        recentCommands, filteredCommands = await response.json()
         updateCommandList();
         adjustLayout(filteredCommands.length);
     } catch (err) {

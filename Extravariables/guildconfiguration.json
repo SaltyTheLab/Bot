@@ -24,7 +24,8 @@
             "getlocation": "1235323618582466621",
             "getcolor": "1235323618582466621",
             "generalChannel": "1231453115937587273",
-            "countingChannel": "1406810924806832218"
+            "countingChannel": "1406810924806832218",
+            "scams": "1436157325214875789"
         },
         "exclusions": {
             "adultcatagorey": "1235309784685744308",
@@ -99,7 +100,13 @@
         "exclusions": {
             "adultcatagorey": "1347589981513711656"
         },
-        "mediaexclusions": {},
+        "mediaexclusions": {
+            "adultimages": "1347590233994301480",
+            "vrcnsfw": "1427427598136512706",
+            "vrcpics": "1427426871838244874",
+            "media": "1400204426639311003",
+            "irl photos": "1347408649978380422"
+        },
         "reactions": {
             "🔴": "1347447588919443557",
             "🟣": "1347447590928519199",
