@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder, InteractionContextType, PermissionFlagsBits } from "discord.js";
-import { unwarn } from "../Database/databasefunctions.js";
+import { getPunishments } from "../Database/databasefunctions.js";
 
 export const data = new SlashCommandBuilder()
     .setName('unwarn')
@@ -12,12 +12,14 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
     const user = interaction.options.getUser('target')
-    const guildId = interaction.guild.id;
-    await unwarn(user.id, guildId);
-
+    const outcome = await getPunishments(user.id, interaction.guild.id, true, true)
     const commandembed = new EmbedBuilder()
         .setDescription(`recent warn removed from${user}`)
         .setColor(0x007800)
+    outcome == 0 ? commandembed
+        .setDescription(`No warns removed from${user}`)
+        .setColor(0x700202)
+        : null
     interaction.reply({
         embeds: [commandembed]
     })
