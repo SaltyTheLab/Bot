@@ -52,7 +52,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (allGuildConfigs[currentGuildId]) {
             configToRender = allGuildConfigs[currentGuildId]
             console.log(`Loading pre-existing config for guild: ${currentGuildId}`, configToRender);
-            console.log(configToRender)
         }
         else {
             configToRender = {
@@ -82,7 +81,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     messagethreshold: 15
                 }
             }
-            console.log(`No config found, loading default for guild: ${currentGuildId}`);
+            console.log(`No config found, loading default`);
         }
         renderConfig(configToRender)
         deleteConfigBtn.classList.toggle('hidden', !currentGuildId)
@@ -102,8 +101,6 @@ document.addEventListener('DOMContentLoaded', () => {
         for (const key in sections) {
             if (Object.hasOwnProperty.call(config, key)) {
                 const containerId = key === 'automodsettings' ? 'automodSection' : `${key}Section`;
-                console.log(containerId)
-                console.log(elements[containerId], config[key], sections[key])
                 renderSection(elements[containerId], config[key], sections[key])
             }
         }
@@ -111,7 +108,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function getSectionValues(container, type) {
-        console.log(container)
         const values = {};
         const divs = container.querySelectorAll('div');
         divs.forEach(div => {
@@ -178,7 +174,6 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     function renderSection(container, data, type) {
-        console.log(container)
         container.innerHTML = ''; // Clear the container first
         for (const key in data) {
             if (Object.hasOwnProperty.call(data, key)) {
