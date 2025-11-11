@@ -1,6 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
-import guildChannelMap from "../BotListeners/Extravariables/guildconfiguration.json" with {type: 'json'};
-import { load, save } from '../utilities/jsonloaders.js';
+import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'};
+import { load, save } from '../utilities/fileeditors.js';
 import { guildEmbedConfig } from './embedData.js';
 let messageIDs = await load('./embeds/embedIDs.json');
 function getComparableEmbed(embedData) {
@@ -22,19 +22,13 @@ function getComparableEmbed(embedData) {
     };
     return JSON.stringify(cleanEmbed);
 }
-async function sendEmbedAndSave(guild, messageIDs, embedName, embedData, guildChannels) {
-    const channel = await guild.channels.fetch(guildChannels[embedName]);
-    try {
-        const oldMessageIndex = messageIDs[guild.id].findIndex((message) => message.name === embedName) ?? null;
-        if (oldMessageIndex && oldMessageIndex !== -1) {
-            // Found an old message with the same name, so we remove it.
-            messageIDs[guild.id].splice(oldMessageIndex, 1);
-        }
-    } catch (err) {
-        console.log(`error sending embed for ${embedName}: `, err)
-    }
+async function sendEmbedAndSave(guildId, channels, messageIDs, embedName, embedData, guildChannels) {
+    const channel = channels.get(guildChannels[embedName]);
+    const oldMessageIndex = messageIDs[guildId].findIndex((message) => message.name === embedName) ?? null;
+    if (oldMessageIndex && oldMessageIndex !== -1)
+        messageIDs[guildId].splice(oldMessageIndex, 1);
     const { embeds, components } = embedData;
-    const msg = await channel.send({ embeds, components, fetchReply: true });
+    const msg = await channel.send({ embeds, components, withResponse: true });
     if (embedData.reactions && embedData.reactions.length > 0) {
         for (const reaction of embedData.reactions) {
             try {
@@ -45,53 +39,44 @@ async function sendEmbedAndSave(guild, messageIDs, embedName, embedData, guildCh
         }
     }
     console.log(`📝 Sent '${embedName}' embed. Message ID:`, msg.id);
-    if (!messageIDs[guild.id]) {
-        // If the guild doesn't exist in our object, create an entry for it
-        messageIDs[guild.id] = [];
-    }
-    messageIDs[guild.id].push({
+    if (!messageIDs[guildId])
+        messageIDs[guildId] = [];
+    messageIDs[guildId].push({
         name: embedName,
         messageId: msg.id,
         channelid: channel.id,
     });
 }
-function generateEmbedData(configData, guild) {
-    const config = typeof configData === 'function' ? configData(guild) : configData
-    const embed = new EmbedBuilder(config.embeds)
-    const reactions = config.reactions || null
-    const components = config.components || null
+function generateEmbedData(configData) {
+    const embed = new EmbedBuilder(configData.embeds)
+    const reactions = configData.reactions || null
+    const components = configData.components || null
     return {
         embeds: [embed],
         components: components,
         reactions: reactions
     }
 }
-export default async function embedsenders(guilds) {
+export default async function embedsenders(guildIds, channels) {
     let embedTasks = [];
-    for (const [guildId, guild] of guilds) {
+    for (const guildId of guildIds) {
         const guildConfig = guildEmbedConfig[guildId];
         if (!guildConfig) {
-            console.log(`No embed configuration found for guild ID: ${guild.id}`);
+            console.log(`No embed configuration found for guild ID: ${guildId}`);
             continue;
         }
-        const guildChannels = guildChannelMap[guild.id].publicChannels;
+        const guildChannels = guildChannelMap[guildId].publicChannels;
         if (!guildChannels) {
-            console.error(`❌ No channel mapping found for guild ID: ${guild.id}. Please check guildChannelMap.`);
+            console.error(`❌ No channel mapping found for guild ID: ${guildId}. Please check guildChannelMap.`);
             continue;
         }
         for (const embedName in guildConfig) {
-            const configData = guildConfig[embedName]
-            const existingEmbedInfo = messageIDs[guildId]?.find((embed) => embed.name === embedName);
+            const existingEmbedInfo = messageIDs[guildId]?.find((embed) => embed.name === embedName) ?? null;
             embedTasks.push(async () => {
+                const embedData = generateEmbedData(guildConfig[embedName])
                 try {
-                    const embedData = generateEmbedData(configData, guild)
-                    const channel = await guild.client.channels.fetch(existingEmbedInfo.channelid) ?? null;
+                    const channel = channels.get(existingEmbedInfo.channelid) ?? null;
                     const message = await channel.messages.fetch(existingEmbedInfo.messageId) ?? null;
-                    if (!existingEmbedInfo || !message) {
-                        console.log(`missing embed for ${embedName}, adding to queue...`);
-                        await sendEmbedAndSave(guild, messageIDs, embedName, embedData, guildChannels);
-                        return;
-                    }
                     const existingEmbedString = getComparableEmbed(message.embeds[0]);
                     const newEmbedString = getComparableEmbed(embedData.embeds[0].data);
 
@@ -108,8 +93,10 @@ export default async function embedsenders(guilds) {
                             await Promise.all(reactionPromises);
                         }
                     }
-                } catch (error) {
-                    console.error(`❌ Failed to update or fetch message '${embedName}':`, error);
+                } catch {
+                    console.log(`missing embed for ${embedName}, adding to queue...`);
+                    await sendEmbedAndSave(guildId, channels, messageIDs, embedName, embedData, guildChannels);
+                    return;
                 }
             });
         }

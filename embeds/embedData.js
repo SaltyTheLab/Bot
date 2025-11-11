@@ -1,13 +1,9 @@
 import { ActionRowBuilder, StringSelectMenuBuilder } from 'discord.js'
 export const guildEmbedConfig = {
     "1231453115937587270": {
-        "rules": (guild) => ({
+        "rules": {
             embeds: {
                 title: '**__Rules__**',
-                author: {
-                    name: "Salty's Cave",
-                    iconURL: guild.iconURL({ size: 1024, extension: 'png' }) || undefined
-                },
                 description:
                     ['__ ** General Server Rules ** __',
                         '**1)**  Explicit or Pornographic material(nsfw vids, gifs, etc.) is strictly forbidden.The only exception applies for content specifically permitted within <#1257424392586002613> . All other channels are intended for general discussion, and content within them must not cause discomfort to other members.',
@@ -60,17 +56,11 @@ export const guildEmbedConfig = {
                         value: 'Feel free to grab some roles in <#1235323618582466621> channel.'
                     }
                 ]
-            },
-            reactions: null,
-        }),
-        "mental": (guild) => ({
+            }
+        },
+        "mental": {
             embeds: {
                 title: 'Mental Health',
-                author: {
-                    name: 'Salty\'s Cave',
-                    iconURL: guild.iconURL({ size: 1024, extension: 'png' }) || undefined
-                },
-                thumbnail: 'https://cdn.discordapp.com/attachments/1334669143504326677/1390140478082519152/SaltyWolfHug.png?ex=68672cb5&is=6865db35&hm=59e9740b98736a7013878079dca702c2291a5f054785836dc6041819f9e4dcbf&',
                 description: ['At some point in your life, you will have to seek help with mental health and that is OK. What is NOT OK is having several days where you feel like you are going to do something drastic or harm yourself.',
                     'This is not a sign of weakness but please be aware that resources are available to you. If you know you or someone is struggling with this, it is imperative that you give them this as soon as possible as early intervention, support or proactive measures can and will save someone\'s life even when they push back hard on you.',
                     'This cave is a strong supporter of mental health and is designed to be a safe space for everyone, which I believe in us to make that happen. We want to encourage others even when they are down. A simple talk may be all someone needs from a stranger or a close friend. These people are good but does not replace a doctor or licensed professional who will listen you with an open mind.',
@@ -124,16 +114,27 @@ export const guildEmbedConfig = {
                         ].join('\n'),
 
                 }
-                ],
+                ]
             }
-        }),
-        "staffguide": (guild) => ({
+        },
+        "scams": {
+            embeds: {
+                title: 'Common Scams',
+                color: 0xc27013,
+                description: [
+                    'There are a few common scams to look out for and be weary of. Most of these will give you a seeming too good to be true or impossible deadline. They will promise that you can pay in installments as you get paid. These are the well known ones:',
+                    '1. The artist scam:\n These are the easiest to spot with a user dming you "hey i like your pfp" or "Is that your OC, it looks really good and I have an Idea for your sona". These guys are usually bots or actual people trying to steal your hard earned money.',
+                    '2. The VrChat Avatar scam:\n These start out with a user claiming to play vrchat then try to ask how long you have been playing for. Once they have talked to you enough they will most likely ask if you have a public or private avatar, your answer will not matter and they\'ll try to rope you into looking at their work. The alternative version of this scam is someone acting as a satisfied customer from a modeler. These guys will also try to show you their work.',
+                    '3. The Game Tester scam:\n These start out as a user claiming to make a game and ask you to test it for them, the file they send you is certain to be malicous and will certainly be damaging to your computer or are data miners that scan and send your info back to the scammer to be sold off or used later. Block and report these accounts ASAP',
+                    '4. The Nitro Scam:\n This is a classic one, always verify that the nitro you recieved is legit, most fake gifts will use bot embed buttons for you to click on a link, offical discord nitro gifts have a very different look to them, so if you recieve a nitro gift and the accept button isn\'t green but gray, then it is not real',
+                    '5. The Steam account Scam:\n This usually starts with a "I accidentally reported your account to steam instead of another person" These ones will try to steal your steam account credentials. If there is a problem with your account steam would contact you via an offical email and not discord',
+                    'How can I protect myself?\n Always enable 2fa on your account, this is a small additional security measure but it ensures someone else cannot access your account without a short number that is sent to your phone'
+                ].join('\n\n')
+            }
+        },
+        "staffguide": {
             embeds: {
                 title: 'Staff Guidelines',
-                author: {
-                    name: 'Salty\'s Cave',
-                    iconURL: guild.iconURL({ size: 1024, extension: 'png' }) || undefined
-                },
                 description: ['All moderation commands are to be executed within <#1307212814036893716> channel, utilizing <@1420927654701301951>\n',
                     '\n__The following links provide direct navigation to specific sections of these guidelines__\n',
                     '[Core Guidelines](https://discord.com/channels/1231453115937587270/1391582104952770570)',
@@ -148,7 +149,7 @@ export const guildEmbedConfig = {
                     'SCAM PREVENTION AND RESPONSE',
                     'RESPONDING TO COMPROMISED ACCOUNTS)\n'].join('\n')
             }
-        }),
+        },
         "getstream": {
             embeds: {
                 title: 'Twitch Pings',
@@ -219,12 +220,8 @@ export const guildEmbedConfig = {
         }
     },
     "1347217846991851541": {
-        "rules": (guild) => ({
+        "rules": {
             embeds: {
-                author: {
-                    name: 'EvoNightWolf\'s Server',
-                    iconURL: guild.iconURL({ size: 1024, extension: 'png' }) || undefined
-                },
                 description: ['__ ** General Server Rules ** __',
                     '1) Be respectful to everyone. Please don\'t antagonize anyone, definitely don\'t bully someone. ',
                     '2) If someone is harassing you or bullying you, block them and open a ticket and let us know. Have proof or we will do nothing. I don\'t care too much for he said, she said. If you don\'t block someone, then you\'re basically asking to get mad or sad or annoyed.',
@@ -249,7 +246,7 @@ export const guildEmbedConfig = {
                 }]
             },
             reactions: null
-        }),
+        },
         "Getcontent": {
             embeds: {
                 title: 'Want some content updates????',
@@ -433,13 +430,9 @@ export const guildEmbedConfig = {
         }
     },
     "1342845801059192913": {
-        "rules": (guild) => ({
+        "rules": {
             embeds: {
                 color: 0x086ca5,
-                author: {
-                    name: 'Bark',
-                    iconURL: guild.iconURL({ size: 1024, extension: 'png' }) || undefined
-                },
                 title: 'Welcome to Bark!!',
                 description: [
                     'This server has a few easy rules to follow, and by doing so you will like this community created by <@1226077693548953630>.',
@@ -467,10 +460,9 @@ export const guildEmbedConfig = {
                         'For every 20 messages you send or are inactive(no messages sent) for an hour, your media count will be reset. Do not take advantage of the reset hence why it is so long'
                     ].join('\n')
                 },
-                { name: 'Circumventing automod filter:', value: 'Trying to use placeholders or different letters to circumvent the automods filter will lead to a warn or mute' }],
-                footer: { text: 'Bark', iconURL: guild.iconURL({ size: 1024, extension: 'png' }) }
+                { name: 'Circumventing automod filter:', value: 'Trying to use placeholders or different letters to circumvent the automods filter will lead to a warn or mute' }]
             }
-        }),
+        },
         "getroles": {
             embeds: {
                 description: [
@@ -481,9 +473,8 @@ export const guildEmbedConfig = {
             },
             reactions: ['🔞', '👨']
         },
-        "dirty": (guild) => ({
+        "dirty": {
             embeds: {
-                thumbnail: guild.iconURL({ size: 1024, extension: "png" }),
                 color: 0xf700ff,
                 title: 'Rules of the 18+ catagorey',
                 description: [
@@ -493,23 +484,19 @@ export const guildEmbedConfig = {
                     '3) No IRL pics in nsfw! We are adults here and expect common sense here. This will lead to a swift ban.\n',
                     'react with 🍆 to get access to <#1388116277670842478> and the dirty vc here!'
                 ].join('\n'),
-                footer: { text: guild.name, iconURL: guild.iconURL({ size: 1024, extension: 'png' }) }
             },
             reactions: ['🍆']
-        }),
-        "staffguide": (guild) => ({
+        },
+        "staffguide": {
             embeds: {
-                thumbnail: guild.iconURL({ size: 1024, extension: 'png' }),
-                author: { name: guild.name },
                 title: '__**Staff Guidelines**__',
                 description: [
                     'Welcome to the staff team of Bark!',
                     'Below are some guidelines to help you familiarize yourself with the commands of <@1420927654701301951>',
                     '[click here](https://discord.com/channels/1342845801059192913/1423832190919114826/1423834091102666924)\nTHE ROLES\nINFORMATION\nPROCEDURE\nHUMAN ERROR\n',
                     '[click here](https://discord.com/channels/1342845801059192913/1423834519345299568/1423834854906265791)\nBOT COMMANDS\nBAN APPEALS\nTICKETS\nFEBOT IS DOWN'
-                ].join('\n'),
-                footer: { text: guild.name, iconURL: guild.iconURL({ size: 1024, extension: 'png' }) }
+                ].join('\n')
             }
-        })
+        }
     }
 }
