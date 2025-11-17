@@ -29,4 +29,4 @@ export class CountingStateManager {
         state.lastUser = null;
     }
 }
-export const countingStateManager = new CountingStateManager();
+export default new CountingStateManager();
