@@ -5,8 +5,9 @@ import globalwordsData from './globalwords.json' with {type: 'json'}
 import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'};
 import { LRUCache } from 'lru-cache';
 import Denque from 'denque';
+import { MessageFlagsBitField } from 'discord.js';
 
-const userMessageTrackers = new LRUCache({ max: 200, ttl: 30 * 60 * 1000, updateAgeOnGet: true, });
+const userMessageTrackers = new LRUCache({ max: 50, ttl: 30 * 60 * 1000, updateAgeOnGet: true, });
 
 function getOrCreateTracker(userId, guildId) {
   const initialTrackerState = () => ({ total: 0, mediaCount: 0, timestamps: new Denque(), duplicateCounts: new Map(), recentMessages: new Denque() })
@@ -61,7 +62,7 @@ function updateTracker(userId, message) {
   }
 
   //media check for message and flag it if true
-  if (hasMedia(message) && !Object.values(guildChannelMap[message.guild.id].mediaexclusions).some(id => id === message.channel.parentId || id === message.channel.id))
+  if (hasMedia(message) && !message.flags.has(MessageFlagsBitField.Flags.IsVoiceMessage) && !Object.values(guildChannelMap[message.guild.id].mediaexclusions).some(id => id === message.channel.parentId || id === message.channel.id))
     tracker.mediaCount += 1;
 
   // Track timestamps for general spam
@@ -106,20 +107,17 @@ export default async function AutoMod(message) {
     Date.now() - member.joinedTimestamp < TWO_DAYS_MS && !getUser(author.id, guild.id, true)];
   let globalword;
   let matchedWord;
-
-  for (const word of messageWords) {
+  messageWords.forEach(word => {
     if (globalwords.has(word)) {
       globalword = word
-      break;
     }
-  }
+  });
   if (!Object.values(guildChannelMap[guild.id].exclusions).some(id => id === message.channel.parentId || id === message.channel.id)) {
-    for (const word of messageWords) {
+    messageWords.forEach(word => {
       if (forbiddenWords.has(word)) {
-        matchedWord = word;
-        break;
+        matchedWord = word
       }
-    }
+    })
   }
   const { GeneralSpam, DuplicateSpam, CapSpam, MediaViolation } = updateTracker(author.id, message);
   const { reasons, totalWeight } = evaluateViolations(hasInvite, globalword, matchedWord, everyonePing, GeneralSpam, DuplicateSpam, MediaViolation, CapSpam, isNewUser);
@@ -128,20 +126,16 @@ export default async function AutoMod(message) {
   globalword || matchedWord || hasInvite || everyonePing ? message.delete() : null;
   let lastReason = null, reasonText;
 
-  if (reasons.length >= 2)
-    lastReason = reasons.pop();
-  if (lastReason == 'while new to the server.')
-    reasonText = `AutoMod: ${reasons.join(', ')} ${lastReason}`;
-  if (reasons.length === 1)
-    reasonText = lastReason !== null ? `AutoMod: ${reasons} and ${lastReason}` : `AutoMod: ${reasons}`;
-  else
-    reasonText = `AutoMod: ${reasons.join(', ')} and ${lastReason}`;
+  reasons.length >= 2 ? lastReason = reasons.pop() : null
+  lastReason == 'while new to the server.' ? reasonText = `AutoMod: ${reasons.join(', ')} ${lastReason}` : null
+  reasons.length === 1 ? (reasonText = lastReason !== null ? `AutoMod: ${reasons} and ${lastReason}` : `AutoMod: ${reasons}`)
+    : reasonText = `AutoMod: ${reasons.join(', ')} and ${lastReason}`;
 
   const commoninputs = {
-    guild: guild, target: author.id, moderatorUser: client.user, reason: reasonText, channel: channel, isAutomated: true
+    guild: guild, target: author, moderatorUser: client.user, reason: reasonText, channel: channel, isAutomated: true
   }
   if ((await getPunishments(author.id, guild.id, true).length > 2 || totalWeight >= 3 || everyonePing || hasInvite) && isNewUser == true)
-    punishUser({ ...commoninputs, banflag: true });
+    await punishUser({ ...commoninputs, banflag: true });
   else
     await punishUser({ ...commoninputs, currentWarnWeight: totalWeight });
 }
