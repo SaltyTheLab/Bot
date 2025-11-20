@@ -5,7 +5,7 @@ import { load } from "../utilities/fileeditors.js";
 
 function getRandomColor() {
     const randomHex = Math.floor(Math.random() * 16777215)
-    return `#${randomHex.toString(16).padStart(6, '0')}`
+    return parseInt(`0x${randomHex.toString(16).padStart(6, '0')}`, 16)
 }
 function shuffle(array) {
     for (let i = array.length - 1; i > 0; i--) {
@@ -38,15 +38,12 @@ export async function execute(interaction) {
         );
     });
 
-    const quiry = new EmbedBuilder()
-        .setAuthor({
-            name: `Guess this logo ${interaction.user.tag}`,
-            iconURL: interaction.user.displayAvatarURL({ dynamic: true }),
-        })
-        .setColor(getRandomColor())
-
     const message = await interaction.reply({
-        embeds: [quiry.setImage('attachment://logo.png')],
+        embeds: [new EmbedBuilder({
+            author: { name: `Guess this logo ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL({ dynamic: true }), },
+            color: getRandomColor(),
+            image: { url: 'attachment://logo.png' }
+        })],
         files: [
             { attachment: resolve(`./${logo.image}`), name: 'logo.png' }
         ],
@@ -56,30 +53,27 @@ export async function execute(interaction) {
     const collector = message.resource.message.createMessageComponentCollector(
         {
             componentType: ComponentType.Button,
-            filter: i => i.message.id === message.resource.message.id,
+            filter: i => i.message.id === message.interaction.responseMessageId,
             time: 15000
         }
     );
     let updatedButtons;
-
     collector.on('collect', async i => {
         updatedButtons = new ActionRowBuilder();
-
         options.forEach(option => {
             const isCorrect = option.brand === logo.brand;
             const wasClicked = i.customId === option.brand;
             updatedButtons.addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`disabled_${option.brand}`)
-                    .setLabel(option.brand)
-                    .setStyle(
-                        isCorrect
-                            ? ButtonStyle.Success
-                            : wasClicked
-                                ? ButtonStyle.Danger
-                                : ButtonStyle.Secondary
-                    )
-                    .setDisabled(true)
+                new ButtonBuilder({
+                    custom_id: `disabled_${option.brand}`,
+                    label: option.brand,
+                    style: isCorrect
+                        ? ButtonStyle.Success
+                        : wasClicked
+                            ? ButtonStyle.Danger
+                            : ButtonStyle.Secondary,
+                    disabled: true
+                })
             );
         });
         if (i.customId === logo.brand) {
@@ -98,11 +92,12 @@ export async function execute(interaction) {
 
             options.forEach(option => {
                 updatedButtons.addComponents(
-                    new ButtonBuilder()
-                        .setCustomId(`disabled_${option.brand}`)
-                        .setLabel(option.brand)
-                        .setStyle(ButtonStyle.Primary)
-                        .setDisabled(true)
+                    new ButtonBuilder({
+                        custom_id: `disabled_${option.brand}`,
+                        label: option.brand,
+                        style: ButtonStyle.Primary,
+                        disabled: true
+                    })
                 )
             })
             await interaction.editReply({ components: [updatedButtons] })

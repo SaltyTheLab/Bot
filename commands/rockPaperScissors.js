@@ -8,27 +8,26 @@ export const data = new SlashCommandBuilder()
 
 export function execute(interaction) {
     let userWin = false;
-    const menu = new EmbedBuilder()
-        .setTitle('**Pick your option**')
-        .setColor(0x00a900)
-
-    const Rock = new ButtonBuilder()
-        .setCustomId('Rock')
-        .setLabel('rock')
-        .setStyle(ButtonStyle.Secondary)
-    const Paper = new ButtonBuilder()
-        .setCustomId('Paper')
-        .setLabel('paper')
-        .setStyle(ButtonStyle.Secondary)
-    const Scissors = new ButtonBuilder()
-        .setCustomId('Scissors')
-        .setLabel('scissors')
-        .setStyle(ButtonStyle.Secondary)
-
-
-    const row = new ActionRowBuilder().addComponents(Rock, Paper, Scissors)
+    const row = new ActionRowBuilder({
+        components: [new ButtonBuilder({
+            custom_id: 'Rock',
+            label: 'rock',
+            style: ButtonStyle.Secondary
+        }), new ButtonBuilder({
+            custom_id: 'Paper',
+            label: 'paper',
+            style: ButtonStyle.Secondary
+        }), new ButtonBuilder({
+            custom_id: 'Scissors',
+            label: 'scissors',
+            style: ButtonStyle.Secondary
+        })]
+    })
     interaction.reply({
-        embeds: [menu],
+        embeds: [new EmbedBuilder({
+            title: '**Pick your option**',
+            color: 0x00a900
+        })],
         components: [row]
     });
     const opponentchoices = [
@@ -62,18 +61,17 @@ export function execute(interaction) {
             result = 'Febot Wins!!!';
         else if (userchoice.toLowerCase() === opponentchoice.toLowerCase())
             result = "it's a tie!!";
-
-        const resultEmbed = new EmbedBuilder()
-            .setTitle(result)
-            .setDescription(`You chose **${userchoice}**.\nOpponent chose **${opponentchoice}**.`)
-            .setColor(0xffa500);
         if (userWin) {
             const { userData } = await getUser(interaction.user.id, interaction.guild.id)
             userData.coins += 20;
             await saveUser(interaction.user.id, interaction.guild.id, { userData });
         }
         await i.update({
-            embeds: [resultEmbed],
+            embeds: [new EmbedBuilder({
+                title: result,
+                description: `You chose **${userchoice}**.\nOpponent chose **${opponentchoice}**.`,
+                color: 0xffa500
+            })],
             components: []
         });
     })

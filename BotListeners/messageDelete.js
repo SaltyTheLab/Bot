@@ -1,5 +1,5 @@
 import { EmbedBuilder } from "discord.js";
-import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'};
+import guildChannelMap from "../Extravariables/guildconfiguration.js";
 export async function messageDelete(message) {
     if (!message.guild || message.partial || !message.author || message.author.bot) return;
 
@@ -15,22 +15,23 @@ export async function messageDelete(message) {
 
     const imageAttachments = message.attachments.filter(att => att.contentType?.startsWith('image/')).map(att => att.url);
 
-    const mainEmbed = new EmbedBuilder()
-        .setColor(0xf03030)
-        .setDescription([title, message.content || '_No content_\n', `[Event Link](${messageLink})`].join('\n'))
-        .setThumbnail(message.author.displayAvatarURL())
-        .setFooter({ text: `ID: ${message.id}` })
-        .setTimestamp()
+    const mainEmbed = new EmbedBuilder({
+        color: 0xf03030,
+        description: [title, message.content || '_No content_\n', `[Event Link](${messageLink})`].join('\n'),
+        thumbnail: { url: message.author.displayAvatarURL() },
+        footer: { text: `ID: ${message.id}` },
+        timestamp: Date.now()
+    })
     hasAttachment ? mainEmbed.setImage(imageAttachments[0]) : null
 
     const additionalImageEmbeds = imageAttachments.slice(1, 9).map(url =>
-        new EmbedBuilder()
-            .setColor(0xf03030)
-            .setDescription(title + `\n[Event Link](${messageLink})`)
-            .setImage(url)
-            .setThumbnail(message.author.displayAvatarURL())
-            .setFooter({ text: `ID: ${message.id}` })
-            .setTimestamp()
-    )
+        new EmbedBuilder({
+            color: 0xf03030,
+            description: title + `\n[Event Link](${messageLink})`,
+            image: url,
+            thumbnail: { url: message.author.displayAvatarURL() },
+            footer: { text: `ID: ${message.id}` },
+            timestamp: Date.now()
+        }))
     await logChannel.send({ embeds: imageAttachments.length > 1 ? [mainEmbed, ...additionalImageEmbeds] : [mainEmbed] });
 };

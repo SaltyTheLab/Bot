@@ -1,22 +1,19 @@
 import { EmbedBuilder, AuditLogEvent } from "discord.js";
 import { load, save } from "../utilities/fileeditors.js";
 import { getPunishments } from "../Database/databasefunctions.js";
-import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'};
+import guildChannelMap from "../Extravariables/guildconfiguration.js";
 const recentBans = new Map();
 async function sendMassBanEmbed(executorId, channel) {
     const entry = recentBans.get(executorId);
     const { executor, bans } = entry;
-    const banlog = new EmbedBuilder()
-        .setAuthor({
-            name: `${executor.tag} ${`mass banned`}`,
-            iconURL: executor.displayAvatarURL({ dynamic: true })
-        })
-        .setTitle(`Mass Ban: ${bans.length} Members Banned`)
-        .setDescription(bans.map(ban => `**Tag**: \`${ban.userTag}\` \n**ID**: \`${ban.userId}\`\n**Reason**: \`${ban.reason}\``).join('\n\n'))
-        .setColor(0x900000)
-        .setFooter({ text: `Banned by ${executor.tag}`, iconURL: executor.displayAvatarURL({ dynamic: true }) })
-        .setTimestamp()
-
+    const banlog = new EmbedBuilder({
+        author: { name: `${executor.tag} ${`mass banned`}`, iconURL: executor.displayAvatarURL({ dynamic: true }) },
+        title: `Mass Ban: ${bans.length} Members Banned`,
+        description: bans.map(ban => `**Tag**: \`${ban.userTag}\` \n**ID**: \`${ban.userId}\`\n**Reason**: \`${ban.reason}\``).join('\n\n'),
+        color: 0x900000,
+        footer: { text: `Banned by ${executor.tag}`, iconURL: executor.displayAvatarURL({ dynamic: true }) },
+        timestamp: Date.now()
+    })
     await channel.send({ embeds: [banlog] })
     recentBans.delete(executorId);
 }
@@ -62,17 +59,18 @@ async function handleban(ban, action) {
             break;
         case 'remove': {
             bans = await getPunishments(user, ban.guild)
-            const embed = new EmbedBuilder()
-                .setColor(0x309eff)
-                .setTitle('A member was unbanned')
-                .setThumbnail(user.displayAvatarURL({ dynamic: true }))
-                .setDescription([
+            const embed = new EmbedBuilder({
+                color: 0x309eff,
+                title: 'A member was unbanned',
+                thumbnail: user.displayAvatarURL({ dynamic: true }),
+                description: [
                     `**User**: ${user}`,
                     `**Tag**: \`${user.tag}\``,
                     `**Id**: \`${user.id}\`\n`,
                     `**Reason**: \`${bans.length > 0 ? `Ban Command: ${bans[0].reason}` : 'No reasons provided'}\``
-                ].join('\n'))
-                .setTimestamp()
+                ].join('\n'),
+                timestamp: Date.now()
+            })
             await banlogChannel.send({ embeds: [embed] });
         }
 

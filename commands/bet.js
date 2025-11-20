@@ -20,15 +20,13 @@ export async function execute(interaction) {
     const bet = Math.random()
     const win = Math.ceil(coincount * 1.5);
     let statement = ` ${user.tag} you bet ${coincount} and won ${win} coins!!`
-    const result = new EmbedBuilder()
-        .setColor(0x007a00)
-        .setAuthor({
-            name: statement,
-            iconURL: user.displayAvatarURL({ dyanamic: true })
-        })
-    if (bet >= .5) {
+    const result = new EmbedBuilder({
+        color: 0x007a00,
+        author: { name: statement, iconURL: user.displayAvatarURL({ dyanamic: true }) },
+    })
+    if (bet >= .5)
         userData.coins += win;
-    } else {
+    else {
         statement = ` ${user.tag} you bet ${coincount} and lost!`
         result.setColor(0x7a0000)
         result.setAuthor({
@@ -40,8 +38,6 @@ export async function execute(interaction) {
     }
     await saveUser(user.id, interaction.guild.id, { userData });
     interaction.reply(
-        {
-            embeds: [result]
-        }
+        { embeds: [result] }
     )
 }

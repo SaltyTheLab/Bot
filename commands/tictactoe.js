@@ -1,12 +1,12 @@
 import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle, ComponentType, InteractionContextType, MessageFlags } from "discord.js";
 import { getUser, saveUser } from "../Database/databasefunctions.js";
-const board = Array(9).fill(' ');
 
-function generateEmbed(description, color = 'Green') {
-    return new EmbedBuilder()
-        .setColor(color)
-        .setTitle('TicTacToe')
-        .setDescription(description)
+function generateEmbed(description, color = 0x0000ff) {
+    return new EmbedBuilder({
+        color: color,
+        title: 'TicTacToe',
+        description: description
+    })
 }
 
 function generateButtons(gameBoard, disabled = false) {
@@ -15,17 +15,14 @@ function generateButtons(gameBoard, disabled = false) {
         const row = new ActionRowBuilder()
         for (let j = 0; j < 3; j++) {
             const index = i * 3 + j;
-            row.addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`tictactoe-${index}`)
-                    .setLabel(gameBoard[index] === ' ' ? '\u200b' : gameBoard[index])
-                    .setStyle(
-                        gameBoard[index] === 'X' ? ButtonStyle.Primary :
-                            gameBoard[index] === 'O' ? ButtonStyle.Danger :
-                                ButtonStyle.Secondary
-                    )
-                    .setDisabled(disabled || gameBoard[index] !== ' ')
-            )
+            row.addComponents(new ButtonBuilder({
+                custom_id: `tictactoe-${index}`,
+                label: gameBoard[index] === ' ' ? '\u200b' : gameBoard[index],
+                style: gameBoard[index] === 'X' ? ButtonStyle.Primary :
+                    gameBoard[index] === 'O' ? ButtonStyle.Danger :
+                        ButtonStyle.Secondary,
+                disabled: disabled || gameBoard[index] !== ' '
+            }))
         }
         rows.push(row);
     }
@@ -55,39 +52,37 @@ function checkDraw(gameBoard) {
 }
 
 function getCPUMove(gameBoard) {
-    // 1. Find all available (empty) moves
     const availableMoves = gameBoard
         .map((cell, index) => (cell === ' ' ? index : null))
         .filter(index => index !== null);
-
-    // 2. Pick a random index from the available moves array
     if (availableMoves.length > 0) {
         const randomIndex = Math.floor(Math.random() * availableMoves.length);
         return availableMoves[randomIndex];
     }
-
-    return -1; // Should not happen in a non-drawn game
+    return -1;
 }
 
 export const data = new SlashCommandBuilder()
     .setName('tictactoe')
     .setDescription('Play a game of TicTacToe')
     .addSubcommand(subcommand =>
-        subcommand.setName('user').setDescription('Play against another person').addUserOption(option =>
-            option.setName('opponent').setDescription('The user you want to play against').setRequired(true)
-        )
-    )
-    .addSubcommand(subcommand =>
-        subcommand.setName('cpu').setDescription('Play against the cpu')
-    )
+        subcommand
+            .setName('user')
+            .setDescription('Play against another person')
+            .addUserOption(option =>
+                option
+                    .setName('opponent')
+                    .setDescription('The user you want to play against')
+                    .setRequired(true)))
+    .addSubcommand(subcommand => subcommand.setName('cpu').setDescription('Play against the cpu'))
     .setContexts(InteractionContextType.Guild)
 
 export async function execute(interaction) {
-    const subcommand = interaction.options.getSubcommand()
     const player1 = interaction.user;
     let player2 = null;
     let isCPU = false;
-    switch (subcommand) {
+    const gameBoard = [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '];
+    switch (interaction.options.getSubcommand()) {
         case 'cpu':
             player2 = {
                 id: 'CPU',
@@ -104,110 +99,86 @@ export async function execute(interaction) {
             break;
     }
     let currentplayer = Math.random() < 0.5 ? player1 : player2;
-    const gameBoard = [...board];
     const players = new Map();
     players.set(player1.id, 'X');
     players.set(player2.id, 'O');
-    const player2Mark = 'O'
-
     const sentMessage = await interaction.reply({
         embeds: [generateEmbed(`It's ${currentplayer}'s turn to move `)],
         components: generateButtons(gameBoard),
         withResponse: true
     });
-
     const collector = interaction.channel.createMessageComponentCollector({
         ComponentType: ComponentType.Button,
-        filter: i => i.message.id === sentMessage.resource.message.id,
+        filter: i => i.message.id === sentMessage.interaction.responseMessageId,
         time: 120000
     })
-
+    async function handleMoveAndStateUpdate(moveIndex, playerMark, updateCallback) {
+        gameBoard[moveIndex] = playerMark;
+        if (checkWinner(gameBoard, playerMark) || checkDraw(gameBoard)) {
+            await updateCallback({
+                components: generateButtons(gameBoard, true)
+            });
+            if (checkWinner(gameBoard, playerMark)) {
+                collector.stop('win');
+                if (!isCPU && currentplayer.id === player1.id) {
+                    const { userData } = await getUser(currentplayer.id, interaction.guild.id)
+                    userData.coins += 100;
+                    saveUser(currentplayer.id, interaction.guild.id, { userData })
+                }
+                return true;
+            }
+            collector.stop('draw');
+            return true;
+        }
+        currentplayer = (currentplayer.id === player1.id) ? player2 : player1;
+        await updateCallback({
+            embeds: [generateEmbed(`It's ${currentplayer.toString()}'s turn to move.`)],
+            components: generateButtons(gameBoard)
+        });
+        return false;
+    }
     async function cpuMoveHandler() {
         const cpuMove = getCPUMove(gameBoard);
-
-        if (cpuMove !== -1) {
-            gameBoard[cpuMove] = player2Mark;
-            if (checkWinner(gameBoard, player2Mark)) {
-                return interaction.editReply({
-                    embeds: [generateEmbed(`${player2.toString()} wins!!`, "Gold")],
-                    components: generateButtons(gameBoard, true)
-                });
-            }
-
-            if (checkDraw(gameBoard)) {
-                collector.stop('draw');
-                return interaction.editReply({
-                    embeds: [generateEmbed(`It's a Draw!`, "Grey")],
-                    components: generateButtons(gameBoard, true)
-                });
-            }
-
-            currentplayer = player1;
-            await interaction.editReply({
-                embeds: [generateEmbed(`It's ${currentplayer.toString()}'s turn to move.`)],
-                components: generateButtons(gameBoard)
-            });
-        }
+        if (cpuMove !== -1)
+            return await handleMoveAndStateUpdate(cpuMove, players.get(currentplayer.id), interaction.editReply.bind(interaction));
+        return false
     }
-
     if (isCPU && currentplayer.id === player2.id)
         await cpuMoveHandler();
-
     collector.on('collect', async i => {
         if (i.user.id !== player1.id && i.user.id !== player2.id)
             return i.reply({ content: 'You are not a participant in this game.', flags: MessageFlags.Ephemeral })
         if (i.user.id !== currentplayer.id)
             return i.reply({ content: 'It\'s not your turn!', flags: MessageFlags.Ephemeral })
-
         const move = parseInt(i.customId.split('-')[1]);
         const playerMark = players.get(currentplayer.id);
-
         if (gameBoard[move] !== ' ')
             return i.reply({ content: "That cell is already taken! Please wait for the buttons to update before making your next move.", flags: MessageFlags.Ephemeral });
         gameBoard[move] = playerMark;
-
-        if (checkWinner(gameBoard, playerMark)) {
-            collector.stop('win');
-            await i.update({
-                embeds: [generateEmbed(`${currentplayer} wins!!`, "Gold")],
-                components: generateButtons(gameBoard, true)
-            })
-            if (!isCPU) {
-                const { userData } = await getUser(currentplayer.id, interaction.guild.id)
-                userData.coins += 100;
-                saveUser(currentplayer.id, interaction.guild.id, { userData })
-            }
-            return;
+        const gameOver = await handleMoveAndStateUpdate(move, playerMark, i.update.bind(i))
+        if (!gameOver && isCPU) {
+            await new Promise(r => setTimeout(r, 750));
+            await cpuMoveHandler();
         }
-
-        if (checkDraw(gameBoard)) {
-            collector.stop('draw');
-            await i.update({
-                embeds: [generateEmbed(`It's a Draw!`, "Grey")],
-                components: generateButtons(gameBoard, true)
-            })
-            return;
-        }
-
-        currentplayer = (currentplayer.id === player1.id) ? player2 : player1;
-        if (isCPU) {
-            await i.update({
-                embeds: [generateEmbed(`It's ${currentplayer.toString()}'s turn to move.`)],
-                components: generateButtons(gameBoard)
-            })
-            setTimeout(() => cpuMoveHandler(), 750);
-        } else
-            await i.update({
-                embeds: [generateEmbed(`It's ${currentplayer}'s turn to move.`)],
-                components: generateButtons(gameBoard)
-            })
     });
-
-    collector.on('end', (collected, reason) => {
-        if (reason === 'time')
-            interaction.editReply({
-                embeds: [generateEmbed(`The game ended due to inactivity.`, "Red")],
-                components: generateButtons(gameBoard, true)
-            });
+    collector.on('end', async (collected, reason) => {
+        let finalEmbed;
+        switch (reason) {
+            case 'time':
+                finalEmbed = generateEmbed(`The game ended due to inactivity.`, 0xff0000)
+                break;
+            case 'win':
+                finalEmbed = generateEmbed(`${currentplayer} wins!!`, 0xffd700)
+                break;
+            case 'draw':
+                finalEmbed = generateEmbed(`It's a draw!`, 0x555555)
+                break;
+            default:
+                return
+        }
+        await interaction.editReply({
+            embeds: [finalEmbed],
+            components: generateButtons(gameBoard, true)
+        })
     });
 }
