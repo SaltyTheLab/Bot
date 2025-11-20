@@ -2,12 +2,12 @@ import punishUser from './punishUser.js';
 import forbbidenWordsData from './forbiddenwords.json' with {type: 'json'};
 import { getPunishments, getUser } from '../Database/databasefunctions.js';
 import globalwordsData from './globalwords.json' with {type: 'json'}
-import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'};
+import guildChannelMap from "../Extravariables/guildconfiguration.js";
 import { LRUCache } from 'lru-cache';
 import Denque from 'denque';
 import { MessageFlagsBitField } from 'discord.js';
 
-const userMessageTrackers = new LRUCache({ max: 50, ttl: 30 * 60 * 1000, updateAgeOnGet: true, });
+const userMessageTrackers = new LRUCache({ max: 50, ttl: 30 * 60 * 1000, updateAgeOnGet: true, ttlAutopurge: true });
 
 function getOrCreateTracker(userId, guildId) {
   const initialTrackerState = () => ({ total: 0, mediaCount: 0, timestamps: new Denque(), duplicateCounts: new Map(), recentMessages: new Denque() })
@@ -130,9 +130,8 @@ export default async function AutoMod(message) {
   lastReason == 'while new to the server.' ? reasonText = `AutoMod: ${reasons.join(', ')} ${lastReason}` : null
   reasons.length === 1 ? (reasonText = lastReason !== null ? `AutoMod: ${reasons} and ${lastReason}` : `AutoMod: ${reasons}`)
     : reasonText = `AutoMod: ${reasons.join(', ')} and ${lastReason}`;
-
   const commoninputs = {
-    guild: guild, target: author, moderatorUser: client.user, reason: reasonText, channel: channel, isAutomated: true
+    guild: guild, target: member, moderatorUser: client.user, reason: reasonText, channel: channel, isAutomated: true
   }
   if ((await getPunishments(author.id, guild.id, true).length > 2 || totalWeight >= 3 || everyonePing || hasInvite) && isNewUser == true)
     await punishUser({ ...commoninputs, banflag: true });

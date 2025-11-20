@@ -1,5 +1,5 @@
 import { save, load } from "../utilities/fileeditors.js"
-async function handleinvites(invite, action = 'add') {
+async function handleinvites(invite, action) {
     let invites = await load("Extravariables/invites.json")
     switch (action) {
         case 'add':
@@ -12,7 +12,7 @@ async function handleinvites(invite, action = 'add') {
     await save("Extravariables/invites.json", invites)
 }
 export async function inviteCreate(invite) {
-    await handleinvites(invite)
+    await handleinvites(invite, 'add')
 }
 export async function inviteDelete(invite) {
     await handleinvites(invite, 'remove')

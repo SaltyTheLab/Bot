@@ -1,6 +1,6 @@
 import { InteractionContextType, PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
 import { save, load } from "../utilities/fileeditors.js";
-import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'};
+import guildChannelMap from "../Extravariables/guildconfiguration.js/";
 export const data = new SlashCommandBuilder()
     .setName('applications')
     .setDescription('Open/close applications')
@@ -36,7 +36,6 @@ export async function execute(interaction) {
                 interaction.reply({ content: 'I couldn\'t open applications' });
                 return;
             }
-
             interaction.reply({ content: 'Apps have now been opened!' });
             break;
         case 'close': {

@@ -2,7 +2,30 @@ import { EmbedBuilder } from '@discordjs/builders';
 import { getUser, saveUser } from '../Database/databasefunctions.js';
 import AutoMod from '../moderation/autoMod.js';
 import { MessageType } from 'discord.js';
-import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'};
+import guildChannelMap from "../Extravariables/guildconfiguration.js";
+async function applyUserXP(userId, message, guildId) {
+  const { userData, rank } = await getUser(userId, guildId);
+  const verifiedRole = message.guild.roles.cache.find(r => r.name.toLowerCase() === 'verified');
+  const member = message.member;
+  userData.xp += 20;
+  userData.totalmessages += 1;
+  const xpNeeded = Math.round(((userData.level - 1) ** 1.5 * 52 + 40) / 20) * 20
+  if (userData.xp >= xpNeeded) {
+    userData.level++;
+    userData.xp = 0;
+    await message.channel.send({
+      embeds: [new EmbedBuilder()
+        .setAuthor({
+          name: `${message.author.tag} leveled up to ${userData.level}!`, iconURL: message.author.displayAvatarURL({ dynamic: true })
+        })
+        .setColor(0x00AE86)
+        .setFooter({ text: `you are #${rank} in ${message.guild.name}`, iconURL: message.guild.iconURL({ extension: 'png', size: 64 }) })]
+    });
+  }
+  if (userData.level >= 3 && !member.roles.cache.has(verifiedRole) && verifiedRole)
+    await member.roles.add(verifiedRole);
+  await saveUser(userId, guildId, { userData });
+}
 export async function messageCreate(client, message) {
   if (message.author.bot || !message.guild || !message.member)
     return;
@@ -45,7 +68,6 @@ export async function messageCreate(client, message) {
       return;
     const lastUser = countingState.getLastUser(guildId)
     const expectedNumber = countingState.getCount(guildId) + 1
-
     if (parseInt(message.content.trim()) === expectedNumber && lastUser !== message.author.id) {
       countingState.increaseCount(message.author.id, guildId);
       message.react('✅')
@@ -61,32 +83,8 @@ export async function messageCreate(client, message) {
       return;
     }
   }
-  if (message.type !== MessageType.UserJoin) await applyUserXP(message.author.id, message, guildId);
+  if (message.type !== MessageType.UserJoin) await applyUserXP(message.author.id, message, guildId)
   if (sentbystaff || message.author.id === "521404063934447616") return;
   await AutoMod(message);
 }
 
-async function applyUserXP(userId, message, guildId) {
-  let { userData, rank } = await getUser(userId, guildId);
-  const verifiedRole = message.guild.roles.cache.find(r => r.name.toLowerCase() === 'verified');
-  const member = message.member;
-  userData.xp += 20;
-  userData.totalmessages += 1;
-  const xpNeeded = Math.round(((userData.level - 1) ** 1.5 * 52 + 40) / 20) * 20
-  if (userData.xp >= xpNeeded) {
-    userData.level++;
-    userData.xp = 0;
-
-    const levelUpEmbed = new EmbedBuilder()
-      .setAuthor({
-        name: `${message.author.tag} leveled up to ${userData.level}!`,
-        iconURL: message.author.displayAvatarURL({ dynamic: true })
-      })
-      .setColor(0x00AE86)
-      .setFooter({ text: `you are #${rank} in ${message.guild.name}` });
-    await message.channel.send({ embeds: [levelUpEmbed] });
-  }
-  if (userData.level === 3 && !member.roles.cache.has(verifiedRole) && verifiedRole)
-    await member.roles.add(verifiedRole);
-  await saveUser(userId, guildId, { userData });
-}

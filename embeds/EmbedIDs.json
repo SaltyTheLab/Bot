@@ -2,96 +2,106 @@
   "1231453115937587270": [
     {
       "name": "rules",
-      "messageId": "1422402967323152464",
+      "messageId": "1441096529829167174",
       "channelid": "1235295566356025354"
     },
     {
       "name": "mental",
-      "messageId": "1422402969026170888",
+      "messageId": "1441096529682235412",
       "channelid": "1390128922712342659"
     },
     {
-      "name": "staffguide",
-      "messageId": "1422402969592139857",
+      "name": "scams",
+      "messageId": "1441096530202198148",
+      "channelid": "1436157325214875789"
+    },
+    {
+      "name": "ModerationRules",
+      "messageId": "1441096531125207101",
       "channelid": "1262533685002113155"
     },
     {
       "name": "getstream",
-      "messageId": "1422402969906708583",
+      "messageId": "1441096529959059569",
       "channelid": "1235323618582466621"
     },
     {
+      "name": "staffguide",
+      "messageId": "1441096532198817926",
+      "channelid": "1262533685002113155"
+    },
+    {
       "name": "getdividers",
-      "messageId": "1422402973589311579",
+      "messageId": "1441096531196514456",
       "channelid": "1235323618582466621"
     },
     {
       "name": "getpronouns",
-      "messageId": "1422402975535730718",
+      "messageId": "1441096532542619801",
       "channelid": "1235323618582466621"
     },
     {
       "name": "getconsole",
-      "messageId": "1422402976751812668",
+      "messageId": "1441096534040117342",
       "channelid": "1235323618582466621"
     },
     {
       "name": "getlocation",
-      "messageId": "1422402977531957260",
+      "messageId": "1441096536695111761",
       "channelid": "1235323618582466621"
     },
     {
       "name": "getcolor",
-      "messageId": "1422402978811482112",
+      "messageId": "1441096538410713162",
       "channelid": "1235323618582466621"
-    },
-    {
-      "name": "scams",
-      "messageId": "1437620577669218396",
-      "channelid": "1436157325214875789"
     }
   ],
   "1342845801059192913": [
     {
+      "name": "moderationguide",
+      "messageId": "1441096529543827650",
+      "channelid": "1423830604952240170"
+    },
+    {
+      "name": "staffguide",
+      "messageId": "1441096531016155368",
+      "channelid": "1423830604952240170"
+    },
+    {
       "name": "rules",
-      "messageId": "1422402967860019252",
+      "messageId": "1441096530084761721",
       "channelid": "1388104789514129468"
     },
     {
       "name": "dirty",
-      "messageId": "1422402968862462003",
+      "messageId": "1441096530047144120",
       "channelid": "1415773272934715534"
     },
     {
       "name": "getroles",
-      "messageId": "1422402969353064468",
+      "messageId": "1441096529820778597",
       "channelid": "1410696524849217578"
-    },
-    {
-      "name": "staffguide",
-      "messageId": "1423858493705945181",
-      "channelid": "1423830604952240170"
     }
   ],
   "1347217846991851541": [
     {
-      "name": "rules",
-      "messageId": "1422402970087329874",
-      "channelid": "1347399775951257704"
-    },
-    {
       "name": "Getcontent",
-      "messageId": "1428484281684066445",
+      "messageId": "1441096529602416835",
       "channelid": "1347227575998484538"
     },
     {
+      "name": "rules",
+      "messageId": "1441096529665331243",
+      "channelid": "1347399775951257704"
+    },
+    {
       "name": "Getgames",
-      "messageId": "1428484283202535446",
+      "messageId": "1441096531062030398",
       "channelid": "1347227575998484538"
     },
     {
       "name": "Getcolor",
-      "messageId": "1428484284351643658",
+      "messageId": "1441096537726914611",
       "channelid": "1347227575998484538"
     }
   ]
