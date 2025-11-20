@@ -1,6 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
     let allGuildConfigs = {};
-    // ui Elements
     const elements = {
         guildSelect: document.getElementById('guildSelect'),
         guildIdInput: document.getElementById('guildIdInput'),
@@ -88,7 +87,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderConfig(config) {
-
         const sections = {
             modChannels: 'mod',
             publicChannels: 'public',
@@ -205,8 +203,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         div.innerHTML = `
                                 <input type="text" placeholder="${namePlaceholder}" value="${key}" class="w-1/2 md:w-1/3 bg-gray-900 text-gray-200 border border-gray-600 rounded-lg p-2" data-channel-name="${type}">
-                                <input type="text" placeholder="${idPlaceholder}" value="${value}" class="w-5/8 md:w-3/4 bg-gray-900 text-gray-200 border border-gray-600 rounded-lg p-2" data-channel-id="${type}">
-                                <button class="remove-btn bg-gray-500  rounded-xl text-red-400 font-bold hover:text-red-500 transition-colors p-2 text-x1 leading-none absolute right-0 top-1/3 -translate-y-1/2">&times;</button>
+                                <input type="text" placeholder="${idPlaceholder}" value="${value}" class="w-1/2 md:w-3/4 bg-gray-900 text-gray-200 border border-gray-600 rounded-lg p-2" data-channel-id="${type}">
+                                <button class="remove-btn bg-gray-500 p-6  rounded-xl text-red-400 font-bold hover:text-red-500 transition-colors p-2 text-x1 leading-none absolute right-0 top-1/3 -translate-y-1/2">&times;</button>
                             `;
                         div.querySelector('.remove-btn').onclick = () => {
                             div.remove();
@@ -229,14 +227,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const idPlaceholder = isReaction || isString ? 'Role ID' : 'Channel ID'
         div.innerHTML = ` 
          <input type="text" placeholder="${namePlaceholder}" value="${name}" class="w-1/2 md:w-1/3 bg-gray-900 text-gray-200 border border-gray-600 rounded-lg p-2" data-channel-name="${type}">
-        <input type="text" placeholder="${idPlaceholder}" value="${value}" class="w-5/8 md:w-3/4 bg-gray-900 text-gray-200 border border-gray-600 rounded-lg p-2" data-channel-id="${type}">
-        <button class="remove-btn bg-gray-500  rounded-xl text-red-400 font-bold hover:text-red-500 transition-colors p-2 text-x1 leading-none absolute right-0 top-1/3 -translate-y-1/2">&times;</button>
+        <input type="text" placeholder="${idPlaceholder}" value="${value}" class="w-1/2 md:w-1/3 bg-gray-900 text-gray-200 border border-gray-600 rounded-lg p-2" data-channel-id="${type}">
+        <button class="remove-btn bg-gray-500  rounded-xl text-red-400 font-bold hover:text-red-500 transition-colors p-2 text-x1 leading-none">&times;</button>
       `;
         div.querySelector('.remove-btn').onclick = () => {
             div.remove();
             updateJsonPreview();
         };
-
         container.appendChild(div);
     }
 
@@ -367,8 +364,6 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('confirmNo').addEventListener('click', () => { modal.remove(); resolve(false); });
         });
     }
-
-    //event listeners
     elements.guildSelect.addEventListener('change', updateGuildUI);
     elements.guildIdInput.addEventListener('input', updateJsonPreview);
     elements.uploadConfigBtn.addEventListener('click', () => elements.fileInput.click());
