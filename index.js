@@ -1,21 +1,22 @@
 import { Client, GatewayIntentBits, Collection, ActivityType } from 'discord.js';
 import { config } from 'dotenv';
 import embedsenders from './embeds/embeds.js';
-import { loadCommandsToClient, loadListeners } from './deploy-cmds.js';
-import { CountingStateManager } from './Extravariables/counting.js';
-import guildChannelMap from "./Extravariables/guildconfiguration.json" with {type: 'json'};
+import { pathToFileURL } from 'node:url';
+import { loadCommandsToClient } from './deploy-cmds.js';
+import CountingStateManager from './Extravariables/counting.js';
+import guildChannelMap from "./Extravariables/guildconfiguration.js";
 import { load } from './utilities/fileeditors.js';
 import db from './Database/database.js';
-config();
-export const { TOKEN, CLIENT_ID } = process.env;
+import { findFiles } from './utilities/fileeditors.js';
+import { initializeRankCardBase } from './commands/rank.js';
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessageReactions, GatewayIntentBits.GuildModeration, GatewayIntentBits.GuildInvites],
   partials: ['MESSAGE', 'CHANNEL', 'REACTION', 'GUILD_MEMBER', 'USER', 'GUILD_INVITES']
 });
-const starttime = new Date()
 client.commands = new Collection()
-client.countingState = new CountingStateManager()
-
+client.countingState = CountingStateManager
+config();
+const starttime = Date.now()
 async function clearExpiredWarns(usersCollection) {
   await usersCollection.updateMany(
     { "punishments": { $elemMatch: { "active": 1, "timestamp": { $lt: Date.now() - 24 * 60 * 60 * 1000 } } } },
@@ -23,11 +24,10 @@ async function clearExpiredWarns(usersCollection) {
     { arrayFilters: [{ "elem.active": 1, "elem.timestamp": { $lt: Date.now() - 24 * 60 * 60 * 1000 } }] }
   ).catch(err => console.error('❌ An error occurred during warn clearance:', err));
 }
-async function cacheInteractiveMessages(guildIds, channels) {
+async function cacheInteractiveMessages(channels) {
   const cachePromises = []
   const embedIDs = await load("embeds/EmbedIDs.json")
-  for (const guildid of guildIds) {
-    if (!embedIDs[guildid]) return;
+  for (const guildid in embedIDs) {
     cachePromises.push(async () => {
       const { name, messageId, channelid } = embedIDs[guildid];
       try {
@@ -44,11 +44,8 @@ async function cacheInteractiveMessages(guildIds, channels) {
   }
   await Promise.allSettled(cachePromises);
 }
-
 function updateStatus() {
-  const now = new Date();
-  const elapsedMs = now - starttime; // Time difference in milliseconds
-
+  const elapsedMs = Date.now() - starttime;
   let seconds = Math.floor(elapsedMs / 1000);
   const days = Math.floor(seconds / 86400);
   seconds %= 86400
@@ -60,18 +57,24 @@ function updateStatus() {
   client.user.setActivity(`${uptimeString}`, { type: ActivityType.Watching });
 }
 async function main() {
-  await client.login(process.env.TOKEN);
-  await new Promise(resolve => client.once('clientReady', resolve));
+  const { CLIENT_ID, TOKEN } = process.env;
+  initializeRankCardBase();
+  await client.login(TOKEN);
+  await new Promise(resolve => client.once('clientReady', resolve))
+  client.removeAllListeners();
+  const eventsNeedingClient = new Set(['messageCreate']);
+  for (const filePath of await findFiles("BotListeners"))
+    for (const [eventName, listenerFunc] of Object.entries(await import(pathToFileURL(filePath).href)))
+      client.on(eventName, eventsNeedingClient.has(eventName) ? (...args) => listenerFunc(client, ...args) : (...args) => listenerFunc(...args));
+  const guildIds = client.guilds.cache.map(guild => guild.id);
+  const channels = client.channels.cache;
+  await loadCommandsToClient(client.commands, guildIds, TOKEN, CLIENT_ID);
   updateStatus();
   setInterval(updateStatus, 5000)
   await clearExpiredWarns(db.collection('users'))
-  setInterval(await clearExpiredWarns(db.collection('users')), 86400000)
-  await loadListeners(client);
-  const guildIds = client.guilds.cache.map(guild => guild.id);
-  const channels = client.channels.cache;
-  await loadCommandsToClient(client.commands, guildIds);
-  await cacheInteractiveMessages(guildIds, channels);
-  await embedsenders(guildIds, channels);
+  setInterval(async () => { await clearExpiredWarns(db.collection('users')) }, 5 * 60 * 1000)
+  await cacheInteractiveMessages(channels);
+  await embedsenders(channels);
   for (const guildId of guildIds) {
     if (guildChannelMap[guildId].publicChannels?.countingChannel) {
       let Countingchannel = channels.get(guildChannelMap[guildId].publicChannels.countingChannel)
@@ -79,7 +82,7 @@ async function main() {
       const lastmessages = Countingchannel.messages.cache.filter(message => !message.author.bot)
       for (const [, message] of lastmessages) {
         const messagenumber = parseInt(message.content.trim())
-        if (!isNaN(messagenumber) && message.content.trim() === parseInt(messagenumber).toString() && message.embeds.length === 0) {
+        if (!isNaN(messagenumber) && message.embeds.length === 0) {
           client.countingState.initialize(messagenumber, guildId);
           break;
         }
@@ -89,4 +92,4 @@ async function main() {
   client.commands.forEach((command, name) => console.log(name))
   console.log(`✅ Logged in as ${client.user.tag}`);
 }
-await main().catch(err => console.error(`crashed at ${Date.now() - starttime} :`, err));
+await main().catch(console.error());
