@@ -36,7 +36,7 @@ async function buildNoteEmbed(interaction, index, currentNote, length) {
         footer: { text: `${mod.tag} | ${formattedDate}`, iconURL: mod.displayAvatarURL({ dynamic: true }) }
     })
 };
-async function buildNoteButtons(index, allnotes, id, disabled = false) {
+function buildNoteButtons(index, allnotes, id, disabled = false) {
     return new ActionRowBuilder({
         components: [new ButtonBuilder({
             custom_id: `note-prev`,
@@ -67,7 +67,7 @@ export async function execute(interaction) {
     const notecommand = {
         'add': async () => {
             try {
-                await editNote({ userId: targetUser.id, moderatorId: interaction.user.id, note: note, guildId: guildId })
+                editNote({ userId: targetUser.id, moderatorId: interaction.user.id, note: note, guildId: guildId })
             } catch (err) {
                 console.warn(`is not in the user database.`, err)
                 interaction.reply({ content: `${targetUser.tag} is not in the User Database` })
@@ -102,7 +102,7 @@ export async function execute(interaction) {
             let currentnote = allnotes[currentIndex]
             let replyMessage = await interaction.reply({
                 embeds: [await buildNoteEmbed(interaction, currentIndex, currentnote, allnotes.length)],
-                components: [await buildNoteButtons(currentIndex, allnotes, currentnote._id)]
+                components: [buildNoteButtons(currentIndex, allnotes, currentnote._id)]
             });
             const collector = replyMessage.createMessageComponentCollector({
                 filter: i => i.user.id === interaction.user.id,
@@ -112,12 +112,13 @@ export async function execute(interaction) {
                 const customIdParts = i.customId.split('-');
                 const action = customIdParts[1];
                 const noteIdToDelete = customIdParts[2];
+                await i.deferUpdate();
                 switch (action) {
                     case 'del':
                         try {
                             const twoDays = 48 * 60 * 60 * 1000
                             if (currentnote.timestamp - Date.now() < twoDays || isAdmin) {
-                                await editNote({ userId: targetUser.id, guildId: guildId, id: noteIdToDelete })
+                                editNote({ userId: targetUser.id, guildId: guildId, id: noteIdToDelete })
                                 allnotes = await viewNotes(targetUser.id, interaction.guild.id);
                                 if (allnotes.length === 0) {
                                     replyMessage = await replyMessage.edit({
@@ -137,7 +138,7 @@ export async function execute(interaction) {
                             currentIndex = Math.min(currentIndex, allnotes.length - 1)
                         } catch (error) {
                             console.error(`Error deleting log ${noteIdToDelete}:`, error);
-                            await i.followUp({ content: `Failed to delete note: ${error.message}`, ephemeral: true });
+                            i.followUp({ content: `Failed to delete note: ${error.message}`, ephemeral: true });
                         }
                         break;
                     default: currentIndex = action == 'next' ? Math.min(allnotes.length - 1, currentIndex + 1)
@@ -145,21 +146,20 @@ export async function execute(interaction) {
                         break;
                 }
                 currentnote = allnotes[currentIndex]
-                replyMessage = await replyMessage.edit({
+                replyMessage = i.editReply({
                     embeds: [await buildNoteEmbed(interaction, currentIndex, currentnote, allnotes.length)],
-                    components: [await buildNoteButtons(currentIndex, allnotes, currentnote._id,)]
+                    components: [buildNoteButtons(currentIndex, allnotes, currentnote._id,)]
                 });
             });
             collector.on('end', async () => {
-                const finalButtons = await buildNoteButtons(currentIndex, allnotes, currentnote._id, true);
                 try {
                     if (replyMessage.embeds > 0 && replyMessage.components[0])
-                        await replyMessage.edit({ components: [finalButtons] });
+                        replyMessage.edit({ components: [buildNoteButtons(currentIndex, allnotes, currentnote._id, true)] });
                 } catch (error) {
                     console.error('Failed to disable buttons automatically:', error);
                 }
             });
         }
     }
-    await notecommand[command]()
+    notecommand[command]()
 }

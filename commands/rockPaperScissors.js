@@ -8,27 +8,26 @@ export const data = new SlashCommandBuilder()
 
 export function execute(interaction) {
     let userWin = false;
-    const row = new ActionRowBuilder({
-        components: [new ButtonBuilder({
-            custom_id: 'Rock',
-            label: 'rock',
-            style: ButtonStyle.Secondary
-        }), new ButtonBuilder({
-            custom_id: 'Paper',
-            label: 'paper',
-            style: ButtonStyle.Secondary
-        }), new ButtonBuilder({
-            custom_id: 'Scissors',
-            label: 'scissors',
-            style: ButtonStyle.Secondary
-        })]
-    })
     interaction.reply({
         embeds: [new EmbedBuilder({
             title: '**Pick your option**',
             color: 0x00a900
         })],
-        components: [row]
+        components: [new ActionRowBuilder({
+            components: [new ButtonBuilder({
+                custom_id: 'Rock',
+                label: 'rock',
+                style: ButtonStyle.Secondary
+            }), new ButtonBuilder({
+                custom_id: 'Paper',
+                label: 'paper',
+                style: ButtonStyle.Secondary
+            }), new ButtonBuilder({
+                custom_id: 'Scissors',
+                label: 'scissors',
+                style: ButtonStyle.Secondary
+            })]
+        })]
     });
     const opponentchoices = [
         'Rock', 'Paper', 'Scissors'
@@ -64,9 +63,9 @@ export function execute(interaction) {
         if (userWin) {
             const { userData } = await getUser(interaction.user.id, interaction.guild.id)
             userData.coins += 20;
-            await saveUser(interaction.user.id, interaction.guild.id, { userData });
+            saveUser(interaction.user.id, interaction.guild.id, { userData });
         }
-        await i.update({
+        i.update({
             embeds: [new EmbedBuilder({
                 title: result,
                 description: `You chose **${userchoice}**.\nOpponent chose **${opponentchoice}**.`,

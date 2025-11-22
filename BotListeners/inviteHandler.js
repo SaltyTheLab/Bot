@@ -1,15 +1,17 @@
 import { save, load } from "../utilities/fileeditors.js"
 async function handleinvites(invite, action) {
-    let invites = await load("Extravariables/invites.json")
+    const invites = await load("Extravariables/invites.json")
+    let guildinvites = invites[invite.guild.id]
     switch (action) {
         case 'add':
-            invites.push({ key: `${invite.guild.id}-${invite.code}`, uses: invite.uses })
+            guildinvites.push({ id: invite.code, uses: invite.uses })
             break;
         case 'remove':
-            invites = invites.filter(inv => inv.key !== `${invite.guild.id}-${invite.code}`)
+            guildinvites = guildinvites.filter(inv => inv.id !== `${invite.code}`)
             break;
     }
-    await save("Extravariables/invites.json", invites)
+    invites[invite.guild.id] = guildinvites
+    save("Extravariables/invites.json", invites)
 }
 export async function inviteCreate(invite) {
     await handleinvites(invite, 'add')

@@ -3,8 +3,6 @@ import { load, save } from "../utilities/fileeditors.js";
 import guildChannelMap from "../Extravariables/guildconfiguration.js";
 
 async function MemberHandler(member, action) {
-    const arrayToMap = (arr) => new Map(arr.map(item => [item.key, item.uses]));
-    const mapToArray = (map) => Array.from(map.entries()).map(([key, uses]) => ({ key, uses }));
     const owner = await member.guild.fetchOwner();
     const user = member.user;
     const guild = member.guild;
@@ -17,14 +15,33 @@ async function MemberHandler(member, action) {
         'add': async () => {
             const newInvites = await member.guild.invites.fetch();
             const filepath = "Extravariables/invites.json"
-            const invites = arrayToMap(await load(filepath));
+            const invitesCache = load(filepath) || {};
+            const guildInvitesArray = invitesCache[guild.id] || [];
+            const oldInvitesMap = new Map(guildInvitesArray.map(item => [item.code, item.uses]));
             let inviter, invite = null;
             let isPersistentInvite = false;
             invite = newInvites.find(i => {
-                const oldUses = invites.get(`${guild.id}-${i.code}`) || 0;
+                const oldUses = oldInvitesMap.get(i.code) || 0;
                 return i.uses === oldUses + 1;
             });
-            if (invite) { inviter = invite.inviter; isPersistentInvite = true; }
+            if (invite) {
+                inviter = invite.inviter;
+                isPersistentInvite = true;
+                const updatedInvitesArray = guildInvitesArray.map(item => {
+                    if (item.code === invite.code) {
+                        return { code: invite.code, uses: invite.uses };
+                    }
+                    return item;
+                });
+                if (!updatedInvitesArray.find(item => item.code === invite.code)) {
+                    updatedInvitesArray.push({ code: invite.code, uses: invite.uses });
+                }
+                invitesCache[guild.id] = updatedInvitesArray;
+                save(filepath, invitesCache);
+            } else {
+                invitesCache[guild.id] = newInvites.map(i => ({ code: i.code, uses: i.uses }));
+                save(filepath, invitesCache);
+            }
             const welcomeEmbed = new EmbedBuilder({
                 color: 0x00FF99,
                 description: `${member} joined the Server!`,
@@ -36,22 +53,20 @@ async function MemberHandler(member, action) {
                 welcomeEmbed.setFooter({ text: `Invited by: ${inviter.tag} | ${invite.code}`, iconURL: inviter.displayAvatarURL({ dynamic: true }) })
                 : null
 
-            newInvites.forEach(i => { invites.set(`${guild.id}-${i.code}`, i.uses); });
-            await save(filepath, mapToArray(invites))
             const message = await welcomeChannel.send({
                 embeds: [welcomeEmbed],
                 components: [new ActionRowBuilder({
-                    components: new ButtonBuilder({
+                    components: [new ButtonBuilder({
                         custom_id: isPersistentInvite && inviter.id !== owner.user.id ? `ban_${member.id}_${inviter.id}_${invite.code}` : `ban_${member.id}_no inviter_no invite code`,
                         label: isPersistentInvite && inviter.id !== owner.user.id ? '🔨 Ban User & Delete Invite' : '🔨 Ban',
                         style: ButtonStyle.Danger,
                         disabled: false
-                    })
+                    })]
                 })]
             });
             if (Date.now() - user.createdTimestamp < 2 * 24 * 60 * 60 * 1000) {
-                await member.kick({ reason: `Account under the age of 2 days` });
-                await mutechannel.send({
+                member.kick({ reason: `Account under the age of 2 days` });
+                mutechannel.send({
                     embeds: [new EmbedBuilder({
                         title: 'A member was auto-kicked',
                         thumbnail: { url: user.displayAvatarURL() },
@@ -61,7 +76,7 @@ async function MemberHandler(member, action) {
                 });
                 return;
             }
-            await generalChannel.send({
+            generalChannel.send({
                 embeds: [new EmbedBuilder({
                     color: 0x00FF99,
                     description: `Welcome ${member} to ${guild.name}!`,
@@ -72,7 +87,7 @@ async function MemberHandler(member, action) {
             });
             if (!user.bot) {
                 const dmchannel = user.createDM();
-                await dmchannel.send({
+                dmchannel.send({
                     embeds: [new EmbedBuilder({
                         title: `Hi there! Welcome to ${guild.name}`,
                         thumbnail: { url: guild.iconURL({ size: 1024, extension: 'png' }) },
@@ -83,22 +98,22 @@ async function MemberHandler(member, action) {
             setTimeout(async () => {
                 const buttonComponent = message.components[0];
                 if (buttonComponent && !buttonComponent.disabled) {
-                    await message.edit({
+                    message.edit({
                         components: [new ActionRowBuilder({
-                            components: new ButtonBuilder({
+                            components: [new ButtonBuilder({
                                 custom_id: buttonComponent.components[0].customId,
                                 label: buttonComponent.components[0].label === '🔨 Ban User & Delete Invite' ? '🔨 Ban User & Delete Invite (Expired)'
                                     : '🔨 Ban (Expired)',
                                 style: ButtonStyle.Danger,
                                 disabled: true
-                            })
+                            })]
                         })]
                     })
                 }
             }, 15 * 60 * 1000)
         },
         'leave': async () => {
-            await welcomeChannel.send({
+            welcomeChannel.send({
                 embeds: [new EmbedBuilder({
                     thumbnail: { url: member.user.displayAvatarURL({ dynamic: true }) },
                     description: `<@${member.id}> left ${guild.name}.`,
@@ -107,12 +122,12 @@ async function MemberHandler(member, action) {
             });
         }
     }
-    await actionMap[action]()
+    actionMap[action]()
 }
 
-export async function guildMemberAdd(member) {
-    await MemberHandler(member, 'add')
+export function guildMemberAdd(member) {
+    MemberHandler(member, 'add')
 }
-export async function guildMemberRemove(member) {
-    await MemberHandler(member, 'leave')
+export function guildMemberRemove(member) {
+    MemberHandler(member, 'leave')
 }

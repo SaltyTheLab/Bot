@@ -58,7 +58,7 @@ export async function execute(interaction) {
             kick = true
             break;
     }
-    await punishUser({
+    punishUser({
         interaction: interaction,
         guild: interaction.guild,
         target: target,

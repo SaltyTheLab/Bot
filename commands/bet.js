@@ -17,14 +17,12 @@ export async function execute(interaction) {
         interaction.reply({ content: `you cannot bet more than you have ${user}`, flags: MessageFlags.Ephemeral })
         return;
     }
-    const bet = Math.random()
     const win = Math.ceil(coincount * 1.5);
     let statement = ` ${user.tag} you bet ${coincount} and won ${win} coins!!`
     const result = new EmbedBuilder({
-        color: 0x007a00,
-        author: { name: statement, iconURL: user.displayAvatarURL({ dyanamic: true }) },
+        color: 0x007a00, author: { name: statement, iconURL: user.displayAvatarURL({ dyanamic: true }) },
     })
-    if (bet >= .5)
+    if (Math.random() >= .5)
         userData.coins += win;
     else {
         statement = ` ${user.tag} you bet ${coincount} and lost!`
@@ -36,8 +34,6 @@ export async function execute(interaction) {
         userData.coins -= coincount;
         userData.coins < 0 ? userData.coins = 0 : null
     }
-    await saveUser(user.id, interaction.guild.id, { userData });
-    interaction.reply(
-        { embeds: [result] }
-    )
+    saveUser(user.id, interaction.guild.id, { userData });
+    interaction.reply({ embeds: [result] })
 }

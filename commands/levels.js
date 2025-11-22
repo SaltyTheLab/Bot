@@ -37,8 +37,8 @@ export async function execute(interaction) {
             break;
         }
     }
-    await saveUser(target.id, interaction.guild.id, { userData });
-    await interaction.reply({
+    saveUser(target.id, interaction.guild.id, { userData });
+    interaction.reply({
         embeds: [embed]
     })
 

@@ -162,11 +162,11 @@ export async function execute(interaction) {
         if (!userData || userData.xp === undefined || userData.level === undefined)
             return interaction.editReply({ content: 'User data not found or incomplete. They might need to gain some XP first!', flags: MessageFlags.Ephemeral });
         const xpNeeded = Math.round(((userData.level - 1) ** 1.5 * 52 + 40) / 20) * 20
-        await interaction.editReply({
+        interaction.editReply({
             files: [await generateRankCard(userData, targetUser, xpNeeded, rank)]
         });
     } catch (error) {
         console.error('Error in rank command:', error);
-        await interaction.editReply({ content: '⚠️ An error occurred while generating the rank card.', flags: MessageFlags.Ephemeral });
+        interaction.editReply({ content: '⚠️ An error occurred while generating the rank card.', flags: MessageFlags.Ephemeral });
     }
 }

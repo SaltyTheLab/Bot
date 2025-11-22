@@ -29,13 +29,13 @@ export async function loadCommandsToClient(commands, guildIds, token, clientid) 
 
     const globalProcessed = await getCommandData(msg.globalPaths)
     globalProcessed.fullmodule.forEach(command => commands.set(command.data.name, command))
-    await rest.put(Routes.applicationCommands(clientid), { body: globalProcessed.jsonPayloads });
+    rest.put(Routes.applicationCommands(clientid), { body: globalProcessed.jsonPayloads });
 
     for (const guildId in msg.guildPaths) {
         const guildProcessed = await getCommandData(msg.guildPaths[guildId]);
         guildProcessed.fullmodule.forEach(command => commands.set(`${guildId}:${command.data.name}`, command))
         if (guildProcessed.jsonPayloads.length > 0)
-            await rest.put(Routes.applicationGuildCommands(clientid, guildId), { body: guildProcessed.jsonPayloads });
+            rest.put(Routes.applicationGuildCommands(clientid, guildId), { body: guildProcessed.jsonPayloads });
     }
     worker.terminate();
 }

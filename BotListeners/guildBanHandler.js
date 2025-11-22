@@ -6,20 +6,21 @@ const recentBans = new Map();
 async function sendMassBanEmbed(executorId, channel) {
     const entry = recentBans.get(executorId);
     const { executor, bans } = entry;
-    const banlog = new EmbedBuilder({
-        author: { name: `${executor.tag} ${`mass banned`}`, iconURL: executor.displayAvatarURL({ dynamic: true }) },
-        title: `Mass Ban: ${bans.length} Members Banned`,
-        description: bans.map(ban => `**Tag**: \`${ban.userTag}\` \n**ID**: \`${ban.userId}\`\n**Reason**: \`${ban.reason}\``).join('\n\n'),
-        color: 0x900000,
-        footer: { text: `Banned by ${executor.tag}`, iconURL: executor.displayAvatarURL({ dynamic: true }) },
-        timestamp: Date.now()
+    await channel.send({
+        embeds: [new EmbedBuilder({
+            author: { name: `${executor.tag} ${`mass banned`}`, iconURL: executor.displayAvatarURL({ dynamic: true }) },
+            title: `Mass Ban: ${bans.length} Members Banned`,
+            description: bans.map(ban => `**Tag**: \`${ban.userTag}\` \n**ID**: \`${ban.userId}\`\n**Reason**: \`${ban.reason}\``).join('\n\n'),
+            color: 0x900000,
+            footer: { text: `Banned by ${executor.tag}`, iconURL: executor.displayAvatarURL({ dynamic: true }) },
+            timestamp: Date.now()
+        })]
     })
-    await channel.send({ embeds: [banlog] })
     recentBans.delete(executorId);
 }
 async function handleban(ban, action) {
     const filepath = "Extravariables\\commandsbans.json"
-    let bans = await load(filepath);
+    let bans = load(filepath);
     const user = ban.user
     const banlogChannel = await ban.guild.channels.fetch(guildChannelMap[ban.guild.id].modChannels.banlogChannel);
     const auditLogs = await ban.guild.fetchAuditLogs({ type: AuditLogEvent.MemberBanAdd, limit: 10 });
@@ -71,14 +72,14 @@ async function handleban(ban, action) {
                 ].join('\n'),
                 timestamp: Date.now()
             })
-            await banlogChannel.send({ embeds: [embed] });
+            banlogChannel.send({ embeds: [embed] });
         }
 
     }
 }
-export async function guildBanAdd(ban) {
-    await handleban(ban, 'add')
+export function guildBanAdd(ban) {
+    handleban(ban, 'add')
 }
-export async function guildBanRemove(ban) {
-    await handleban(ban, 'remove')
+export function guildBanRemove(ban) {
+    handleban(ban, 'remove')
 }

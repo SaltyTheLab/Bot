@@ -31,11 +31,11 @@ export async function execute(interaction) {
     const buttons = new ActionRowBuilder();
     options.forEach(option => {
         buttons.addComponents(
-            new ButtonBuilder()
-                .setCustomId(option.brand)
-                .setLabel(option.brand)
-                .setStyle(ButtonStyle.Primary)
-        );
+            new ButtonBuilder({
+                custom_id: option.brand,
+                label: option.brand,
+                style: ButtonStyle.Primary
+            }));
     });
 
     const message = await interaction.reply({
@@ -48,9 +48,8 @@ export async function execute(interaction) {
             { attachment: resolve(`./${logo.image}`), name: 'logo.png' }
         ],
         components: [buttons],
-        withResponse: true
     },);
-    const collector = message.resource.message.createMessageComponentCollector(
+    const collector = message.createMessageComponentCollector(
         {
             componentType: ComponentType.Button,
             filter: i => i.message.id === message.interaction.responseMessageId,
@@ -67,10 +66,8 @@ export async function execute(interaction) {
                 new ButtonBuilder({
                     custom_id: `disabled_${option.brand}`,
                     label: option.brand,
-                    style: isCorrect
-                        ? ButtonStyle.Success
-                        : wasClicked
-                            ? ButtonStyle.Danger
+                    style: isCorrect ? ButtonStyle.Success
+                        : wasClicked ? ButtonStyle.Danger
                             : ButtonStyle.Secondary,
                     disabled: true
                 })
@@ -79,9 +76,9 @@ export async function execute(interaction) {
         if (i.customId === logo.brand) {
             const { userData } = await getUser(interaction.user.id, interaction.guild.id);
             userData.coins += 20;
-            await saveUser(interaction.user.id, interaction.guild.id, { userData });
+            saveUser(interaction.user.id, interaction.guild.id, { userData });
         }
-        await i.update({
+        i.update({
             components: [updatedButtons],
         });
         collector.stop();
@@ -89,18 +86,12 @@ export async function execute(interaction) {
     collector.on('end', async (collected, reason) => {
         if (collected.size === 0 && reason == 'time') {
             updatedButtons = new ActionRowBuilder()
-
             options.forEach(option => {
                 updatedButtons.addComponents(
-                    new ButtonBuilder({
-                        custom_id: `disabled_${option.brand}`,
-                        label: option.brand,
-                        style: ButtonStyle.Primary,
-                        disabled: true
-                    })
+                    new ButtonBuilder({ custom_id: `disabled_${option.brand}`, label: option.brand, style: ButtonStyle.Primary, disabled: true })
                 )
             })
-            await interaction.editReply({ components: [updatedButtons] })
+            interaction.editReply({ components: [updatedButtons] })
         }
     })
 }

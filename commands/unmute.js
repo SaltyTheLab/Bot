@@ -5,20 +5,15 @@ export const data = new SlashCommandBuilder()
     .setDescription('Unmutes a member')
     .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
     .setContexts([InteractionContextType.Guild])
-    .addUserOption(opt =>
-        opt.setName('target').setDescription('User to unmute').setRequired(true))
+    .addUserOption(opt => opt.setName('target').setDescription('User to unmute').setRequired(true))
 
 export async function execute(interaction) {
     const user = interaction.options.getUser('target');
     const member = await interaction.guild.members.fetch(user.id);
-    const embed = new EmbedBuilder({
-        color: 0xb50000,
-        description: `${user} is not muted.`
-    })
+    const embed = new EmbedBuilder({ color: 0xb50000, description: `${user} is not muted.` })
     if (member.communicationDisabledUntil) {
         await member.timeout(null)
-        embed.setColor(0x00a900)
-        embed.setDescription(`${user.tag} was unmuted.`)
+        embed.setColor(0x00a900).setDescription(`${user.tag} was unmuted.`)
     }
     return interaction.reply({ embeds: [embed] })
 }

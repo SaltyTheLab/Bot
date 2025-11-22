@@ -115,7 +115,7 @@ export async function execute(interaction) {
     async function handleMoveAndStateUpdate(moveIndex, playerMark, updateCallback) {
         gameBoard[moveIndex] = playerMark;
         if (checkWinner(gameBoard, playerMark) || checkDraw(gameBoard)) {
-            await updateCallback({
+            updateCallback({
                 components: generateButtons(gameBoard, true)
             });
             if (checkWinner(gameBoard, playerMark)) {
@@ -131,7 +131,7 @@ export async function execute(interaction) {
             return true;
         }
         currentplayer = (currentplayer.id === player1.id) ? player2 : player1;
-        await updateCallback({
+        updateCallback({
             embeds: [generateEmbed(`It's ${currentplayer.toString()}'s turn to move.`)],
             components: generateButtons(gameBoard)
         });
@@ -140,11 +140,11 @@ export async function execute(interaction) {
     async function cpuMoveHandler() {
         const cpuMove = getCPUMove(gameBoard);
         if (cpuMove !== -1)
-            return await handleMoveAndStateUpdate(cpuMove, players.get(currentplayer.id), interaction.editReply.bind(interaction));
+            return handleMoveAndStateUpdate(cpuMove, players.get(currentplayer.id), interaction.editReply.bind(interaction));
         return false
     }
     if (isCPU && currentplayer.id === player2.id)
-        await cpuMoveHandler();
+        cpuMoveHandler();
     collector.on('collect', async i => {
         if (i.user.id !== player1.id && i.user.id !== player2.id)
             return i.reply({ content: 'You are not a participant in this game.', flags: MessageFlags.Ephemeral })
@@ -158,7 +158,7 @@ export async function execute(interaction) {
         const gameOver = await handleMoveAndStateUpdate(move, playerMark, i.update.bind(i))
         if (!gameOver && isCPU) {
             await new Promise(r => setTimeout(r, 750));
-            await cpuMoveHandler();
+            cpuMoveHandler();
         }
     });
     collector.on('end', async (collected, reason) => {
@@ -176,7 +176,7 @@ export async function execute(interaction) {
             default:
                 return
         }
-        await interaction.editReply({
+        interaction.editReply({
             embeds: [finalEmbed],
             components: generateButtons(gameBoard, true)
         })

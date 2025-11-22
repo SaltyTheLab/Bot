@@ -14,7 +14,8 @@ function getNextPunishment(weightedWarns) {
     { type: 'Mute', label: '8 hour mute', minutes: 240 },
     { type: 'Mute', label: '8 hour mute', minutes: 480 }
   ];
-  let index = Math.floor(weightedWarns);
+  let index = weightedWarns;
+  if (index < 0) index = 0;
   if (index >= punishmentStages.length) index = punishmentStages.length - 1;
   const { type, label, minutes } = punishmentStages[index];;
   const unit = minutes >= 60 ? 'hour' : 'min';
@@ -29,7 +30,7 @@ export default async function punishUser({ interaction = null, guild, target, mo
   const LOG_COLORS = { Warn: 0xffcc00, Mute: 0xff4444, Ban: 0xd10000, Kick: 0x838383 };
   const MAX_TIMEOUT_MS = 2419200000;
   const icon = target instanceof GuildMember ? target.user.displayAvatarURL({ dynamic: true }) : target.displayAvatarURL({ dynamic: true })
-  let activeWarns = await getPunishments(target.id, guild.id, true) ?? [];
+  let activeWarns = await getPunishments(target.id, guild.id, true);
   let dmDescription = `<@${target.id}>, you were given a \`warning\` in ${guild.name}.`;
   let logAuthor = `${moderatorUser.tag} warned a member`;
   let commandTitle = `${userTag} was issued a warning`;
@@ -60,14 +61,14 @@ export default async function punishUser({ interaction = null, guild, target, mo
       commandTitle = `${userTag} was issued a ${durationStr} mute`
       dmDescription = `<@${target.id}>, you were given a \`${durationStr} mute\` in ${guild.name}.`;
       logAuthor = `${moderatorUser.tag} muted a member`;
-      action = await target.timeout(Math.min(durationMs, MAX_TIMEOUT_MS), reason)
+      action = target.timeout(Math.min(durationMs, MAX_TIMEOUT_MS), reason)
       logcolor = LOG_COLORS['Mute'];
       break;
     case 'Kick':
       commandTitle = `${userTag} was kicked`
       dmDescription = `<@${target.id}>, you were kicked from ${guild.name}.`;
       logAuthor = `${moderatorUser.tag} kicked a member`;
-      action = await target.kick({ reason: reason })
+      action = target.kick({ reason: reason })
       logcolor = LOG_COLORS['Kick'];
       break;
     default: {
@@ -79,23 +80,22 @@ export default async function punishUser({ interaction = null, guild, target, mo
         commandTitle = `${userTag} was issued a ${durationStr} mute`
         dmDescription = `<@${target.id}>, you were given a \`${durationStr} mute\` in ${guild.name}.`;
         logAuthor = `${moderatorUser.tag} muted a member`;
-        action = await target.timeout(durationMs, reason)
+        action = target.timeout(durationMs, reason)
         logcolor = LOG_COLORS['Mute'];
         warnType = 'Mute'
       }
       break;
     }
   }
-  const commandEmbed = new EmbedBuilder({
-    color: logcolor,
-    author: { name: commandTitle, iconURL: icon }
-  })
+  const commandEmbed = new EmbedBuilder({ color: logcolor, author: { name: commandTitle, iconURL: icon } })
   const buttonmessage = messageid ? `https://discord.com/channels/${guild.id}/${channel.id}/${messageid}` : null
+
   isAutomated ? sentMessage = await channel.send({ embeds: [commandEmbed] })
     : !buttonmessage ? sentMessage = await interaction.reply({ embeds: [commandEmbed], withResponse: true })
       : null
   const messageLink = buttonmessage ?? `https://discord.com/channels/${guild.id}/${channel.id}/${sentMessage.id}`;
-  await editPunishment({ userId: target.id, moderatorId: moderatorUser.id, reason: reason, durationMs: durationMs, warnType: warnType, weight: currentWarnWeight, channel: channel.id, guildId: guild.id, messagelink: messageLink, }).catch(err => console.warn(err));
+
+  editPunishment({ userId: target.id, moderatorId: moderatorUser.id, reason: reason, durationMs: durationMs, warnType: warnType, weight: currentWarnWeight, channel: channel.id, guildId: guild.id, messagelink: messageLink, }).catch(err => console.warn(err));
   activeWarns = await getPunishments(target.id, guild.id, true);
   const refrences = (warnType === 'Ban' ? activeWarns.filter(r => r.type === 'Ban') : activeWarns.filter(r => r.type !== 'Kick'))
     .slice(0, 10)
@@ -120,7 +120,6 @@ export default async function punishUser({ interaction = null, guild, target, mo
       ])],
     timestamp: Date.now()
   })
-
   const logEmbed = new EmbedBuilder({
     color: logcolor,
     author: { name: logAuthor, iconURL: moderatorUser.displayAvatarURL({ dynamic: true }) },
@@ -138,7 +137,7 @@ export default async function punishUser({ interaction = null, guild, target, mo
     timestamp: Date.now(),
     footer: { text: 'User DMed ✅' }
   })
-  try { await target.send({ embeds: [dmEmbed] }) } catch { logEmbed.setFooter({ text: 'User DMed 🚫' }) }
-  await logChannel.send({ embeds: [logEmbed] });
+  try { target.send({ embeds: [dmEmbed] }) } catch { logEmbed.setFooter({ text: 'User DMed 🚫' }) }
+  logChannel.send({ embeds: [logEmbed] });
   action
 }

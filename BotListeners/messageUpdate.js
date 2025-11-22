@@ -15,5 +15,5 @@ export async function messageUpdate(oldMessage, newMessage) {
         footer: { text: `ID: ${newMessage.id}` },
         timestamp: Date.now()
     })
-    await logChannel.send({ embeds: [embed] });
+    logChannel.send({ embeds: [embed] });
 }

@@ -43,7 +43,7 @@ async function buildLogEmbed(interaction, log, idx, totalLogs) {
     })
 
 };
-async function buildButtons(idx, totalLogs, isDeletable, logId, disabled = false) {
+function buildButtons(idx, totalLogs, isDeletable, logId, disabled = false) {
     const buttons = [
         new ButtonBuilder({
             custom_id: `modlog-prev`,
@@ -105,11 +105,10 @@ export async function execute(interaction) {
     let currentLog = allLogs[currentIndex];
     let replyMessage = await interaction.reply({
         embeds: [await buildLogEmbed(interaction, currentLog, currentIndex, allLogs.length)],
-        components: [await buildButtons(currentIndex, allLogs.length, isAdmin, currentLog._id)],
-        withResponse: true
+        components: [buildButtons(currentIndex, allLogs.length, isAdmin, currentLog._id)],
     });
 
-    const collector = replyMessage.resource.message.createMessageComponentCollector({
+    const collector = replyMessage.createMessageComponentCollector({
         filter: i => i.user.id === interaction.user.id,
         time: fiveMinutesInMs
     });
@@ -122,7 +121,7 @@ export async function execute(interaction) {
         switch (action) {
             case 'del':
                 try {
-                    await editPunishment({ userId: targetUser.id, guildId: interaction.guild.id, id: logIdToDelete })
+                    editPunishment({ userId: targetUser.id, guildId: interaction.guild.id, id: logIdToDelete })
                     allLogs = await getPunishments(targetUser.id, interaction.guild.id);
                     if (allLogs.length === 0) {
                         replyMessage = await i.editReply({
@@ -131,6 +130,7 @@ export async function execute(interaction) {
                             })],
                             components: []
                         });
+                        collector.stop();
                         return;
                     }
                     currentIndex = Math.min(currentIndex, allLogs.length - 1)
@@ -144,17 +144,15 @@ export async function execute(interaction) {
                 break;
         }
         currentLog = allLogs[currentIndex];
-        replyMessage = await i.editReply({
+        replyMessage = i.editReply({
             embeds: [await buildLogEmbed(interaction, currentLog, currentIndex, allLogs.length)],
-            components: [await buildButtons(currentIndex, allLogs.length, isAdmin, currentLog._id)],
-            withResponse: true
+            components: [buildButtons(currentIndex, allLogs.length, isAdmin, currentLog._id)],
         });
     });
     collector.on('end', async () => {
         try {
             if (replyMessage.embeds.length > 0 && replyMessage.components[0]) {
-                await replyMessage.edit({ components: [await buildButtons(currentIndex, allLogs.length, isAdmin, currentLog._id, true)] });
-                console.log(`Modlog buttons for ${targetUser.tag} were disabled automatically.`);
+                replyMessage.edit({ components: [buildButtons(currentIndex, allLogs.length, isAdmin, currentLog._id, true)] });
             }
         } catch (error) {
             console.error('Failed to disable buttons automatically:', error);

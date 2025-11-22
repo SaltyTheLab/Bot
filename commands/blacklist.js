@@ -1,8 +1,7 @@
 import { EmbedBuilder, SlashCommandBuilder, InteractionContextType, PermissionFlagsBits } from "discord.js";
 import { getblacklist, editblacklist } from "../Database/databasefunctions.js";
 
-export const data = new SlashCommandBuilder({
-})
+export const data = new SlashCommandBuilder()
     .setName('blacklist')
     .setDescription('edit/show a users blacklist')
     .addSubcommand(command =>
@@ -25,21 +24,20 @@ export async function execute(interaction) {
     const list = blacklist.map(role => `<@&${role}>`).join(',')
     const role = interaction.options.getRole('role') ?? null
     const embed = new EmbedBuilder({
-        thumbnail: { url: targetUser.user.displayAvatarURL({ dynamic: true }) },
         description: `${targetUser}'s blacklist\n\nblacklist: ${list.length > 0 ? list : 'empty'}`
     })
     switch (interaction.options.getSubcommand()) {
         case 'add':
             embed.setDescription(`${role} was blacklisted from ${targetUser}`)
             if (!blacklist.includes(role.id)) {
-                await editblacklist(targetUser.id, interaction.guild.id, role.id, 'pull')
-                await targetUser.roles.remove(role)
+                editblacklist(targetUser.id, interaction.guild.id, role.id, 'pull')
+                targetUser.roles.remove(role)
             } else
                 embed.setDescription(`${role} is already blacklisted from ${targetUser}`)
             break;
         case 'remove':
             editblacklist(targetUser.id, interaction.guild.id, role.id)
-            embed.setDescription(`${role} was removed from ${targetUser} blacklist`)
+            embed.setDescription(`${role} was removed from ${targetUser}'s blacklist`)
             break;
     }
     interaction.reply({ embeds: [embed] })

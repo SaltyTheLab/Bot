@@ -1,5 +1,5 @@
 import { InteractionContextType, PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
-import { save, load } from "../utilities/fileeditors.js";
+import { save } from "../utilities/fileeditors.js";
 import guildChannelMap from "../Extravariables/guildconfiguration.js/";
 export const data = new SlashCommandBuilder()
     .setName('applications')
@@ -15,8 +15,6 @@ export const data = new SlashCommandBuilder()
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
 
 export async function execute(interaction) {
-    const filepath = "Extravariables/invites.json"
-    const command = interaction.options.getSubcommand();
     const channel = interaction.guild.channels.cache.get(guildChannelMap[interaction.guild.id].modChannels.applyChannel)
     const everyone = interaction.guild.roles.everyone;
     if (!channel.permissionsFor(interaction.client.user).has(PermissionFlagsBits.ManageChannels)) {
@@ -24,12 +22,12 @@ export async function execute(interaction) {
             content: `❌ I do not have the **Manage Channels** permission in ${channel.toString()} to modify its permissions. Please check my role permissions and hierarchy.`,
         });
     }
-    switch (command) {
+    switch (interaction.options.getSubcommand()) {
         case 'open':
             try {
-                await channel.permissionOverwrites.edit(everyone, {
+                channel.permissionOverwrites.edit(everyone, {
                     ViewChannel: true,
-                    SendMessages: true
+                    UseApplicationCommands: true
                 })
             } catch (err) {
                 console.error('Cannot change channel perms:', err)
@@ -40,18 +38,16 @@ export async function execute(interaction) {
             break;
         case 'close': {
             try {
-                await channel.permissionOverwrites.edit(everyone, {
+                channel.permissionOverwrites.edit(everyone, {
                     ViewChannel: false,
-                    SendMessages: false
+                    UseApplicationCommands: false
                 })
             } catch (err) {
                 console.error('Cannot change channel perms:', err)
                 interaction.reply({ content: 'I couldn\'t open applications' });
                 return;
             }
-            let applications = await load(filepath);
-            applications = {};
-            save(filepath, applications);
+            save("Extravariables/invites.json", {});
             interaction.reply({ content: 'Apps have now been closed!' });
             break;
         }

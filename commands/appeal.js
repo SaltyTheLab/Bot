@@ -22,15 +22,12 @@ export async function execute(interaction) {
     })
     if (options.length == 0)
         return interaction.reply('I could not find any ban records for any servers i am in.')
-    await interaction.reply({
+    interaction.reply({
         content: `Please select the guild you wish to appeal a ban from:`,
         components: [new ActionRowBuilder({
-            components: new StringSelectMenuBuilder({
-                custom_id: 'guild_appeal_select',
-                placeholder: 'Select a guild to appeal your ban',
-                options: options
-            })
+            components: [new StringSelectMenuBuilder({
+                custom_id: 'guild_appeal_select', placeholder: 'Select a guild to appeal your ban', options: options
+            })]
         })],
-        withResponse: true
     });
 }
