@@ -49,8 +49,8 @@ export async function getPunishments(userId, guildId, active = false, pull = fal
   if (!history)
     return [];
   if (pull && active) {
-    const warns = history.punishments.length > 0 ? history.punishments.filter(w => w.type === 'Warn') : null
-    const recentwarn = warns[warns.length - 1]
+    const warns = history.punishments.length > 0 ? history.punishments.filter(w => w.type === 'Warn') : []
+    const recentwarn = warns.length < 1 ? warns[warns.length - 1] : null
     if (!recentwarn)
       return 0;
     await usersCollection.updateOne({ userId: userId, guildId: guildId },
