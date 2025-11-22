@@ -6,7 +6,8 @@ import guildChannelMap from "../Extravariables/guildconfiguration.js";
 import { LRUCache } from 'lru-cache';
 import Denque from 'denque';
 import { MessageFlagsBitField } from 'discord.js';
-
+const forbiddenWords = new Set(forbbidenWordsData);
+const globalWords = new Set(globalwordsData);
 const userMessageTrackers = new LRUCache({ max: 50, ttl: 30 * 60 * 1000, updateAgeOnGet: true, ttlAutopurge: true });
 
 function getOrCreateTracker(userId, guildId) {
@@ -56,9 +57,9 @@ function updateTracker(userId, message) {
   tracker.total += 1;
 
   if (content.length >= minLengthForCapsCheck) {
-    const lettersOnly = content.replace(/[<a?:[a-zA-Z0-9_]+:\d+>/g, '').replace(/[^a-zA-Z]/g, '')
+    const lettersOnly = content.replace(/<a?:\w+:\d+>/g, '').replace(/[^a-zA-Z]/g, '')
     const upperCaseOnly = lettersOnly.match(/[A-Z]/g) ?? null
-    upperCaseOnly && upperCaseOnly.length > 10 ? upperRatio = upperCaseOnly.length / lettersOnly.length : null
+    if (upperCaseOnly && upperCaseOnly.length > 10) upperRatio = upperCaseOnly.length / lettersOnly.length
   }
 
   //media check for message and flag it if true
@@ -95,46 +96,56 @@ function updateTracker(userId, message) {
   return { MediaViolation, GeneralSpam, DuplicateSpam, CapSpam };
 }
 export default async function AutoMod(message) {
-  const forbiddenWords = new Set(forbbidenWordsData.map(w => w.toLowerCase()));
-  const globalwords = new Set(globalwordsData.map(w => w.toLowerCase()))
   const inviteRegex = /(https?:\/\/)?(www\.)?(discord\.gg|discord(app)?\.com\/invite)\/[a-zA-Z0-9-]+/i;
   const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
   const { author, content, member, guild, channel, client } = message;
-  const messageWords = content.toLowerCase().split(/\s+/);
-  const [hasInvite, everyonePing, isNewUser] = [
-    inviteRegex.test(content),
-    message.mentions.everyone,
-    Date.now() - member.joinedTimestamp < TWO_DAYS_MS && !getUser(author.id, guild.id, true)];
+  const messageWords = content.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+  const [hasInvite, everyonePing] = [inviteRegex.test(content), message.mentions.everyone];
   let globalword;
   let matchedWord;
   messageWords.forEach(word => {
-    if (globalwords.has(word)) {
-      globalword = word
-    }
+    globalWords.has(word) ? globalword = word : null
   });
   if (!Object.values(guildChannelMap[guild.id].exclusions).some(id => id === message.channel.parentId || id === message.channel.id)) {
     messageWords.forEach(word => {
-      if (forbiddenWords.has(word)) {
-        matchedWord = word
-      }
+      forbiddenWords.has(word) ? matchedWord = word : null
     })
   }
   const { GeneralSpam, DuplicateSpam, CapSpam, MediaViolation } = updateTracker(author.id, message);
-  const { reasons, totalWeight } = evaluateViolations(hasInvite, globalword, matchedWord, everyonePing, GeneralSpam, DuplicateSpam, MediaViolation, CapSpam, isNewUser);
-  if (totalWeight == 0) return;
+  let { totalWeight } = evaluateViolations(hasInvite, globalword, matchedWord, everyonePing, GeneralSpam, DuplicateSpam, MediaViolation, CapSpam, false);
+  if (totalWeight === 0) return;
 
-  globalword || matchedWord || hasInvite || everyonePing ? message.delete() : null;
-  let lastReason = null, reasonText;
+  globalword || matchedWord || hasInvite || everyonePing ? await message.delete() : null;
+  let isNewUser = false;
 
-  reasons.length >= 2 ? lastReason = reasons.pop() : null
-  lastReason == 'while new to the server.' ? reasonText = `AutoMod: ${reasons.join(', ')} ${lastReason}` : null
-  reasons.length === 1 ? (reasonText = lastReason !== null ? `AutoMod: ${reasons} and ${lastReason}` : `AutoMod: ${reasons}`)
-    : reasonText = `AutoMod: ${reasons.join(', ')} and ${lastReason}`;
+  if (Date.now() - member.joinedTimestamp < TWO_DAYS_MS) {
+    const { userData } = await getUser(author.id, guild.id, true);
+    if (!userData) {
+      isNewUser = true;
+      totalWeight = Math.ceil(totalWeight + 0.9);
+    }
+  }
+  const { reasons } = evaluateViolations(hasInvite, globalword, matchedWord, everyonePing, GeneralSpam, DuplicateSpam, MediaViolation, CapSpam, isNewUser)
+  let reasonText;
+  if (reasons.length === 1) { reasonText = `AutoMod: ${reasons[0]}` }
+  else {
+    const lastReason = reasons.pop();
+    lastReason == 'while new to the server' ? reasonText = `AutoMod: ${reasons.join(', ')} ${lastReason}` : `AutoMod: ${reasons.join(', ')}`
+  }
   const commoninputs = {
     guild: guild, target: member, moderatorUser: client.user, reason: reasonText, channel: channel, isAutomated: true
   }
-  if ((await getPunishments(author.id, guild.id, true).length > 2 || totalWeight >= 3 || everyonePing || hasInvite) && isNewUser == true)
-    await punishUser({ ...commoninputs, banflag: true });
+  let punishmentCount = 0;
+  if (isNewUser && (totalWeight >= 3 || everyonePing || hasInvite)) {
+    try {
+      const punishments = await getPunishments(author.id, guild.id, true);
+      punishmentCount = punishments.length;
+    } catch (error) {
+      console.error(`Failed to fetch punishments for user ${author.id}: ${error.message}`);
+    }
+  }
+  if (isNewUser && (totalWeight >= 3 || everyonePing || hasInvite) || punishmentCount > 2)
+    punishUser({ ...commoninputs, banflag: true });
   else
-    await punishUser({ ...commoninputs, currentWarnWeight: totalWeight });
+    punishUser({ ...commoninputs, currentWarnWeight: totalWeight });
 }
