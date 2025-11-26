@@ -1,8 +1,24 @@
 import { EmbedBuilder } from '@discordjs/builders';
-import { getUser, saveUser } from '../Database/databasefunctions.js';
+import { getUser, saveUser } from '../Database/databaseAndFunctions.js';
 import AutoMod from '../moderation/autoMod.js';
 import { MessageType } from 'discord.js';
 import guildChannelMap from "../Extravariables/guildconfiguration.js";
+const KEYWORD_REPLIES = new Map([
+  ['bark', 'bark'],
+  ['cute', 'You\'re Cute'],
+  ['adorable', 'You\'re adorable'],
+  ['borderlands', 'there ain\'t rest for the wicked'],
+  ['potato', 'tomato, potato, potato, patato'],
+  ['grr', 'Don\'t you growl at me'],
+  ['lazy', 'Get up then!!'],
+  ['<@364089951660408843>', 'awooooooooo']
+])
+const COMPLEX_KEYWORD_REPLIES = [
+  { keywords: ['bark', 'at', 'you'], reply: "woof woof bark bark\nwoof woof woof bark bark\nwoof woof woof\nwoof woof woof\nbark bark bark" },
+  { keywords: ['say', 'the', 'line'], reply: 'stay frosty :3' },
+  { keywords: ['execute', 'order', '66'], reply: 'Not the Padawans!!!' },
+  { keywords: ['hello', 'there'], reply: 'general Kenobi' }
+];
 async function applyUserXP(userId, message, guildId) {
   const { userData, rank } = await getUser(userId, guildId);
   const verifiedRole = message.guild.roles.cache.find(r => r.name.toLowerCase() === 'verified');
@@ -13,7 +29,7 @@ async function applyUserXP(userId, message, guildId) {
   if (userData.xp >= xpNeeded) {
     userData.level++;
     userData.xp = 0;
-    await message.channel.send({
+    message.channel.send({
       embeds: [new EmbedBuilder()
         .setAuthor({
           name: `${message.author.tag} leveled up to ${userData.level}!`, iconURL: message.author.displayAvatarURL({ dynamic: true })
@@ -23,44 +39,15 @@ async function applyUserXP(userId, message, guildId) {
     });
   }
   if (userData.level >= 3 && !member.roles.cache.has(verifiedRole) && verifiedRole)
-    await member.roles.add(verifiedRole);
-  await saveUser(userId, guildId, { userData });
+    member.roles.add(verifiedRole);
+  saveUser(userId, guildId, { userData });
 }
 export async function messageCreate(client, message) {
   if (message.author.bot || !message.guild || !message.member)
     return;
   const sentbystaff = message.member.permissions.has('ModerateMembers')
-  const lowerContent = message.content.toLowerCase().split(/\s/);
+  const lowerContent = message.content.toLowerCase().split(/\s+/);
   const guildId = message.guild.id
-
-  if (lowerContent.includes('bark'))
-    message.reply('bark')
-  if (lowerContent.includes('cute'))
-    message.reply('You\'re Cute')
-  if (lowerContent.includes('adorable'))
-    message.reply('You\'re adorable')
-  if (lowerContent.includes('borderlands'))
-    message.reply('there ain\'t rest for the wicked')
-  if (lowerContent.includes('potato'))
-    message.reply('tomato, potato, potato, patato')
-  if (lowerContent.includes('grr'))
-    message.reply('Don\'t you growl at me')
-  if (lowerContent.includes('<@364089951660408843>'))
-    message.reply('awooooooooo')
-  if (lowerContent.includes('<@857445139416088647>'))
-    message.react('1257522749635563561')
-  if (lowerContent.includes('bad') && lowerContent.includes('bot'))
-    message.react('😡');
-  if (lowerContent.includes('hello') && lowerContent.includes('there'))
-    message.reply({ content: "general Kenobi" })
-  if (lowerContent.includes('bark') && lowerContent.includes('at') && lowerContent.includes('you'))
-    message.reply({ content: "woof woof bark bark\nwoof woof woof bark bark\nwoof woof woof\nwoof woof woof\nbark bark bark" });
-  if (lowerContent.includes('say') && lowerContent.includes('the') && lowerContent.includes('line'))
-    message.reply('stay frosty :3')
-  if (lowerContent.includes('execute') && lowerContent.includes('order') && lowerContent.includes('66'))
-    message.reply({ content: 'Not the Padawans!!!' })
-  if (lowerContent.includes('lazy'))
-    message.reply('Get up then!!')
 
   if (message.channel.id === guildChannelMap[guildId].publicChannels.countingChannel) {
     const countingState = client.countingState
@@ -74,7 +61,7 @@ export async function messageCreate(client, message) {
       return;
     }
     else {
-      await message.reply({
+      message.reply({
         content: lastUser == message.author.id ? `you already put a number down <@${message.author.id}>!(number reset)`
           : `<@${message.author.id}> missed the count, it was supposed to be ${expectedNumber}`
       })
@@ -83,8 +70,24 @@ export async function messageCreate(client, message) {
       return;
     }
   }
-  if (message.type !== MessageType.UserJoin) await applyUserXP(message.author.id, message, guildId)
-  if (sentbystaff || message.author.id === "521404063934447616") return;
-  await AutoMod(message);
-}
+  for (const [keyword, reply] of KEYWORD_REPLIES) {
+    if (lowerContent.includes(keyword)) {
+      message.reply({ content: reply });
+      break;
+    }
+  }
+  for (const { keywords, reply } of COMPLEX_KEYWORD_REPLIES) {
+    if (keywords.every(k => lowerContent.includes(k))) {
+      message.reply({ content: reply });
+      break;
+    }
+  }
+  if (lowerContent.includes('<@857445139416088647>'))
+    message.react('1257522749635563561');
+  if (lowerContent.includes('bad') && lowerContent.includes('bot'))
+    message.react('😡');
 
+  if (message.type !== MessageType.UserJoin) applyUserXP(message.author.id, message, guildId)
+  if (sentbystaff || message.author.id === "521404063934447616") return;
+  AutoMod(message);
+}
