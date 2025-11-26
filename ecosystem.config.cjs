@@ -3,7 +3,7 @@ module.exports = {
     name: "Febot",
     script: "index.js",
     watch: false,
-    max_memory_restart: "1G",
+    max_memory_restart: "150M",
     env: {
       NODE_ENV: "production",
     },
