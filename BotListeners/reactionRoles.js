@@ -1,8 +1,7 @@
 import guildChannelMap from "../Extravariables/guildconfiguration.js";
-import { getblacklist } from '../Database/databasefunctions.js';
-import { load } from '../utilities/fileeditors.js';
+import { getblacklist } from '../Database/databaseAndFunctions.js';
+import embedIDs from '../embeds/EmbedIDs.json' with {type: 'json'};
 async function handleReactionChange(reaction, user, action) {
-  const embedIDs = await load("embeds/EmbedIDs.json");
   if (user.bot) return;
   const member = await reaction.message.guild.members.fetch(user.id);
   try {
@@ -14,15 +13,12 @@ async function handleReactionChange(reaction, user, action) {
     return;
   }
   const isValidMessageId = embedIDs[reaction.message.guild.id].some(embedInfo => embedInfo.messageId === reaction.message.id);
-
   if (!isValidMessageId)
     return;
-
   const roleID = guildChannelMap[reaction.message.guild.id].reactions[reaction.emoji.id || reaction.emoji.name];
-
   if (!roleID) { console.log(`⚠️ No role mapped to emoji: ${roleID}`); return; }
   const blacklist = await getblacklist(user.id, reaction.message.guild.id)
-  if (blacklist.length > 0 && await blacklist.find(r => r === roleID))
+  if (blacklist.length > 0 && blacklist.find(r => r === roleID))
     return;
   await member.roles[action](roleID).catch(err => console.error(`❌ Failed to ${action} role(s):`, err))
 }
