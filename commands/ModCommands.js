@@ -64,7 +64,8 @@ export async function execute(interaction) {
         target: target,
         moderatorUser: interaction.user,
         reason: reason,
-        channel: interaction.channel, banflag: banflag,
+        channel: interaction.channel,
+        banflag: banflag,
         kick: kick
     });
 }
