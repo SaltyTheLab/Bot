@@ -1,10 +1,10 @@
-import { ActionRowBuilder, StringSelectMenuBuilder } from "discord.js"
+import { ActionRowBuilder, EmbedBuilder, StringSelectMenuBuilder } from "discord.js"
 const guildConfig = {
     "1231453115937587270": {
         messageConfigs: {
             rules: {
                 channelid: "1235295566356025354",
-                embeds: {
+                embeds: [new EmbedBuilder({
                     title: '**__Rules__**',
                     description: ['__ ** General Server Rules ** __',
                         '**1)**  Explicit or Pornographic material(nsfw vids, gifs, etc.) is strictly forbidden.The only exception applies for content specifically permitted within <#1257424392586002613> . All other channels are intended for general discussion, and content within them must not cause discomfort to other members.',
@@ -59,11 +59,11 @@ const guildConfig = {
                             value: 'Feel free to grab some roles in <#1235323618582466621> channel.'
                         }
                     ]
-                }
+                })]
             },
             mental: {
                 channelid: "1390128922712342659",
-                embeds: {
+                embeds: [new EmbedBuilder({
                     title: 'Mental Health',
                     description: ['At some point in your life, you will have to seek help with mental health and that is OK. What is NOT OK is having several days where you feel like you are going to do something drastic or harm yourself.',
                         'This is not a sign of weakness but please be aware that resources are available to you. If you know you or someone is struggling with this, it is imperative that you give them this as soon as possible as early intervention, support or proactive measures can and will save someone\'s life even when they push back hard on you.',
@@ -119,11 +119,11 @@ const guildConfig = {
                                 '113Online (Netherlands):', '[113Online](https: //www.113.nl/)'].join('\n'),
                         }
                     ]
-                },
+                })],
             },
             scams: {
                 channelid: "1436157325214875789",
-                embeds: {
+                embeds: [new EmbedBuilder({
                     title: 'Common Scams',
                     color: 0xc27013,
                     description: [
@@ -135,14 +135,14 @@ const guildConfig = {
                         '5. The Steam account Scam:\n This usually starts with a I accidentally reported your account to steam instead of another person These ones will try to steal your steam account credentials. If there is a problem with your account steam would contact you via an offical email and not discord',
                         'How can I protect myself?\n Always enable 2fa on your account, this is a small additional security measure but it ensures someone else cannot access your account without a short number that is sent to your phone'
                     ].join('\n\n')
-                }
+                })]
             },
-            ModerationRules: {
+            staff: {
                 channelid: "1262533685002113155",
-                embeds: {
+                embeds: [new EmbedBuilder({
                     title: 'Moderation Guidelines',
                     color: 0x1daf0a,
-                    description: ['Welcome to the staff team of Bark! Below are the Guidelines that we expect you to follow as a mod of the community:',
+                    description: ['Welcome to the staff team! Below are the Guidelines that we expect you to follow as a mod of the community:',
                         '1) Respect everyone that is in the community',
                         '2) Try to maintain a level of professionalism when handling situations. You are leaders in the community and should be setting an example',
                         '3) Enforce every rule and issue it\'s respective punishment when necessary (some have direct consequences so see server rules)',
@@ -153,11 +153,7 @@ const guildConfig = {
                         '8) Do not share or discuss contents of staff channels with anyone outside of staff (this includes Screenshots and screenshares of messages, tickets, and applications',
                         '9) Have fun!! This is supposed to be a fun and friendly enviroment, so try your best to have fun!'
                     ].join('\n\n')
-                },
-            },
-            staffguide: {
-                channelid: "1262533685002113155",
-                embeds: {
+                }), new EmbedBuilder({
                     title: 'Staff HandBook',
                     description: ['All moderation commands are to be executed within <#1307212814036893716> channel, utilizing <@1420927654701301951>\n',
                         '\n__The following links provide direct navigation to specific sections of these guidelines__\n',
@@ -165,54 +161,20 @@ const guildConfig = {
                         '\n[Ticket System Overview](https://discord.com/channels/1231453115937587270/1391586898392387706)\nAPPEAL PROCESS GUIDELINES\nHANDING INDIVIDUAL TICKETS\n',
                         '\n[Identifying and Addressing Malicious Users](https://discord.com/channels/1231453115937587270/1391591076413964370)\nRAID RESPONSE AND BAN PROTOCOLS\nRESPONDING TO COMPROMISED ACCOUNTS'
                     ].join('\n')
-                }
+                })]
             },
-            getstream: {
+            aboutMe: {
                 channelid: "1235323618582466621",
-                embeds: {
-                    title: 'Twitch Pings',
-                    description: 'React here to get notified of when <@857445139416088647> is live!'
-                },
-                reactions: ['▶️']
-            },
-            getdividers: {
-                channelid: "1235323618582466621",
-                embeds: {
-                    title: 'Divders',
-                    description: 'React here to get the Divider roles for easy viewing',
-                },
-                reactions: ['🚧']
-            },
-            getpronouns: {
-                channelid: "1235323618582466621",
-                embeds: {
+                embeds: [new EmbedBuilder({
                     title: 'Identity?',
                     description: [
                         '🧡: <@&1235323773473783989>',
                         '💛: <@&1235323773973168274>',
                         '💜: <@&1235323774505582634>',
                         '💚: <@&1235323775772528766>'
-                    ].join('\n')
-                },
-                reactions: ['🧡', '💛', '💜', '💚']
-            },
-            getconsole: {
-                channelid: "1235323618582466621",
-                embeds: {
-                    title: 'What do you play on?',
-                    description: ['💻:<@&1235323729936908379>',
-                        '📦: <@&1235323730628968530>',
-                        '🚉: <@&1235323732273397893>',
-                        '🟥: <@&1235323733246476329>',
-                        '📱: <@&1235323733795799154>',
-                        '🎧: <@&1272280467940573296>'
-                    ].join('\n')
-                },
-                reactions: ['💻', '📦', '🚉', '🟥', '📱', '🎧']
-            },
-            getlocation: {
-                channelid: "1235323618582466621",
-                embeds: {
+                    ].join('\n'),
+                    color: 0x458910
+                }), new EmbedBuilder({
                     title: 'Where you on the earth?',
                     description: [
                         ' 🇪🇺: <@&1235335164436025415>',
@@ -221,13 +183,25 @@ const guildConfig = {
                         '🐼: <@&1235335166772117694>',
                         '🐨: <@&1235335167560912927>',
                         '🦒: <@&1235335168458231951>'
-                    ].join('\n')
-                },
-                reactions: ['🇪🇺', '🦅', '🌄', '🐼', '🐨', '🦒']
+                    ].join('\n'),
+                    color: 0x458910
+                }),
+                new EmbedBuilder({
+                    title: 'What do you play on?',
+                    description: ['💻:<@&1235323729936908379>',
+                        '📦: <@&1235323730628968530>',
+                        '🚉: <@&1235323732273397893>',
+                        '🟥: <@&1235323733246476329>',
+                        '📱: <@&1235323733795799154>',
+                        '🎧: <@&1272280467940573296>'
+                    ].join('\n'),
+                    color: 0x458910
+                })],
+                reactions: ['🧡', '💛', '💜', '💚', '🇪🇺', '🦅', '🌄', '🐼', '🐨', '🦒', '💻', '📦', '🚉', '🟥', '📱', '🎧']
             },
             getcolor: {
                 channelid: "1235323618582466621",
-                embeds: {
+                embeds: [new EmbedBuilder({
                     title: 'Get Your Colors here!',
                     description: [
                         '🔴: <@&1235323620163846294>',
@@ -238,9 +212,19 @@ const guildConfig = {
                         '🟡: <@&1235323625037500466>',
                         '🔵: <@&1235323625452601437>',
                         '🔷: <@&1418796891138687107>'
-                    ].join('\n')
-                },
+                    ].join('\n'),
+                    color: 0x458910
+                })],
                 reactions: ['🔴', '🟣', '🟢', '🩷', '🟠', '🟡', '🔵', '🔷']
+            },
+            extra: {
+                channelid: "1235323618582466621",
+                embeds: [new EmbedBuilder({
+                    title: 'Extra Roles',
+                    description: 'React 🚧 to get the divider roles\n\nReact ▶️ for <@&1331028469794209913> to be notified when <@857445139416088647> is live! ',
+                    color: 0x380b5e
+                })],
+                reactions: ['🚧', '▶️']
             }
         },
         modChannels: {
@@ -318,7 +302,7 @@ const guildConfig = {
         messageConfigs: {
             rules: {
                 channelid: "1347399775951257704",
-                embeds: {
+                embeds: [new EmbedBuilder({
                     description: ['__ ** General Server Rules ** __',
                         '1) Be respectful to everyone. Please don\'t antagonize anyone, definitely don\'t bully someone. ',
                         '2) If someone is harassing you or bullying you, block them and open a ticket and let us know. Have proof or we will do nothing. I don\'t care too much for he said, she said. If you don\'t block someone, then you\'re basically asking to get mad or sad or annoyed.',
@@ -341,23 +325,34 @@ const guildConfig = {
                             '3) If you take a role to another creator or to certain things, you will be pinged and notified. Remember, if you want the notification but don\'t care for the ping, server setting notifications for you.'
                         ].join('\n\n'), inline: false
                     }]
-                },
+                })],
                 reactions: null
             },
-            Getcontent: {
+            getRoles: {
                 channelid: "1347227575998484538",
-                embeds: {
-                    title: 'Want some content updates????',
-                    description: 'React to this message to get your roles!',
+                embeds: [new EmbedBuilder({
+                    title: 'Get some content updates and Game roles here!',
+                    description: 'Use the drop down menu to get your roles!',
                     color: 0x9900ff
-                },
-                components: [new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder()
-                        .setCustomId('stream_role_select')
-                        .setPlaceholder('Select some content')
-                        .setMinValues(0)
-                        .setMaxValues(8)
-                        .addOptions(
+                }), new EmbedBuilder({
+                    title: 'Pick your color',
+                    description: ['It\'s a small but fun way to express yourself and stand out from the crowd.',
+                        'Just click on any of the colors below and make it your own. And remember, you can always change your color whenever you feel like it!',
+                        'Thank you for being a part of our friendly community.',
+                        '🔴: <@&1347447588919443557>',
+                        '🟣: <@&1347447590928519199>',
+                        '🟢: <@&1347447605847920640>',
+                        '🔵: <@&1347447594690805933>',
+                        '🟤: <@&1347447591901859882>'
+                    ].join('\n')
+                })],
+                components: [new ActionRowBuilder({
+                    components: [new StringSelectMenuBuilder({
+                        custom_id: 'role_select',
+                        placeholder: 'Select some Content and Games',
+                        min_values: 0,
+                        max_values: 25,
+                        options: [
                             {
                                 label: ' Evo\'s twitch',
                                 description: 'Get notifications for Twitch Streams.',
@@ -406,24 +401,7 @@ const guildConfig = {
                                 description: 'For people who want to host game/movie nights',
                                 value: 'role_game_movie_night',
                                 emoji: '🕹️'
-                            }
-                        )
-                )]
-
-            },
-            Getgames: {
-                channelid: "1347227575998484538",
-                embeds: {
-                    title: 'Games',
-                    description: 'Pick the games you play. Don\'t pick games if you don\'t play them.'
-                },
-                components: [new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder()
-                        .setCustomId('Game_role_Select')
-                        .setPlaceholder('Select your games')
-                        .setMinValues(0)
-                        .setMaxValues(17)
-                        .addOptions(
+                            },
                             {
                                 label: 'Path of Exile',
                                 description: 'get this role if you play the game',
@@ -508,26 +486,11 @@ const guildConfig = {
                                 label: 'Borderlands',
                                 description: 'get this role if you play the game',
                                 value: 'role_game_Borderlands',
-                            }
-                        )
-                )]
-            },
-            Getcolor: {
-                channelid: "1347227575998484538",
-                embeds: {
-                    title: 'Pick your color',
-                    description: ['It\'s a small but fun way to express yourself and stand out from the crowd.',
-                        'Just click on any of the colors below and make it your own. And remember, you can always change your color whenever you feel like it!',
-                        'Thank you for being a part of our friendly community.',
-                        '🔴: <@&1347447588919443557>',
-                        '🟣: <@&1347447590928519199>',
-                        '🟢: <@&1347447605847920640>',
-                        '🔵: <@&1347447594690805933>',
-                        '🟤: <@&1347447591901859882>'
-                    ].join('\n')
-                },
+                            }]
+                    })]
+                })],
                 reactions: ['🔴', '🟣', '🟢', '🔵', '🟤']
-            }
+            },
         },
         modChannels: {
             mutelogChannel: "1403065255126503537",
@@ -598,7 +561,7 @@ const guildConfig = {
         messageConfigs: {
             rules: {
                 channelid: "1388104789514129468",
-                embeds: {
+                embeds: [new EmbedBuilder({
                     color: 0x086ca5,
                     title: 'Welcome to Bark!!',
                     description: [
@@ -619,22 +582,22 @@ const guildConfig = {
                         'For each message you send there is a media check, this does not count the number of attachments in the message but rather checks for the presence of an attachment. So sending one message with ten images will be treated the same as one message with one image. This is per user and not collectively in the server',
                         'Circumventing AutoMod Filter:\n Trying to use placeholders or different letters to circumvent the automods filter will lead to a warn or mute'
                     ].join('\n\n')
-                }
+                })]
             },
             getroles: {
                 channelid: "1410696524849217578",
-                embeds: {
+                embeds: [new EmbedBuilder({
                     description: [
                         `Get your age role here. Lying about your age is punishable up to a ban depending on severity:\n`,
                         '🔞: <@&1388113103081705502>',
                         '👨: <@&1388111992287400089>'
                     ].join('\n'),
-                },
+                })],
                 reactions: ['🔞', '👨']
             },
             dirty: {
                 channelid: "1415773272934715534",
-                embeds: {
+                embeds: [new EmbedBuilder({
                     color: 0xf700ff,
                     title: 'Rules of the 18+ catagorey',
                     description: [
@@ -644,12 +607,12 @@ const guildConfig = {
                         '3) No IRL pics in nsfw! We are adults here and expect common sense here. This will lead to a swift ban.\n',
                         'react with 🍆 to get access to <#1388116277670842478> and the dirty vc here!'
                     ].join('\n'),
-                },
+                })],
                 reactions: ['🍆']
             },
-            moderationguide: {
+            staff: {
                 channelid: "1423830604952240170",
-                embeds: {
+                embeds: [new EmbedBuilder({
                     color: 0x1daf0a,
                     title: 'Moderation Guidelines',
                     description: ['Welcome to the staff team of Bark! Below are the Guidelines that we expect you to follow as a mod of the community:',
@@ -663,11 +626,7 @@ const guildConfig = {
                         '8) Do not share or discuss contents of staff channels with anyone outside of staff (this includes Screenshots and screenshares of messages, tickets, and applications',
                         '9) Have fun!! This is supposed to be a fun and friendly enviroment, so try your best to have fun!'
                     ].join('\n\n')
-                }
-            },
-            staffguide: {
-                channelid: "1423830604952240170",
-                embeds: {
+                }), new EmbedBuilder({
                     title: '__**Staff HandBook**__',
                     color: 0x308796,
                     description: [
@@ -675,8 +634,8 @@ const guildConfig = {
                         '[click here](https://discord.com/channels/1342845801059192913/1423832190919114826/1423834091102666924)\nTHE ROLES\nINFORMATION\nPROCEDURE\nHUMAN ERROR\n',
                         '[click here](https://discord.com/channels/1342845801059192913/1423834519345299568/1423834854906265791)\nBOT COMMANDS\nBAN APPEALS\nTICKETS\nFEBOT IS DOWN'
                     ].join('\n')
-                }
-            }
+                })]
+            },
         },
         modChannels: {
             mutelogChannel: "1408174384342106234",
