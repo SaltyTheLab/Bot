@@ -1,6 +1,6 @@
 import punishUser from './punishUser.js';
 import forbbidenWordsData from './forbiddenwords.json' with {type: 'json'};
-import { getPunishments, getUser } from '../Database/databasefunctions.js';
+import { getPunishments, getUser } from '../Database/databaseAndFunctions.js';
 import globalwordsData from './globalwords.json' with {type: 'json'}
 import guildChannelMap from "../Extravariables/guildconfiguration.js";
 import { LRUCache } from 'lru-cache';
@@ -88,11 +88,11 @@ function updateTracker(userId, message) {
   const MediaViolation = tracker.mediaCount > mediathreshold && tracker.total < messageThreshold;
   const GeneralSpam = tracker.timestamps.size() > GENERAL_SPAM_THRESHOLD;
   const CapSpam = upperRatio > capsthreshold;
-  MediaViolation ? tracker.mediaCount = 1 : null;
-  GeneralSpam ? tracker.recentMessages.clear() : null;
-  DuplicateSpam ? tracker.duplicateCounts.clear() : null;
-  if (tracker.total >= messageThreshold) { tracker.total = 0; tracker.mediaCount = 0; tracker.timestamps.clear(); }
-  userMessageTrackers.set(userId, tracker)
+  if (MediaViolation) tracker.mediaCount = 1
+  if (GeneralSpam) tracker.recentMessages.clear();
+  if (DuplicateSpam) tracker.duplicateCounts.clear();
+  if (tracker.total >= messageThreshold) { tracker.total = 0; tracker.mediaCount = 0; tracker.timestamps.clear(); tracker.recentMessages.clear(); }
+  userMessageTrackers.set(`${userId}-${message.guild.id}`, tracker)
   return { MediaViolation, GeneralSpam, DuplicateSpam, CapSpam };
 }
 export default async function AutoMod(message) {
@@ -103,46 +103,53 @@ export default async function AutoMod(message) {
   const [hasInvite, everyonePing] = [inviteRegex.test(content), message.mentions.everyone];
   let globalword;
   let matchedWord;
-  messageWords.forEach(word => {
-    globalWords.has(word) ? globalword = word : null
-  });
-  if (!Object.values(guildChannelMap[guild.id].exclusions).some(id => id === message.channel.parentId || id === message.channel.id)) {
-    messageWords.forEach(word => {
-      forbiddenWords.has(word) ? matchedWord = word : null
-    })
+  const isChannelExcluded = Object.values(guildChannelMap[guild.id].exclusions).some(id => id === message.channel.parentId || id === message.channel.id);
+  for (const word of messageWords) {
+    let globalwordFound, matchedWordFound;
+    if (globalWords.has(word)) {
+      globalword = word;
+      globalwordFound = true;
+    }
+    if (!isChannelExcluded && forbiddenWords.has(word)) {
+      matchedWord = word;
+      matchedWordFound = true;
+    }
+    if (globalwordFound && (matchedWordFound || isChannelExcluded))
+      break;
+
   }
   const { GeneralSpam, DuplicateSpam, CapSpam, MediaViolation } = updateTracker(author.id, message);
-  let { totalWeight } = evaluateViolations(hasInvite, globalword, matchedWord, everyonePing, GeneralSpam, DuplicateSpam, MediaViolation, CapSpam, false);
-  if (totalWeight === 0) return;
 
   globalword || matchedWord || hasInvite || everyonePing ? await message.delete() : null;
   let isNewUser = false;
-
   if (Date.now() - member.joinedTimestamp < TWO_DAYS_MS) {
     const { userData } = await getUser(author.id, guild.id, true);
     if (!userData) {
       isNewUser = true;
-      totalWeight = Math.ceil(totalWeight + 0.9);
     }
   }
-  const { reasons } = evaluateViolations(hasInvite, globalword, matchedWord, everyonePing, GeneralSpam, DuplicateSpam, MediaViolation, CapSpam, isNewUser)
-  let reasonText;
-  if (reasons.length === 1) { reasonText = `AutoMod: ${reasons[0]}` }
-  else {
-    const lastReason = reasons.pop();
-    lastReason == 'while new to the server' ? reasonText = `AutoMod: ${reasons.join(', ')} ${lastReason}` : `AutoMod: ${reasons.join(', ')}`
-  }
-  const commoninputs = {
-    guild: guild, target: member, moderatorUser: client.user, reason: reasonText, channel: channel, isAutomated: true
-  }
+  const { totalWeight, reasons } = evaluateViolations(hasInvite, globalword, matchedWord, everyonePing, GeneralSpam, DuplicateSpam, MediaViolation, CapSpam, isNewUser)
+  if (totalWeight <= 0.9)
+    return;
   let punishmentCount = 0;
-  if (isNewUser && (totalWeight >= 3 || everyonePing || hasInvite)) {
+  if (isNewUser) {
     try {
       const punishments = await getPunishments(author.id, guild.id, true);
       punishmentCount = punishments.length;
     } catch (error) {
       console.error(`Failed to fetch punishments for user ${author.id}: ${error.message}`);
     }
+  }
+  let reasonText;
+  const filteredReasons = reasons.filter(r => r !== 'while new to the server.');
+  if (filteredReasons.length > 0) {
+    reasonText = `AutoMod: ${filteredReasons.join(', ')}`;
+    if (reasons.includes('while new to the server.')) {
+      reasonText += ' while new to the server.';
+    }
+  }
+  const commoninputs = {
+    guild: guild, target: member, moderatorUser: client.user, reason: reasonText, channel: channel, isAutomated: true
   }
   if (isNewUser && (totalWeight >= 3 || everyonePing || hasInvite) || punishmentCount > 2)
     punishUser({ ...commoninputs, banflag: true });
