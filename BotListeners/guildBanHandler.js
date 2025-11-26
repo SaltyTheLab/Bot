@@ -1,6 +1,6 @@
 import { EmbedBuilder, AuditLogEvent } from "discord.js";
 import { load, save } from "../utilities/fileeditors.js";
-import { getPunishments } from "../Database/databasefunctions.js";
+import { getPunishments } from '../Database/databaseAndFunctions.js';
 import guildChannelMap from "../Extravariables/guildconfiguration.js";
 const recentBans = new Map();
 async function sendMassBanEmbed(executorId, channel) {

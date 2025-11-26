@@ -86,8 +86,7 @@ async function MemberHandler(member, action) {
                 ]
             });
             if (!user.bot) {
-                const dmchannel = user.createDM();
-                dmchannel.send({
+                await user.send({
                     embeds: [new EmbedBuilder({
                         title: `Hi there! Welcome to ${guild.name}`,
                         thumbnail: { url: guild.iconURL({ size: 1024, extension: 'png' }) },
