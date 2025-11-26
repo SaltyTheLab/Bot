@@ -1,14 +1,13 @@
-import { EmbedBuilder } from 'discord.js';
 import guildChannelMap from "../Extravariables/guildconfiguration.js";
 import { load, save } from '../utilities/fileeditors.js';
 let messageIDs = await load('./embeds/embedIDs.json');
 function getComparableEmbed(embedData) {
     if (!embedData) return null;
-    const normalizeText = (text) => text?.replace(/\r\n/g, '\n').trim() || null;
+    const normalizeText = (text) => text ? text.replace(/\r\n/g, '\n').trim() : null;
     const cleanEmbed = {
-        title: normalizeText(embedData.title) || null,
-        description: normalizeText(embedData.description) || null,
-        url: normalizeText(embedData.url) || null,
+        title: normalizeText(embedData.title),
+        description: normalizeText(embedData.description),
+        url: normalizeText(embedData.url),
         color: embedData.color || null,
         fields: embedData.fields ?
             embedData.fields.map(field => ({
@@ -22,36 +21,18 @@ function getComparableEmbed(embedData) {
     return JSON.stringify(cleanEmbed);
 }
 async function sendEmbedAndSave(guildId, messageIDs, embedName, embedData, channel) {
-    try {
-        const oldMessageIndex = messageIDs[guildId].findIndex((message) => message.name === embedName) ?? null;
-        if (oldMessageIndex && oldMessageIndex !== -1)
-            messageIDs[guildId].splice(oldMessageIndex, 1);
-        const { embeds, components } = embedData;
-        const msg = await channel.send({ embeds, components, withResponse: true });
-        if (embedData.reactions && embedData.reactions.length > 0)
-            for (const reaction of embedData.reactions)
-                await msg.react(reaction);
-        console.log(`📝 Sent '${embedName}' embed. Message ID:`, msg.id);
-        if (!messageIDs[guildId])
-            messageIDs[guildId] = [];
-        messageIDs[guildId].push({
-            name: embedName,
-            messageId: msg.id,
-            channelid: channel.id
-        });
-    } catch (err) {
-        console.warn('Error sending embed:', err)
-    }
-}
-function generateEmbedData(configData) {
-    const embed = new EmbedBuilder(configData.embeds)
-    const reactions = configData.reactions || null
-    const components = configData.components || null
-    return {
-        embeds: [embed],
-        components: components,
-        reactions: reactions
-    }
+    const oldMessageIndex = messageIDs[guildId].findIndex((message) => message.name === embedName);
+    if (oldMessageIndex && oldMessageIndex !== -1)
+        messageIDs[guildId].splice(oldMessageIndex, 1);
+    const { embeds, components } = embedData;
+    const msg = await channel.send({ embeds, components, withResponse: true });
+    if (embedData.reactions && embedData.reactions.length > 0)
+        for (const reaction of embedData.reactions)
+            msg.react(reaction);
+    console.log(`📝 Sent '${embedName}' embed. Message ID:`, msg.id);
+    if (!messageIDs[guildId])
+        messageIDs[guildId] = [];
+    messageIDs[guildId].push({ name: embedName, messageId: msg.id, channelid: channel.id });
 }
 export default async function embedsenders(channels) {
     let embedTasks = [];
@@ -64,37 +45,34 @@ export default async function embedsenders(channels) {
         for (const embedName in messageconfigs) {
             const channel = channels.get(messageconfigs[embedName].channelid) ?? null;
             const existingEmbedInfo = messageIDs[guildId]?.find((embed) => embed.name === embedName) ?? null;
-            const embedData = generateEmbedData(messageconfigs[embedName])
-            try {
-                const message = await channel.messages.fetch(existingEmbedInfo.messageId) ?? null;
-                if (getComparableEmbed(message.embeds[0]) !== getComparableEmbed(embedData.embeds[0].data)) {
-                    await message.edit({
-                        embeds: embedData.embeds, ...(embedData.components && { components: embedData.components })
-                    })
-                    console.log(`✅ Message '${embedName}' updated successfully.`);
-                    if (embedData.reactions) {
-                        await message.reactions.removeAll();
-                        const reactionPromises = embedData.reactions.map(reaction => message.react(reaction));
-                        await Promise.allSettled(reactionPromises);
+            const embedData = messageconfigs[embedName];
+            embedTasks.push(async () => {
+                try {
+                    const message = await channel.messages.fetch(existingEmbedInfo.messageId) ?? null;
+                    const existingEmbeds = message.embeds.map(embed => embed.toJSON());
+                    const newEmbeds = embedData.embeds
+                    const comparableExistingEmbeds = existingEmbeds
+                        .map(embed => getComparableEmbed(embed))
+                        .join('|||');
+                    const comparableNewEmbeds = newEmbeds
+                        .map(embed => getComparableEmbed(embed.data))
+                        .join('|||');
+                    if (comparableExistingEmbeds !== comparableNewEmbeds) {
+                        message.edit({
+                            embeds: newEmbeds, ...(embedData.components && { components: embedData.components })
+                        })
+                        console.log(`✅ Message '${embedName}' updated successfully.`);
+                        return;
                     }
-                    return;
-                }
-            } catch {
-                embedTasks.push(async () => {
-                    console.log(`missing embed for ${embedName}, adding to queue...`);
+                } catch (err) {
+                    console.log(`Failed to fetch/update '${embedName}'. Re-sending. Error: ${err.message}`);
                     await sendEmbedAndSave(guildId, messageIDs, embedName, embedData, channel);
-                    return;
-                })
-            };
+                }
+            })
         }
     }
     if (embedTasks.length > 0) {
         await Promise.allSettled(embedTasks.map(task => task()));
-        try {
-            await save('./embeds/embedIDs.json', messageIDs)
-            console.log('✅ Successfully saved message IDs to disk.');
-        } catch (error) {
-            console.error('❌ Failed to save message IDs to disk:', error);
-        }
+        await save('./embeds/embedIDs.json', messageIDs)
     }
 }
