@@ -1,6 +1,6 @@
 import { ButtonBuilder, ButtonStyle, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, EmbedBuilder, AuditLogEvent, PermissionFlagsBits, MessageFlags, LabelBuilder } from "discord.js";
 import punishUser from "../moderation/punishUser.js";
-import { appealsinsert, appealsget, appealupdate } from "../Database/databasefunctions.js";
+import { appealsinsert, appealsget, appealupdate } from '../Database/databaseAndFunctions.js';
 import { load, save } from "../utilities/fileeditors.js";
 import guildChannelMap from "../Extravariables/guildconfiguration.js";
 
@@ -28,44 +28,37 @@ export async function interactionCreate(interaction) {
     }
     if (interaction.isModalSubmit()) {
         if (interaction.customId.startsWith('appeal')) {
-            const guildId = interaction.fields.getTextInputValue('guildId');
+            const guildId = interaction.fields.getStringSelectValues('guildId');
             const reason = interaction.fields.getTextInputValue('reason');
             const justification = interaction.fields.getTextInputValue('justification');
             const extra = interaction.fields.getTextInputValue('extra');
-            const targetUserid = interaction.user.id
-            const guild = interaction.client.guilds.cache.get(guildId);
-            const appealChannel = interaction.client.channels.get(guildChannelMap[guild.id].modChannels.appealChannel);
-            const modRole = guild.roles.cache.find(role => role.permissions.has('BanMembers') && !role.managed);
-            const adminRole = guild.roles.cache.find(role => role.permissions.has('Administrator') && role.name.toLowerCase().includes('admin'));
-            if (!appealChannel) {
-                return interaction.reply({
-                    content: 'The appeal channel for that guild could not be found. Please contact a moderator directly.',
-                    flags: MessageFlags.Ephemeral
-                });
-            }
+            const guild = interaction.client.guilds.cache.get(guildId[0]);
+            const appealChannel = interaction.client.channels.cache.get(guildChannelMap[guild.id].modChannels.appealChannel);
+            const modrole = guild.roles.cache.find(role => role.permissions.has('BanMembers') && !role.managed && role.name.startsWith('Mod'))
+            const adminRole = guild.roles.cache.find(role => role.permissions.has('Administrator'));
             const message = await appealChannel.send({
-                content: `<@&${modRole.id}> <@&${adminRole.id}>`,
+                content: `<@&${modrole.id}> <@&${adminRole.id}>`,
                 embeds: [new EmbedBuilder({
-                    author: { name: `${interaction.user.tag})`, iconURL: interaction.user.displayAvatarURL({ dynamic: true }) },
+                    author: { name: `${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL({ dynamic: true }) },
                     color: 0x13cbd8,
                     title: `Ban appeal`,
                     fields: [
                         { name: 'Why did you get banned?', value: `${reason}` },
                         { name: 'Why do you believe that your appeal should be accepted?', value: `${justification}` },
                         { name: 'Is there anything else you would like us to know?', value: `${extra}` }],
-                    footer: { text: `User ID: ${targetUserid}` },
+                    footer: { text: `User ID: ${interaction.user.id}` },
                     timestamp: Date.now()
                 })],
                 components: [new ActionRowBuilder({
                     components: [
-                        new ButtonBuilder({ custom_id: `unban_approve_${targetUserid}_${guildId}`, label: 'Approve', style: ButtonStyle.Success }),
-                        new ButtonBuilder({ custom_id: `unban_reject_${targetUserid}_${guildId}`, label: 'Reject', style: ButtonStyle.Danger })
+                        new ButtonBuilder({ custom_id: `unban_approve_${interaction.user.id}_${guild.id}`, label: 'Approve', style: ButtonStyle.Success }),
+                        new ButtonBuilder({ custom_id: `unban_reject_${interaction.user.id}_${guild.id}`, label: 'Reject', style: ButtonStyle.Danger })
                     ]
                 })]
             })
             message.startThread({ name: interaction.user.tag })
             interaction.reply({ content: 'Your appeal has been submitted and our team will look into it.' })
-            appealsinsert(interaction.user.id, guildId, reason, justification, extra);
+            appealsinsert(interaction.user.id, guild.id, reason, justification, extra);
         }
         if (interaction.customId.startsWith('situations')) {
             const applications = load(filepath);
@@ -140,7 +133,6 @@ export async function interactionCreate(interaction) {
         if (interaction.customId.startsWith('server')) {
             const applications = load(filepath)
             const application = applications[interaction.user.id]
-            console.log(interaction.fields.fields)
             application.Agerange = interaction.fields.getStringSelectValues('age');
             application.Experience = interaction.fields.getTextInputValue('experience')
             application.History = interaction.fields.getTextInputValue('punishments')
@@ -217,20 +209,20 @@ export async function interactionCreate(interaction) {
             const guild = interaction.client.guilds.cache.get(customIdParts[3]);
             const appeals = await appealsget(targetUser.id, guild.id)
             let outcome = false
-            const Adminchannel = interaction.client.channels.cache.get(guildChannelMap[guild.id].modChannels.AdminChannel);
+            const Adminchannel = interaction.client.channels.cache.get(guildChannelMap[guild.id].modChannels.adminChannel);
             if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-                interaction.reply({ content: `Please wait for an admin to make a decision. `, flags: MessageFlags.Ephemeral })
+                interaction.editReply({ content: `Please wait for an admin to make a decision. `, flags: MessageFlags.Ephemeral })
                 Adminchannel.send({ content: `Letting you know ${interaction.user} tried to jump the gun on an appeal.` })
                 return;
             }
             const appealEmbed = new EmbedBuilder({
                 color: 0x13cbd8,
                 title: `Ban appeal`,
-                author: { name: `${targetUser.tag} `, iconURL: targetUser.displayAvatarURL({ dynamic: true }) },
+                author: { name: `${targetUser.tag}`, iconURL: targetUser.displayAvatarURL({ dynamic: true }) },
                 fields: [
-                    { name: 'Why did you get banned?', value: `${appeals[0].reason} ` },
-                    { name: 'Why do you believe that your appeal should be accepted?', value: `${appeals[0].justification} ` },
-                    { name: 'Is there anything else you would like us to know?', value: `${appeals[0].extra}` }
+                    { name: 'Why did you get banned?', value: `${appeals.reason} ` },
+                    { name: 'Why do you believe that your appeal should be accepted?', value: `${appeals.justification} ` },
+                    { name: 'Is there anything else you would like us to know?', value: `${appeals.extra}` }
                 ],
                 footer: { text: `User ID: ${targetUser.id}` },
                 timestamp: Date.now()
@@ -351,7 +343,7 @@ export async function interactionCreate(interaction) {
         }
     }
     if (interaction.isStringSelectMenu()) {
-        if (interaction.customId === 'stream_role_select' || interaction.customId === 'Game_role_Select') {
+        if (interaction.customId === 'role_select') {
             await interaction.deferReply({ flags: MessageFlags.Ephemeral })
             const member = interaction.member;
             const guildid = interaction.guild.id;
@@ -393,42 +385,6 @@ export async function interactionCreate(interaction) {
                 replyContent = 'No role changes were made.';
             }
             interaction.editReply({ content: replyContent, flags: MessageFlags.Ephemeral });
-        }
-        if (interaction.customId.startsWith('guild_appeal')) {
-            const appealslist = await appealsget(interaction.user.id, interaction.values[0])
-            const deniedappeals = appealslist.filter(appeal => appeal.denied === 1)
-            if (deniedappeals.length > 0) {
-                interaction.reply(`Your previous appeal has been denied.I'm sorry.`)
-                return;
-            }
-            if (appealslist.length > 0) {
-                interaction.reply(`You have already submitted an appeal, please be patient`)
-                return;
-            }
-
-            const guildid = new LabelBuilder({
-                label: "Guild ID",
-                component: new TextInputBuilder({ custom_id: 'guildId', style: TextInputStyle.Short, value: interaction.values[0], required: true })
-            })
-            const reason = new LabelBuilder({
-                label: "Why were you banned?",
-                component: new TextInputBuilder({ custom_id: 'reason', style: TextInputStyle.Paragraph, required: true, placeholder: 'Put your ban reason here' })
-            })
-            const justification = new LabelBuilder({
-                label: "Why should accept your ban appeal?",
-                component: new TextInputBuilder({ custom_id: 'justification', style: TextInputStyle.Paragraph, required: true, placeholder: 'Put your explaination here' })
-            })
-            const extra = new LabelBuilder({
-                label: 'Anything else we need to know?',
-                component: new TextInputBuilder({
-                    custom_id: 'extra', style: TextInputStyle.Paragraph, required: false, placeholder: 'Put anything else here'
-                })
-            })
-            interaction.showModal(new ModalBuilder({
-                custom_id: 'appealModal',
-                title: 'Ban Appeal Submission',
-                components: [guildid, reason, justification, extra]
-            }));
         }
     }
 }

@@ -1,5 +1,5 @@
-import { InteractionContextType, SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder } from "discord.js";
-import { appealsget } from "../Database/databasefunctions.js";
+import { InteractionContextType, SlashCommandBuilder, StringSelectMenuBuilder, LabelBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } from "discord.js";
+import { appealsget } from '../Database/databaseAndFunctions.js';
 
 export const data = new SlashCommandBuilder()
     .setContexts([InteractionContextType.BotDM])
@@ -22,12 +22,31 @@ export async function execute(interaction) {
     })
     if (options.length == 0)
         return interaction.reply('I could not find any ban records for any servers i am in.')
-    interaction.reply({
-        content: `Please select the guild you wish to appeal a ban from:`,
-        components: [new ActionRowBuilder({
-            components: [new StringSelectMenuBuilder({
-                custom_id: 'guild_appeal_select', placeholder: 'Select a guild to appeal your ban', options: options
-            })]
-        })],
-    });
+    const guildid = new LabelBuilder({
+        label: "Guild ID",
+        component: new StringSelectMenuBuilder({
+            custom_id: 'guildId',
+            max_values: 1,
+            options: options
+        })
+    })
+    const reason = new LabelBuilder({
+        label: "Why were you banned?",
+        component: new TextInputBuilder({ custom_id: 'reason', style: TextInputStyle.Paragraph, required: true, placeholder: 'Put your ban reason here' })
+    })
+    const justification = new LabelBuilder({
+        label: "Why should accept your ban appeal?",
+        component: new TextInputBuilder({ custom_id: 'justification', style: TextInputStyle.Paragraph, required: true, placeholder: 'Put your explaination here' })
+    })
+    const extra = new LabelBuilder({
+        label: 'Anything else we need to know?',
+        component: new TextInputBuilder({
+            custom_id: 'extra', style: TextInputStyle.Paragraph, required: false, placeholder: 'Put anything else here'
+        })
+    })
+    interaction.showModal(new ModalBuilder({
+        custom_id: 'appealModal',
+        title: 'Ban Appeal Submission',
+        components: [guildid, reason, justification, extra]
+    }));
 }
