@@ -5,13 +5,13 @@ import { pathToFileURL } from 'node:url';
 import { loadCommandsToClient } from './deploy-cmds.js';
 import CountingStateManager from './Extravariables/counting.js';
 import guildChannelMap from "./Extravariables/guildconfiguration.js";
-import { load } from './utilities/fileeditors.js';
-import db from './Database/database.js';
+import { load, save } from './utilities/fileeditors.js';
+import db from './Database/databaseAndFunctions.js';
 import { findFiles } from './utilities/fileeditors.js';
-import { initializeRankCardBase } from './commands/rank.js';
+import { initializeRankCardBase } from './utilities/rankcardgenerator.js';
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessageReactions, GatewayIntentBits.GuildModeration, GatewayIntentBits.GuildInvites],
-  partials: ['MESSAGE', 'CHANNEL', 'REACTION', 'GUILD_MEMBER', 'USER', 'GUILD_INVITES']
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildModeration, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessageReactions, GatewayIntentBits.GuildModeration, GatewayIntentBits.GuildInvites, GatewayIntentBits.MessageContent],
+  partials: ['MESSAGE', 'CHANNEL', 'REACTION', 'GUILD_MEMBER', 'USER']
 });
 client.commands = new Collection()
 client.countingState = CountingStateManager
@@ -57,9 +57,10 @@ function updateStatus() {
   client.user.setActivity(`${uptimeString}`, { type: ActivityType.Watching });
 }
 async function main() {
+  const invites = {}
   const { CLIENT_ID, TOKEN } = process.env;
   initializeRankCardBase();
-  await client.login(TOKEN);
+  client.login(TOKEN);
   await new Promise(resolve => client.once('clientReady', resolve))
   client.removeAllListeners();
   const eventsNeedingClient = new Set(['messageCreate']);
@@ -68,14 +69,17 @@ async function main() {
       client.on(eventName, eventsNeedingClient.has(eventName) ? (...args) => listenerFunc(client, ...args) : (...args) => listenerFunc(...args));
   const guildIds = client.guilds.cache.map(guild => guild.id);
   const channels = client.channels.cache;
-  await loadCommandsToClient(client.commands, guildIds, TOKEN, CLIENT_ID);
+  loadCommandsToClient(client.commands, guildIds, TOKEN, CLIENT_ID);
   updateStatus();
   setInterval(updateStatus, 5000)
   await clearExpiredWarns(db.collection('users'))
   setInterval(async () => { await clearExpiredWarns(db.collection('users')) }, 5 * 60 * 1000)
-  await cacheInteractiveMessages(channels);
+  cacheInteractiveMessages(channels);
   await embedsenders(channels);
   for (const guildId of guildIds) {
+    const guild = client.guilds.cache.get(guildId);
+    const guildinvites = await guild.invites.fetch();
+    invites[guildId] = guildinvites.map(invite => { return { id: invite.code, uses: invite.uses } })
     if (guildChannelMap[guildId].publicChannels?.countingChannel) {
       let Countingchannel = channels.get(guildChannelMap[guildId].publicChannels.countingChannel)
       await Countingchannel.messages.fetch({ limit: 5 });
@@ -89,6 +93,7 @@ async function main() {
       }
     }
   }
+  save("Extravariables/invites.json", invites)
   client.commands.forEach((command, name) => console.log(name))
   console.log(`✅ Logged in as ${client.user.tag}`);
 }
