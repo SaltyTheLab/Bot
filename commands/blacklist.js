@@ -1,5 +1,5 @@
 import { EmbedBuilder, SlashCommandBuilder, InteractionContextType, PermissionFlagsBits } from "discord.js";
-import { getblacklist, editblacklist } from "../Database/databasefunctions.js";
+import { getblacklist, editblacklist } from '../Database/databaseAndFunctions.js';
 
 export const data = new SlashCommandBuilder()
     .setName('blacklist')
@@ -21,10 +21,9 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
     const targetUser = interaction.options.getMember('target');
     const blacklist = await getblacklist(targetUser.id, interaction.guild.id)
-    const list = blacklist.map(role => `<@&${role}>`).join(',')
     const role = interaction.options.getRole('role') ?? null
     const embed = new EmbedBuilder({
-        description: `${targetUser}'s blacklist\n\nblacklist: ${list.length > 0 ? list : 'empty'}`
+        description: `${targetUser}'s blacklist\n\nblacklist: ${blacklist.length > 0 ? blacklist.map(role => `<@&${role}>`).join(',') : 'empty'}`
     })
     switch (interaction.options.getSubcommand()) {
         case 'add':

@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, InteractionContextType, } from "discord.js";
-import { getUser, saveUser } from "../Database/databasefunctions.js";
+import { getUser, saveUser } from '../Database/databaseAndFunctions.js';
 
 export const data = new SlashCommandBuilder()
     .setName('add')

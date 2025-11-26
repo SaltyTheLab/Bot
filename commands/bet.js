@@ -1,5 +1,5 @@
 import { EmbedBuilder, SlashCommandBuilder, InteractionContextType, MessageFlags } from "discord.js";
-import { getUser, saveUser } from "../Database/databasefunctions.js";
+import { getUser, saveUser } from '../Database/databaseAndFunctions.js';
 
 export const data = new SlashCommandBuilder()
     .setName('bet')

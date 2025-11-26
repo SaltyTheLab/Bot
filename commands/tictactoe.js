@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle, ComponentType, InteractionContextType, MessageFlags } from "discord.js";
-import { getUser, saveUser } from "../Database/databasefunctions.js";
+import { getUser, saveUser } from '../Database/databaseAndFunctions.js';
 
 function generateEmbed(description, color = 0x0000ff) {
     return new EmbedBuilder({

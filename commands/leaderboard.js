@@ -1,5 +1,5 @@
-import { EmbedBuilder, InteractionContextType, SlashCommandBuilder, } from "discord.js";
-import { leaderboard } from "../Database/databasefunctions.js";
+import { EmbedBuilder, InteractionContextType, SlashCommandBuilder } from "discord.js";
+import { leaderboard } from '../Database/databaseAndFunctions.js';
 
 export const data = new SlashCommandBuilder()
     .setName(`leaderboard`)
