@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle, InteractionContextType, ComponentType } from "discord.js";
-import { getUser, saveUser } from "../Database/databasefunctions.js";
+import { getUser, saveUser } from '../Database/databaseAndFunctions.js';
 import { resolve } from 'node:path';
-import { load } from "../utilities/fileeditors.js";
+import logos from "../Database/logos.json" with {type: 'json'};
 
 function getRandomColor() {
     const randomHex = Math.floor(Math.random() * 16777215)
@@ -18,27 +18,17 @@ export const data = new SlashCommandBuilder()
     .setName('logos')
     .setContexts([InteractionContextType.Guild])
     .setDescription('Guess the logo');
-
 export async function execute(interaction) {
-    const logos = await load('Database/logos.json');
-    // Pick a random logo as the correct answer
     const logo = logos[Math.floor(Math.random() * logos.length)];
-    // Filter out the correct logo and pick 3 distractors
-    const noAnswerLogo = logos.filter(l => l.brand !== logo.brand)
-    const distractors = shuffle(noAnswerLogo).slice(0, 3);
-    const options = shuffle([logo, ...distractors]);
-
-    const buttons = new ActionRowBuilder();
-    options.forEach(option => {
-        buttons.addComponents(
-            new ButtonBuilder({
-                custom_id: option.brand,
-                label: option.brand,
-                style: ButtonStyle.Primary
-            }));
+    const options = shuffle([logo, ...shuffle(logos.filter(l => l.brand !== logo.brand)).slice(0, 3)]);
+    let buttons = options.map(option => {
+        return new ButtonBuilder({
+            custom_id: option.brand,
+            label: option.brand,
+            style: ButtonStyle.Primary
+        });
     });
-
-    const message = await interaction.reply({
+    const initialmessage = await interaction.reply({
         embeds: [new EmbedBuilder({
             author: { name: `Guess this logo ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL({ dynamic: true }), },
             color: getRandomColor(),
@@ -47,51 +37,53 @@ export async function execute(interaction) {
         files: [
             { attachment: resolve(`./${logo.image}`), name: 'logo.png' }
         ],
-        components: [buttons],
-    },);
-    const collector = message.createMessageComponentCollector(
+        components: [new ActionRowBuilder({
+            components: buttons
+        })],
+        withResponse: true
+    });
+    const collector = initialmessage.resource.message.createMessageComponentCollector(
         {
             componentType: ComponentType.Button,
-            filter: i => i.message.id === message.interaction.responseMessageId,
+            filter: i => i.message.id === initialmessage.interaction.responseMessageId,
             time: 15000
         }
     );
-    let updatedButtons;
+    const message = initialmessage.resource.message
     collector.on('collect', async i => {
-        updatedButtons = new ActionRowBuilder();
-        options.forEach(option => {
-            const isCorrect = option.brand === logo.brand;
-            const wasClicked = i.customId === option.brand;
-            updatedButtons.addComponents(
-                new ButtonBuilder({
-                    custom_id: `disabled_${option.brand}`,
-                    label: option.brand,
-                    style: isCorrect ? ButtonStyle.Success
-                        : wasClicked ? ButtonStyle.Danger
-                            : ButtonStyle.Secondary,
-                    disabled: true
-                })
-            );
+        buttons = options.map(option => {
+            return new ButtonBuilder({
+                custom_id: `disabled_${option.brand}`,
+                label: option.brand,
+                style: option.brand === logo.brand ? ButtonStyle.Success
+                    : i.customId === option.brand ? ButtonStyle.Danger
+                        : ButtonStyle.Secondary,
+                disabled: true
+            })
         });
+
         if (i.customId === logo.brand) {
             const { userData } = await getUser(interaction.user.id, interaction.guild.id);
             userData.coins += 20;
             saveUser(interaction.user.id, interaction.guild.id, { userData });
         }
         i.update({
-            components: [updatedButtons],
+            components: [new ActionRowBuilder({
+                components: buttons
+            })]
         });
         collector.stop();
     });
     collector.on('end', async (collected, reason) => {
         if (collected.size === 0 && reason == 'time') {
-            updatedButtons = new ActionRowBuilder()
-            options.forEach(option => {
-                updatedButtons.addComponents(
-                    new ButtonBuilder({ custom_id: `disabled_${option.brand}`, label: option.brand, style: ButtonStyle.Primary, disabled: true })
-                )
+            buttons = options.map(option => {
+                return new ButtonBuilder({ custom_id: `disabled_${option.brand}`, label: option.brand, style: ButtonStyle.Primary, disabled: true })
             })
-            interaction.editReply({ components: [updatedButtons] })
+            message.edit({
+                components: [new ActionRowBuilder({
+                    components: buttons
+                })]
+            })
         }
     })
 }
