@@ -1,6 +1,5 @@
 import { createCanvas, loadImage } from 'canvas';
 let rankCardBaseCanvas = null;
-
 function initializeRankCardBase() {
     const canvas = createCanvas(500, 150);
     const ctx = canvas.getContext('2d')
@@ -11,16 +10,6 @@ function initializeRankCardBase() {
     // --- Static Text Labels ---
     ctx.fillStyle = '#ffffff';
     ctx.font = '20px sans-serif';
-    // --- XP Progress Bar Background ---
-    const barX = 130;
-    const barY = canvas.height - 75;
-    const barWidth = canvas.width - 150;
-    const barHeight = 25;
-    const radius = barHeight / 2;
-    // Draw the background of the progress bar
-    ctx.fillStyle = '#40444b';
-    roundRect(ctx, barX, barY, barWidth, barHeight, radius);
-    ctx.fill();
     // --- Avatar Border Outline (STATIC) ---
     const avatarSize = 100;
     const avatarX = 20;
@@ -57,44 +46,35 @@ function formatXP(xp) {
     return xp.toString();
 }
 
-async function generateRankCard(userData, targetUser, xpNeeded, rank) {
-    const canvas = rankCardBaseCanvas;
+
+async function generateRankCard(userData, targetUser, xpNeeded = null, rank = null) {
+    const canvas = createCanvas(rankCardBaseCanvas.width, rankCardBaseCanvas.height);
     const ctx = canvas.getContext('2d');
-    ctx.drawImage(rankCardBaseCanvas, 0, 0);
+    const baseCtx = rankCardBaseCanvas.getContext('2d');
+    const baseImageData = baseCtx.getImageData(0, 0, rankCardBaseCanvas.width, rankCardBaseCanvas.height);
+    ctx.putImageData(baseImageData, 0, 0);
+    ctx.font = '20px sans-serif';
+    ctx.fillStyle = '#ffffff';
     const xpPercent = Math.min(userData.xp / xpNeeded, 1);
     // === Avatar and Border ===
     const avatarSize = 100;
     const avatarX = 20;
     const avatarY = canvas.height / 2 - avatarSize / 2;
     const avatar = await loadImage(targetUser.displayAvatarURL({ extension: 'png', size: 128 }))
-
     ctx.save(); // Save the context state BEFORE applying the avatar clip.
-
     // 2. Create the circular clipping path for the avatar.
     ctx.beginPath();
     ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2);
     ctx.closePath();
     ctx.clip();
-
     // 3. Draw the avatar image (it will automatically be clipped to the circle).
     ctx.drawImage(avatar, avatarX, avatarY, avatarSize, avatarSize)
-
     // 4. Restore the context state. This removes the clipping path,
     ctx.restore();
-
-    // === Text ===
-    ctx.fillStyle = '#ffffff'; // Set color once for white text
-    ctx.font = '20px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(`Level ${userData.level}`, canvas.width - 220, 30);
-    ctx.textAlign = 'right';
-    ctx.fillText(`RANK ${rank}`, canvas.width - 20, 30);
-
-    // Username truncation logic (from previous suggestion)
     const maxUsernameWidth = 200; // Adjust as needed
     let usernameToDisplay = targetUser.username;
     const metrics = ctx.measureText(usernameToDisplay);
-    if (metrics.width > maxUsernameWidth) {
+    if (metrics.width > maxUsernameWidth && xpNeeded !== null) {
         let truncated = false;
         while (ctx.measureText(usernameToDisplay + '…').width > maxUsernameWidth && usernameToDisplay.length > 0) {
             usernameToDisplay = usernameToDisplay.slice(0, -1);
@@ -104,25 +84,41 @@ async function generateRankCard(userData, targetUser, xpNeeded, rank) {
             usernameToDisplay += '…';
         }
     }
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(usernameToDisplay, 350, canvas.height - 90);
-    // XP numbers
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#cccccc';
-    ctx.fillText(`${formatXP(userData.xp)} / ${formatXP(xpNeeded)}`, canvas.width - 20, canvas.height - 90);
     ctx.textAlign = 'left';
-    ctx.fillText(`Total Messages: ${userData.totalmessages}`, 130, canvas.height - 20)
-    // === XP Progress Bar ===
-    const barWidth = canvas.width - 150;
-    const barHeight = 25;
-    const radius = barHeight / 2;
-    // Fill of progress bar
-    if (xpPercent > 0) {
-        ctx.fillStyle = '#3ba55d';
-        const fill = Math.max(barWidth * xpPercent, 25)
-        roundRect(ctx, 130, canvas.height - 75, fill, barHeight, radius);
+    ctx.fillText(usernameToDisplay, 130, canvas.height - 90);
+    ctx.textAlign = 'right';
+    // Level Rank, and Xp
+    if (xpPercent !== null) {
+        // === Text ===
+        ctx.fillText(`Level ${userData.level}`, canvas.width - 220, 30);
+        ctx.fillText(`RANK ${rank}`, canvas.width - 20, 30);
+        // --- XP Progress Bar Background ---
+        let barX = 130;
+        let barY = canvas.height - 75;
+        let barWidth = canvas.width - 150;
+        let barHeight = 25;
+        let radius = barHeight / 2;
+        // Draw the background of the progress bar
+        ctx.fillStyle = '#40444b';
+        roundRect(ctx, barX, barY, barWidth, barHeight, radius);
         ctx.fill();
+        ctx.fillStyle = '#cccccc';
+        ctx.fillText(`${formatXP(userData.xp)} / ${formatXP(xpNeeded)}`, canvas.width - 20, canvas.height - 90);
+        // === XP Progress Bar ===
+        barWidth = canvas.width - 150;
+        barHeight = 25;
+        radius = barHeight / 2;
+        // Fill of progress bar
+        if (xpPercent > 0) {
+            ctx.fillStyle = '#3ba55d';
+            const fill = Math.max(barWidth * xpPercent, 25)
+            roundRect(ctx, 130, canvas.height - 75, fill, barHeight, radius);
+            ctx.fill();
+        }
+    } else {
+        ctx.fillText(`Coins: ${userData.coins}\nTotalMessages: ${userData.totalmessages}`, canvas.width - 150, canvas.height - 50);
     }
+
     return { file: canvas.toBuffer('image/png'), name: 'rank.png' }
 };
 export { initializeRankCardBase, generateRankCard }
