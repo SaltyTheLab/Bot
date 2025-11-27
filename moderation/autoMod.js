@@ -2,7 +2,7 @@ import punishUser from './punishUser.js';
 import forbbidenWordsData from './forbiddenwords.json' with {type: 'json'};
 import { getPunishments, getUser } from '../Database/databaseAndFunctions.js';
 import globalwordsData from './globalwords.json' with {type: 'json'}
-import guildChannelMap from "../Extravariables/guildconfiguration.js";
+import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'}
 import { LRUCache } from 'lru-cache';
 import Denque from 'denque';
 import { MessageFlagsBitField } from 'discord.js';

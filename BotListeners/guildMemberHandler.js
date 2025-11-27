@@ -1,6 +1,6 @@
 import { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } from "discord.js";
 import { load, save } from "../utilities/fileeditors.js";
-import guildChannelMap from "../Extravariables/guildconfiguration.js";
+import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'}
 
 async function MemberHandler(member, action) {
     const owner = await member.guild.fetchOwner();

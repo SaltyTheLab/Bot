@@ -1,4 +1,4 @@
-import guildChannelMap from "../Extravariables/guildconfiguration.js";
+import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'}
 import { getblacklist } from '../Database/databaseAndFunctions.js';
 import embedIDs from '../embeds/EmbedIDs.json' with {type: 'json'};
 async function handleReactionChange(reaction, user, action) {

@@ -1,5 +1,5 @@
-import guildChannelMap from "../Extravariables/guildconfiguration.js";
 import { load, save } from '../utilities/fileeditors.js';
+import { EmbedBuilder, ActionRowBuilder } from 'discord.js';
 let messageIDs = await load('./embeds/embedIDs.json');
 function getComparableEmbed(embedData) {
     if (!embedData) return null;
@@ -34,7 +34,20 @@ async function sendEmbedAndSave(guildId, messageIDs, embedName, embedData, chann
         messageIDs[guildId] = [];
     messageIDs[guildId].push({ name: embedName, messageId: msg.id, channelid: channel.id });
 }
+function reconstructComponent(component) {
+    if (!component) return null;
+    return new ActionRowBuilder(component)
+}
+function getEmbedData(embedData) {
+    const embeds = embedData.embeds.map(embed => {
+        if (typeof embed.color === 'string') embed.color = parseInt(embed.color, 16)
+        return new EmbedBuilder(embed)
+    })
+    const components = embedData.components ? embedData.components.map(component => reconstructComponent(component)) : null
+    return { embeds: embeds, components: components, reactions: embedData.reactions }
+}
 export default async function embedsenders(channels) {
+    const guildChannelMap = await load("./Extravariables/guildconfiguration.json")
     let embedTasks = [];
     for (const guildId in guildChannelMap) {
         const messageconfigs = guildChannelMap[guildId].messageConfigs;
@@ -45,22 +58,14 @@ export default async function embedsenders(channels) {
         for (const embedName in messageconfigs) {
             const channel = channels.get(messageconfigs[embedName].channelid) ?? null;
             const existingEmbedInfo = messageIDs[guildId]?.find((embed) => embed.name === embedName) ?? null;
-            const embedData = messageconfigs[embedName];
+            const embedData = getEmbedData(messageconfigs[embedName]);
             embedTasks.push(async () => {
                 try {
                     const message = await channel.messages.fetch(existingEmbedInfo.messageId) ?? null;
-                    const existingEmbeds = message.embeds.map(embed => embed.toJSON());
-                    const newEmbeds = embedData.embeds
-                    const comparableExistingEmbeds = existingEmbeds
-                        .map(embed => getComparableEmbed(embed))
-                        .join('|||');
-                    const comparableNewEmbeds = newEmbeds
-                        .map(embed => getComparableEmbed(embed.data))
-                        .join('|||');
+                    const comparableExistingEmbeds = message.embeds.map(embed => getComparableEmbed(embed.toJSON())).join('|||');
+                    const comparableNewEmbeds = embedData.embeds.map(embed => getComparableEmbed(embed.data)).join('|||');
                     if (comparableExistingEmbeds !== comparableNewEmbeds) {
-                        message.edit({
-                            embeds: newEmbeds, ...(embedData.components && { components: embedData.components })
-                        })
+                        message.edit({ embeds: embedData.embeds, ...(embedData.components && { components: embedData.components }) })
                         console.log(`✅ Message '${embedName}' updated successfully.`);
                         return;
                     }

@@ -1,5 +1,5 @@
 import { EmbedBuilder } from "discord.js";
-import guildChannelMap from "../Extravariables/guildconfiguration.js";
+import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'}
 export async function guildMemberUpdate(oldMember, newMember) {
     if (oldMember.nickname === newMember.nickname) return;
     const logChannel = oldMember.client.channels.cache.get(guildChannelMap[oldMember.guild.id].modChannels.namelogChannel);

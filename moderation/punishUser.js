@@ -1,7 +1,7 @@
 import { EmbedBuilder, GuildMember } from 'discord.js';
 import { editPunishment, getPunishments, getUser } from '../Database/databaseAndFunctions.js';
 import { load, save } from '../utilities/fileeditors.js';
-import guildChannelMap from "../Extravariables/guildconfiguration.js";
+import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'}
 function getNextPunishment(weightedWarns) {
   let index = Math.max(0, weightedWarns - 1);
   const punishmentStages = [

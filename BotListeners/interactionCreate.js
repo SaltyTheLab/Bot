@@ -2,7 +2,7 @@ import { ButtonBuilder, ButtonStyle, ActionRowBuilder, ModalBuilder, TextInputBu
 import punishUser from "../moderation/punishUser.js";
 import { appealsinsert, appealsget, appealupdate } from '../Database/databaseAndFunctions.js';
 import { load, save } from "../utilities/fileeditors.js";
-import guildChannelMap from "../Extravariables/guildconfiguration.js";
+import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'}
 
 const filepath = "Extravariables/applications.json"
 export async function interactionCreate(interaction) {

@@ -1,6 +1,6 @@
 import { InteractionContextType, PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
 import { save } from "../utilities/fileeditors.js";
-import guildChannelMap from "../Extravariables/guildconfiguration.js/";
+import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'}
 export const data = new SlashCommandBuilder()
     .setName('applications')
     .setDescription('Open/close applications')
