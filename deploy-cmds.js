@@ -15,7 +15,7 @@ async function getCommandData(filePaths) {
     }
     return { fullmodule, jsonPayloads };
 }
-export async function loadCommandsToClient(commands, guildIds, token, clientid) {
+export default async function loadCommandsToClient(commands, guildIds, token, clientid) {
     if (!token || !clientid) { console.error('❌ Missing required environment variables: TOKEN or CLIENT_ID.'); return; }
     const rest = new REST({ version: '10' }).setToken(token);
     const botRoot = resolve(dirname(fileURLToPath(import.meta.url)));

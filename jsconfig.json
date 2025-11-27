@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "module": "CommonJS",
-    "target": "ES6"
+    "target": "es2024",
   },
   "exclude": [
     "node_modules"

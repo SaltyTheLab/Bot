@@ -11,19 +11,15 @@ export const data = new SlashCommandBuilder()
             .setRequired(false)
     );
 export async function execute(interaction) {
-    try {
-        await interaction.deferReply();
-        const targetUser = interaction.options.getUser('user') || interaction.user;
-        const { userData, rank } = await getUser(targetUser.id, interaction.guild.id);
-        if (!userData || userData.xp === undefined || userData.level === undefined)
-            return interaction.editReply({ content: 'User data not found or incomplete. They might need to gain some XP first!', flags: MessageFlags.Ephemeral });
-        const xpNeeded = Math.round(((userData.level - 1) ** 1.5 * 52 + 40) / 20) * 20
-        const image = await generateRankCard(userData, targetUser, xpNeeded, rank)
-        interaction.editReply({
-            files: [new AttachmentBuilder(image.file, image.name)]
-        });
-    } catch (error) {
-        console.error('Error in rank command:', error);
-        interaction.editReply({ content: '⚠️ An error occurred while generating the rank card.', flags: MessageFlags.Ephemeral });
-    }
+    await interaction.deferReply();
+    const targetUser = interaction.options.getUser('user') || interaction.user;
+    const { userData, rank } = await getUser(targetUser.id, interaction.guild.id);
+    if (!userData || userData.xp === undefined || userData.level === undefined)
+        return interaction.editReply({ content: 'User data not found or incomplete. They might need to gain some XP first!', flags: MessageFlags.Ephemeral });
+    const xpNeeded = Math.round(((userData.level - 1) ** 1.5 * 52 + 40) / 20) * 20
+    const image = await generateRankCard(userData, targetUser, xpNeeded, rank)
+    interaction.editReply({
+        files: [new AttachmentBuilder(image.file, image.name)]
+    });
+
 }

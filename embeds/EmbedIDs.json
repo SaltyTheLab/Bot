@@ -6,48 +6,33 @@
       "channelid": "1262533685002113155"
     },
     {
-      "name": "getpronouns",
-      "messageId": "1442734528534806558",
-      "channelid": "1235323618582466621"
-    },
-    {
       "name": "mental",
-      "messageId": "1442734528429948970",
+      "messageId": "1443491465622982706",
       "channelid": "1390128922712342659"
     },
     {
-      "name": "getconsole",
-      "messageId": "1442734529235259424",
-      "channelid": "1235323618582466621"
-    },
-    {
-      "name": "scams",
-      "messageId": "1442734528866287726",
-      "channelid": "1436157325214875789"
-    },
-    {
-      "name": "getlocation",
-      "messageId": "1442734530577432676",
-      "channelid": "1235323618582466621"
-    },
-    {
       "name": "rules",
-      "messageId": "1442735474430181437",
+      "messageId": "1443491465782235241",
       "channelid": "1235295566356025354"
     },
     {
+      "name": "scams",
+      "messageId": "1443495502284062730",
+      "channelid": "1436157325214875789"
+    },
+    {
       "name": "aboutMe",
-      "messageId": "1442739455181197453",
+      "messageId": "1443496385830981632",
       "channelid": "1235323618582466621"
     },
     {
       "name": "getcolor",
-      "messageId": "1442739653861183518",
+      "messageId": "1443496386871165012",
       "channelid": "1235323618582466621"
     },
     {
       "name": "extra",
-      "messageId": "1442739654800441366",
+      "messageId": "1443496387726540922",
       "channelid": "1235323618582466621"
     }
   ],
@@ -58,18 +43,18 @@
       "channelid": "1423830604952240170"
     },
     {
-      "name": "dirty",
-      "messageId": "1442734528438210682",
-      "channelid": "1415773272934715534"
-    },
-    {
       "name": "getroles",
-      "messageId": "1442734528442662934",
+      "messageId": "1443491465568190545",
       "channelid": "1410696524849217578"
     },
     {
+      "name": "dirty",
+      "messageId": "1443495502271348787",
+      "channelid": "1415773272934715534"
+    },
+    {
       "name": "rules",
-      "messageId": "1442735475000344606",
+      "messageId": "1443495502330204201",
       "channelid": "1388104789514129468"
     }
   ],
@@ -81,7 +66,7 @@
     },
     {
       "name": "getRoles",
-      "messageId": "1442738464230735872",
+      "messageId": "1443500506302382134",
       "channelid": "1347227575998484538"
     }
   ]

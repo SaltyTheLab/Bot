@@ -1,14 +1,14 @@
 import { Client, GatewayIntentBits, Collection, ActivityType } from 'discord.js';
 import { config } from 'dotenv';
-import embedsenders from './embeds/embeds.js';
 import { pathToFileURL } from 'node:url';
-import { loadCommandsToClient } from './deploy-cmds.js';
-import CountingStateManager from './Extravariables/counting.js';
-import guildChannelMap from "./Extravariables/guildconfiguration.js";
-import { load, save } from './utilities/fileeditors.js';
-import db from './Database/databaseAndFunctions.js';
-import { findFiles } from './utilities/fileeditors.js';
+import { load, save, findFiles } from './utilities/fileeditors.js';
 import { initializeRankCardBase } from './utilities/rankcardgenerator.js';
+import loadCommandsToClient from './deploy-cmds.js';
+import CountingStateManager from './Extravariables/counting.js';
+import guildChannelMap from "./Extravariables/guildconfiguration.json" with {type: 'json'}
+import embedsenders from './embeds/embeds.js';
+import db from './Database/databaseAndFunctions.js';
+
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildModeration, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessageReactions, GatewayIntentBits.GuildModeration, GatewayIntentBits.GuildInvites, GatewayIntentBits.MessageContent],
   partials: ['MESSAGE', 'CHANNEL', 'REACTION', 'GUILD_MEMBER', 'USER']
@@ -53,35 +53,31 @@ function updateStatus() {
   seconds %= 3600;
   const minutes = Math.floor(seconds / 60);
   seconds %= 60;
-  const uptimeString = `${days}d ${hours}h ${minutes}m ${seconds}s`;
-  client.user.setActivity(`${uptimeString}`, { type: ActivityType.Watching });
+  client.user.setActivity(`${days}d ${hours}h ${minutes}m ${seconds}s`, { type: ActivityType.Watching });
 }
 async function main() {
   const invites = {}
   const { CLIENT_ID, TOKEN } = process.env;
   initializeRankCardBase();
-  client.login(TOKEN);
+  await client.login(TOKEN);
   await new Promise(resolve => client.once('clientReady', resolve))
   client.removeAllListeners();
   const eventsNeedingClient = new Set(['messageCreate']);
   for (const filePath of await findFiles("BotListeners"))
     for (const [eventName, listenerFunc] of Object.entries(await import(pathToFileURL(filePath).href)))
       client.on(eventName, eventsNeedingClient.has(eventName) ? (...args) => listenerFunc(client, ...args) : (...args) => listenerFunc(...args));
-  const guildIds = client.guilds.cache.map(guild => guild.id);
-  const channels = client.channels.cache;
-  loadCommandsToClient(client.commands, guildIds, TOKEN, CLIENT_ID);
+  loadCommandsToClient(client.commands, client.guilds.cache.map(guild => guild.id), TOKEN, CLIENT_ID);
   updateStatus();
   setInterval(updateStatus, 5000)
   await clearExpiredWarns(db.collection('users'))
   setInterval(async () => { await clearExpiredWarns(db.collection('users')) }, 5 * 60 * 1000)
-  cacheInteractiveMessages(channels);
-  await embedsenders(channels);
-  for (const guildId of guildIds) {
-    const guild = client.guilds.cache.get(guildId);
+  cacheInteractiveMessages(client.channels.cache);
+  await embedsenders(client.channels.cache);
+  for (const [guildId, guild] of client.guilds.cache) {
     const guildinvites = await guild.invites.fetch();
     invites[guildId] = guildinvites.map(invite => { return { id: invite.code, uses: invite.uses } })
     if (guildChannelMap[guildId].publicChannels?.countingChannel) {
-      let Countingchannel = channels.get(guildChannelMap[guildId].publicChannels.countingChannel)
+      let Countingchannel = client.channels.cache.get(guildChannelMap[guildId].publicChannels.countingChannel)
       await Countingchannel.messages.fetch({ limit: 5 });
       const lastmessages = Countingchannel.messages.cache.filter(message => !message.author.bot)
       for (const [, message] of lastmessages) {
