@@ -23,7 +23,7 @@ const unitMap = { min: 60000, hour: 3600000, day: 86400000 };
 const LOG_COLORS = { Warn: 0xffcc00, Mute: 0xff4444, Ban: 0xd10000, Kick: 0x838383 };
 const MAX_TIMEOUT_MS = 2419200000;
 export default async function punishUser({ interaction = null, guild, target, moderatorUser, reason, channel, isAutomated = false, currentWarnWeight = 1, banflag = false, messageid = null, kick = false }) {
-  if (!await getUser(target.id, guild.id) && interaction) { interaction.reply('❌ User does not exist in the Database.'); return; }
+  if (!await getUser({ userId: target.id, guildId: guild.id, modflag: true }) && interaction) { interaction.reply('❌ User does not exist in the Database.'); return; }
   const user = target instanceof GuildMember ? target.user : target;
   const userTag = user.tag;
   const icon = user.displayAvatarURL({ dynamic: true });
@@ -87,13 +87,10 @@ export default async function punishUser({ interaction = null, guild, target, mo
   }
 
   const buttonmessage = messageid ? `https://discord.com/channels/${guild.id}/${channel.id}/${messageid}` : null
-
   isAutomated ? sentMessage = await channel.send({ embeds: [new EmbedBuilder({ color: logcolor, author: { name: commandTitle, iconURL: icon } })] })
     : !buttonmessage ? sentMessage = await interaction.reply({ embeds: [new EmbedBuilder({ color: logcolor, author: { name: commandTitle, iconURL: icon } })], withResponse: true })
       : null
-
   editPunishment({ userId: target.id, guildId: guild.id, moderatorId: moderatorUser.id, reason: reason, durationMs: durationMs, warnType: warnType, weight: currentWarnWeight, channel: channel.id, messagelink: buttonmessage ?? `https://discord.com/channels/${guild.id}/${channel.id}/${sentMessage.id}` }).catch(err => console.warn(err));
-
   activeWarns = await getPunishments(target.id, guild.id, true);
   const refrences = (warnType === 'Ban' ? activeWarns.filter(r => r.type === 'Ban') : activeWarns.filter(r => r.type !== 'Kick'))
     .slice(0, 10)
