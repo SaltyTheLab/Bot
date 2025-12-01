@@ -24,7 +24,7 @@ export async function execute(interaction) {
     const target = interaction.options.getUser('target')
     const xp = interaction.options.getNumber('xp') ?? null;
     const level = interaction.options.getNumber('level') ?? null;
-    const { userData } = await getUser(target.id, interaction.guild.id)
+    const { userData } = await getUser(target.id, interaction.guild.id, true)
     switch (interaction.options.getSubcommand()) {
         case 'xp': {
             userData.xp += xp
@@ -37,7 +37,7 @@ export async function execute(interaction) {
             break;
         }
     }
-    saveUser(target.id, interaction.guild.id, { userData });
+    saveUser({ userId: target.id, guildId: interaction.guild.id, userData: userData });
     interaction.reply({
         embeds: [embed]
     })

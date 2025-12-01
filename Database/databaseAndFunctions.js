@@ -7,7 +7,7 @@ const appeals = client.db("Database").collection('appeals');
 const usersCollection = client.db("Database").collection('users');
 
 // --- USER XP/LEVEL SYSTEM ---
-export async function getUser(userId, guildId, modflag = false) {
+export async function getUser({ userId, guildId, modflag = false }) {
   let userData = await usersCollection.findOne({ userId: userId, guildId: guildId }, { projection: { xp: 1, level: 1, coins: 1, totalmessages: 1 } });
   if (!userData && !modflag) {
     const newUser = { userId: userId, xp: 0, level: 1, coins: 100, guildId: guildId, notes: [], punishments: [], blacklist: [], totalmessages: 0 }
@@ -26,14 +26,15 @@ export async function getUser(userId, guildId, modflag = false) {
 export async function leaderboard(guildId) {
   return await usersCollection.find({ guildId: guildId }).limit(10).sort({ level: -1, xp: -1 }).toArray()
 }
-export async function saveUser(userId, guildId, { userData }) {
+export async function saveUser({ userId, guildId, userData }) {
+  const { coins, xp, level, totalmessages } = userData;
   const filter = { userId: userId, guildId: guildId };
-  const update = { $set: { ...userData } };
-  const options = { upsert: true };
+  const update = { $set: { coins: coins, xp: xp, level: level, totalmessages: totalmessages } };
+  const options = { upsert: true }
   await usersCollection.updateOne(filter, update, options)
 }
 // --- NOTES ---
-export async function editNote({ userId, moderatorId = null, note = null, guildId, id = null }) {
+export async function editNote({ userId, guildId, moderatorId = null, note = null, id = null }) {
   let result;
   if (id)
     result = { $pull: { notes: { _id: id } } }
@@ -51,8 +52,8 @@ export async function getPunishments(userId, guildId, active = false) {
   if (!history)
     return [];
   return active ?
-    history.punishments.filter(p => p.active === 1)
-    : history.punishments
+    history.punishments.filter(p => p.active === 1).sort((a, b) => b.timestamp - a.timestamp)
+    : history.punishments.sort((a, b) => b.timestamp - a.timestamp)
 }
 export async function editPunishment({ userId, guildId, moderatorId = null, reason = null, durationMs = null, warnType = null, weight = null, channel = null, messagelink = null, id = null }) {
   let result;

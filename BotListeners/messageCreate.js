@@ -1,7 +1,6 @@
-import { EmbedBuilder } from '@discordjs/builders';
 import { getUser, saveUser } from '../Database/databaseAndFunctions.js';
 import AutoMod from '../moderation/autoMod.js';
-import { MessageType } from 'discord.js';
+import { MessageType, EmbedBuilder } from 'discord.js';
 import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'}
 const KEYWORD_REPLIES = new Map([
   ['bark', 'bark'],
@@ -20,7 +19,7 @@ const COMPLEX_KEYWORD_REPLIES = [
   { keywords: ['hello', 'there'], reply: 'general Kenobi' }
 ];
 async function applyUserXP(userId, message, guildId) {
-  const { userData, rank } = await getUser(userId, guildId);
+  const { userData, rank } = await getUser({ userId: userId, guildId: guildId });
   const verifiedRole = message.guild.roles.cache.find(r => r.name.toLowerCase() === 'verified');
   const member = message.member;
   userData.xp += 20;
@@ -30,23 +29,24 @@ async function applyUserXP(userId, message, guildId) {
     userData.level++;
     userData.xp = 0;
     message.channel.send({
-      embeds: [new EmbedBuilder()
-        .setAuthor({
+      embeds: [new EmbedBuilder({
+        author: {
           name: `${message.author.tag} leveled up to ${userData.level}!`, iconURL: message.author.displayAvatarURL({ dynamic: true })
-        })
-        .setColor(0x00AE86)
-        .setFooter({ text: `you are #${rank} in ${message.guild.name}`, iconURL: message.guild.iconURL({ extension: 'png', size: 64 }) })]
+        },
+        color: 0x00AE86,
+        footer: { text: `you are #${rank} in ${message.guild.name}`, iconURL: message.guild.iconURL({ extension: 'png', size: 64 }) }
+      })]
     });
   }
   if (userData.level >= 3 && !member.roles.cache.has(verifiedRole) && verifiedRole)
     member.roles.add(verifiedRole);
-  saveUser(userId, guildId, { userData });
+  saveUser({ userId: userId, guildId: guildId, userData: userData });
 }
 export async function messageCreate(client, message) {
   if (message.author.bot || !message.guild || !message.member)
     return;
   const sentbystaff = message.member.permissions.has('ModerateMembers')
-  const lowerContent = message.content.toLowerCase().split(/\s+/);
+  const lowerContent = message.content.toLowerCase().replace(/[.!]/g, '').split(/\s+/);
   const guildId = message.guild.id
 
   if (message.channel.id === guildChannelMap[guildId].publicChannels.countingChannel) {

@@ -11,7 +11,7 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
     const user = interaction.user;
-    const { userData } = await getUser(user.id, interaction.guild.id);
+    const { userData } = await getUser(user.id, interaction.guild.id, true);
     const coincount = interaction.options.getInteger('amount')
     if (coincount > userData.coins) {
         interaction.reply({ content: `you cannot bet more than you have ${user}`, flags: MessageFlags.Ephemeral })
@@ -22,18 +22,14 @@ export async function execute(interaction) {
     const result = new EmbedBuilder({
         color: 0x007a00, author: { name: statement, iconURL: user.displayAvatarURL({ dyanamic: true }) },
     })
-    if (Math.random() >= .5)
-        userData.coins += win;
+    if (Math.random() >= .5) userData.coins += win;
     else {
         statement = ` ${user.tag} you bet ${coincount} and lost!`
         result.setColor(0x7a0000)
-        result.setAuthor({
-            name: statement,
-            iconURL: user.displayAvatarURL({ dyanamic: true })
-        })
+        result.setAuthor({ name: statement, iconURL: user.displayAvatarURL({ dyanamic: true }) })
         userData.coins -= coincount;
         userData.coins < 0 ? userData.coins = 0 : null
     }
-    saveUser(user.id, interaction.guild.id, { userData });
+    saveUser({ userId: user.id, guildId: interaction.guild.id, userData: userData });
     interaction.reply({ embeds: [result] })
 }
