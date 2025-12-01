@@ -3,15 +3,7 @@ import { getblacklist } from '../Database/databaseAndFunctions.js';
 import embedIDs from '../embeds/EmbedIDs.json' with {type: 'json'};
 async function handleReactionChange(reaction, user, action) {
   if (user.bot) return;
-  const member = await reaction.message.guild.members.fetch(user.id);
-  try {
-    if (reaction.partial) reaction = await reaction.fetch();
-    if (reaction.message && reaction.message.partial) await reaction.message.fetch();
-    if (user.partial) user = await user.fetch();
-  } catch (err) {
-    console.error(`❌ Failed to fetch reaction or user (${action}):`, err);
-    return;
-  }
+  const member = await reaction.message.guild.members.fetch(user.id)
   const isValidMessageId = embedIDs[reaction.message.guild.id].some(embedInfo => embedInfo.messageId === reaction.message.id);
   if (!isValidMessageId)
     return;
