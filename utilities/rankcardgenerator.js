@@ -45,9 +45,7 @@ function formatXP(xp) {
         return `${Math.floor(xp / 1000)}k`;
     return xp.toString();
 }
-
-
-async function generateRankCard(userData, targetUser, xpNeeded = null, rank = null) {
+async function generateRankCard({ userData, targetUser, xpNeeded = null, rank = null }) {
     const canvas = createCanvas(rankCardBaseCanvas.width, rankCardBaseCanvas.height);
     const ctx = canvas.getContext('2d');
     const baseCtx = rankCardBaseCanvas.getContext('2d');
@@ -55,21 +53,18 @@ async function generateRankCard(userData, targetUser, xpNeeded = null, rank = nu
     ctx.putImageData(baseImageData, 0, 0);
     ctx.font = '20px sans-serif';
     ctx.fillStyle = '#ffffff';
-    const xpPercent = Math.min(userData.xp / xpNeeded, 1);
     // === Avatar and Border ===
     const avatarSize = 100;
     const avatarX = 20;
     const avatarY = canvas.height / 2 - avatarSize / 2;
     const avatar = await loadImage(targetUser.displayAvatarURL({ extension: 'png', size: 128 }))
-    ctx.save(); // Save the context state BEFORE applying the avatar clip.
+    ctx.save();
     // 2. Create the circular clipping path for the avatar.
     ctx.beginPath();
     ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2);
     ctx.closePath();
     ctx.clip();
-    // 3. Draw the avatar image (it will automatically be clipped to the circle).
     ctx.drawImage(avatar, avatarX, avatarY, avatarSize, avatarSize)
-    // 4. Restore the context state. This removes the clipping path,
     ctx.restore();
     const maxUsernameWidth = 200; // Adjust as needed
     let usernameToDisplay = targetUser.username;
@@ -86,37 +81,32 @@ async function generateRankCard(userData, targetUser, xpNeeded = null, rank = nu
     }
     ctx.textAlign = 'left';
     ctx.fillText(usernameToDisplay, 130, canvas.height - 90);
-    ctx.textAlign = 'right';
-    // Level Rank, and Xp
-    if (xpPercent !== null) {
+    // Level, Rank, and Xp
+    if (xpNeeded !== null) {
+        const xpPercent = Math.min(userData.xp / xpNeeded, 1);
         // === Text ===
-        ctx.fillText(`Level ${userData.level}`, canvas.width - 220, 30);
-        ctx.fillText(`RANK ${rank}`, canvas.width - 20, 30);
-        // --- XP Progress Bar Background ---
-        let barX = 130;
-        let barY = canvas.height - 75;
-        let barWidth = canvas.width - 150;
-        let barHeight = 25;
-        let radius = barHeight / 2;
+        ctx.fillText(`Level ${userData.level}             RANK ${rank}`, 250, 30);
+        // --- XP Progress Bar and Background ---
+        const barX = 130;
+        const barY = canvas.height - 75;
+        const barWidth = 350;
+        const barHeight = 25;
+        const radius = barHeight / 2;
         // Draw the background of the progress bar
         ctx.fillStyle = '#40444b';
         roundRect(ctx, barX, barY, barWidth, barHeight, radius);
         ctx.fill();
         ctx.fillStyle = '#cccccc';
-        ctx.fillText(`${formatXP(userData.xp)} / ${formatXP(xpNeeded)}`, canvas.width - 20, canvas.height - 90);
-        // === XP Progress Bar ===
-        barWidth = canvas.width - 150;
-        barHeight = 25;
-        radius = barHeight / 2;
+        ctx.fillText(`${formatXP(userData.xp)} / ${formatXP(xpNeeded)}`, 380, canvas.height - 90);
         // Fill of progress bar
         if (xpPercent > 0) {
             ctx.fillStyle = '#3ba55d';
             const fill = Math.max(barWidth * xpPercent, 25)
-            roundRect(ctx, 130, canvas.height - 75, fill, barHeight, radius);
+            roundRect(ctx, barX, barY, fill, barHeight, radius);
             ctx.fill();
         }
     } else {
-        ctx.fillText(`Coins: ${userData.coins}\nTotalMessages: ${userData.totalmessages}`, canvas.width - 150, canvas.height - 50);
+        ctx.fillText(`Coins: ${userData.coins}\nTotalMessages: ${userData.totalmessages}`, 150, canvas.height - 50);
     }
 
     return { file: canvas.toBuffer('image/png'), name: 'rank.png' }

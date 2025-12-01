@@ -45,9 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const { guildSelect, guildIdInput, deleteConfigBtn } = elements;
         const currentGuildId = guildSelect.value;
         guildIdInput.value = currentGuildId;
-
         let configToRender;
-
         if (allGuildConfigs[currentGuildId]) {
             configToRender = allGuildConfigs[currentGuildId]
             console.log(`Loading pre-existing config for guild: ${currentGuildId}`, configToRender);
@@ -133,9 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (nameSpanMod && idInputMod) {
                         name = nameSpanMod.dataset.channelName.trim();
                         id = idInputMod.value.trim();
-                        if (name && id) {
-                            values[name] = id;
-                        }
+                        if (name && id) values[name] = id;
                     }
                     break;
                 }
@@ -145,12 +141,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (nameInput && idInput) {
                         name = nameInput.value.trim();
                         id = idInput.value.trim();
-                        if (name) {
-                            if (id.includes(',')) {
-                                id = id.split(',').map(item => item.trim());
-                            }
-                            values[name] = id;
-                        }
+                        if (name)
+                            if (id.includes(',')) id = id.split(',').map(item => item.trim());
+                        values[name] = id;
                     }
                     break;
                 }
@@ -160,9 +153,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (nameInput && idInput) {
                         name = nameInput.value.trim();
                         id = idInput.value.trim();
-                        if (name) {
-                            values[name] = id;
-                        }
+                        if (name) values[name] = id;
                     }
                     break;
                 }
@@ -180,18 +171,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 switch (type) {
                     case 'automod': {
                         div.innerHTML = `
-                                <span class="w-full md:w-1/3 bg-gray-700 text-gray-200 rounded-lg p-2 font-bold text-xl" data-automod-name="${key}">
-                                    ${key}
-                                </span>
+                                <span class="w-full md:w-1/3 bg-gray-700 text-gray-200 rounded-lg p-2 font-bold text-xl" data-automod-name="${key}">${key}</span>
                                 <input type="text" placeholder="Value" value="${data[key]}" class="w-full md:w-2/3 bg-gray-900 text-gray-200 border border-gray-600 rounded-lg p-2" data-automod-value>
                             `;
                         break;
                     }
                     case 'mod': {
                         div.innerHTML = `
-                                <span class="w-full md:w-1/3 bg-gray-700 text-gray-200 rounded-lg p-2 font-bold text-xl" data-channel-name="${key}">
-                                    ${key}
-                                </span>
+                                <span class="w-full md:w-1/3 bg-gray-700 text-gray-200 rounded-lg p-2 font-bold text-xl" data-channel-name="${key}">${key}</span>
                                 <input type="text" placeholder="Channel ID" value="${data[key]}" class="w-full md:w-2/3 bg-gray-900 text-gray-200 border border-gray-600 rounded-lg p-2" data-channel-id="${type}">
                             `;
                         break;
@@ -254,11 +241,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const { jsonPreview } = elements;
         const { guildId, config } = getFormValues();
         let previewData = {};
-        if (guildId) {
-            previewData[guildId] = config;
-        } else {
-            previewData = { 'placeholder-guild': config };
-        }
+        if (guildId) previewData[guildId] = config;
+        else previewData = { 'placeholder-guild': config };
         jsonPreview.textContent = `${JSON.stringify(previewData, null, 2)} `;
     };
 
@@ -331,9 +315,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleDownloadConfig() {
         const { guildId, config } = getFormValues();
-        if (guildId) {
-            allGuildConfigs[guildId] = config;
-        }
+        if (guildId) allGuildConfigs[guildId] = config;
         const fileContent = JSON.stringify(allGuildConfigs, null, 2);
         const blob = new Blob([fileContent], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
@@ -377,6 +359,5 @@ document.addEventListener('DOMContentLoaded', () => {
     elements.saveConfigBtn.addEventListener('click', handleSaveConfig);
     elements.deleteConfigBtn.addEventListener('click', handleDeleteConfig);
     elements.downloadConfigBtn.addEventListener('click', handleDownloadConfig);
-
     updateGuildSelect();
 })

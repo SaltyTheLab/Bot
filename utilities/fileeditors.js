@@ -2,7 +2,7 @@ import { readFile, writeFile, readdir } from 'fs/promises';
 import { join } from 'node:path';
 
 export async function load(filepath) {
-    return JSON.parse(await readFile(filepath, 'utf8'));;
+    return await JSON.parse(await readFile(filepath, 'utf8'));;
 }
 
 export async function save(filepath, data) {

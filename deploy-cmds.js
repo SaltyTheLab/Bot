@@ -25,8 +25,6 @@ export default async function loadCommandsToClient(commands, guildIds, token, cl
         worker.on('message', resolve);
         worker.postMessage({ globalCommandsPath: 'commands', guildIds: guildIds, botRoot: botRoot });
     });
-    if (!msg.success) throw new Error(`Worker failed to load command files: ${msg.error}`);
-
     const globalProcessed = await getCommandData(msg.globalPaths)
     globalProcessed.fullmodule.forEach(command => commands.set(command.data.name, command))
     rest.put(Routes.applicationCommands(clientid), { body: globalProcessed.jsonPayloads });
