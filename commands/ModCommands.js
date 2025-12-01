@@ -1,5 +1,6 @@
 import { InteractionContextType, PermissionFlagsBits, SlashCommandBuilder, GuildMember, MessageFlags } from "discord.js";
 import punishUser from "../moderation/punishUser.js";
+import guildchannelmap from "../Extravariables/guildconfiguration.json" with {type: 'json'}
 export const data = new SlashCommandBuilder()
     .setName('member')
     .setDescription('Warn/Mute/Ban/kick a member')
@@ -34,6 +35,7 @@ export async function execute(interaction) {
     const reason = interaction.options.getString('reason');
     const staffcheck = target instanceof GuildMember ? target.permissions.has(PermissionFlagsBits.ModerateMembers) : null
     const duration = interaction.options.getInteger('duration') ?? null
+    const adminChannel = await interaction.client.channels.cache.get(guildchannelmap[interaction.guild.id].modChannels.adminChannel) ?? null
     let banflag = false
     let kick = false
     if (target.bot)
@@ -50,8 +52,10 @@ export async function execute(interaction) {
                 return interaction.reply({ content: '⚠️ User is already muted.', flags: MessageFlags.Ephemeral });
             break;
         case 'ban':
-            if (!interaction.member.permissions.has(PermissionFlagsBits.BanMembers))
+            if (!interaction.member.permissions.has(PermissionFlagsBits.BanMembers)) {
+                adminChannel.send({ content: `Jr. mod ${interaction.user} just tried to use the ban command, I suggest a private talk if you see multiple instances of this message about them...` })
                 return interaction.reply({ content: 'Jr mods do not have access to this command, please contact a mod or higher in the jr mod chat.', flags: MessageFlags.Ephemeral });
+            }
             banflag = true
             break;
         case 'kick':
