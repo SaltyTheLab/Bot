@@ -8,13 +8,13 @@ import Denque from 'denque';
 import { MessageFlagsBitField } from 'discord.js';
 const forbiddenWords = new Set(forbbidenWordsData);
 const globalWords = new Set(globalwordsData);
-const userMessageTrackers = new LRUCache({ max: 50, ttl: 30 * 60 * 1000, updateAgeOnGet: true, ttlAutopurge: true });
+const userMessageTrackers = new LRUCache({ max: 50, ttl: 15 * 60 * 1000, updateAgeOnGet: true, ttlAutopurge: true });
 
 function getOrCreateTracker(userId, guildId) {
   const initialTrackerState = () => ({ total: 0, mediaCount: 0, timestamps: new Denque(), duplicateCounts: new Map(), recentMessages: new Denque() })
   const trackerkey = `${userId}-${guildId}`
   let tracker = userMessageTrackers.get(trackerkey) ?? initialTrackerState();
-  if (!userMessageTrackers.has(trackerkey)) userMessageTrackers.set(trackerkey, tracker);
+  userMessageTrackers.set(trackerkey, tracker);
   return tracker;
 }
 function hasMedia(message) {
@@ -99,7 +99,8 @@ export default async function AutoMod(message) {
   const inviteRegex = /(https?:\/\/)?(www\.)?(discord\.gg|discord(app)?\.com\/invite)\/[a-zA-Z0-9-]+/i;
   const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
   const { author, content, member, guild, channel, client } = message;
-  const messageWords = content.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+  // eslint-disable-next-line no-useless-escape
+  const messageWords = content.replace(/[\-!.,?_\\*#<>()\[\]{}\+:;='"`~/|^&]/g, '').toLowerCase().split(/\s+/g);
   const [hasInvite, everyonePing] = [inviteRegex.test(content), message.mentions.everyone];
   let globalword;
   let matchedWord;
@@ -152,7 +153,7 @@ export default async function AutoMod(message) {
     guild: guild, target: member, moderatorUser: client.user, reason: reasonText, channel: channel, isAutomated: true
   }
   if (isNewUser && (totalWeight >= 3 || everyonePing || hasInvite) || punishmentCount > 2)
-    punishUser({ ...commoninputs, banflag: true });
+    await punishUser({ ...commoninputs, banflag: true });
   else
-    punishUser({ ...commoninputs, currentWarnWeight: totalWeight });
+    await punishUser({ ...commoninputs, currentWarnWeight: totalWeight });
 }
