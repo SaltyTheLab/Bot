@@ -1,17 +1,23 @@
-import { Client, GatewayIntentBits, Collection, ActivityType } from 'discord.js';
+import { Client, GatewayIntentBits, Collection, Options, ActivityType } from 'discord.js';
 import { config } from 'dotenv';
 import { pathToFileURL } from 'node:url';
-import { load, save, findFiles } from './utilities/fileeditors.js';
+import { save, findFiles } from './utilities/fileeditors.js';
 import { initializeRankCardBase } from './utilities/rankcardgenerator.js';
 import loadCommandsToClient from './deploy-cmds.js';
 import CountingStateManager from './Extravariables/counting.js';
 import guildChannelMap from "./Extravariables/guildconfiguration.json" with {type: 'json'}
 import embedsenders from './embeds/embeds.js';
 import db from './Database/databaseAndFunctions.js';
-
+import embedIDs from './embeds/EmbedIDs.json' with {type: 'json'}
+const embeds = Object.values(embedIDs).flatMap(guildEmbeds => guildEmbeds.map(embedInfo => embedInfo.messageId))
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildModeration, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessageReactions, GatewayIntentBits.GuildModeration, GatewayIntentBits.GuildInvites, GatewayIntentBits.MessageContent],
-  partials: ['MESSAGE', 'CHANNEL', 'REACTION', 'GUILD_MEMBER', 'USER']
+  partials: ['MESSAGE', 'CHANNEL', 'REACTION', 'GUILD_MEMBER', 'USER'],
+  sweepers: {
+    ...Options.DefaultSweeperSettings,
+    messages: { interval: 1800, lifetime: 3600, filter: (message) => embeds.includes(message.id) },
+    users: { interval: 1800, lifetime: 3600, filter: (user) => user.id !== client.user.id }
+  }
 });
 client.commands = new Collection()
 client.countingState = CountingStateManager
@@ -23,26 +29,6 @@ async function clearExpiredWarns(usersCollection) {
     { $set: { "punishments.$[elem].active": 0 } },
     { arrayFilters: [{ "elem.active": 1, "elem.timestamp": { $lt: Date.now() - 24 * 60 * 60 * 1000 } }] }
   ).catch(err => console.error('❌ An error occurred during warn clearance:', err));
-}
-async function cacheInteractiveMessages(channels) {
-  const cachePromises = []
-  const embedIDs = await load("embeds/EmbedIDs.json")
-  for (const guildid in embedIDs) {
-    cachePromises.push(async () => {
-      const { name, messageId, channelid } = embedIDs[guildid];
-      try {
-        const channel = channels.cache.get(channelid);
-        const message = await channel.messages.fetch(messageId);
-        if (message.reactions.length > 0) channel.messages.cache.set(messageId, message);
-        return { status: 'fullfilled' }
-      } catch (err) {
-        const reason = err.code === 10008 ? "Discord API Error: Unknown Message" : err.message;
-        console.error(`❌ Failed to cache embed '${name}' in channel ${channelid}:`, reason);
-        return { status: 'rejected', reason }
-      }
-    });
-  }
-  await Promise.allSettled(cachePromises);
 }
 function updateStatus() {
   const elapsedMs = Date.now() - starttime;
@@ -71,7 +57,6 @@ async function main() {
   setInterval(updateStatus, 5000)
   await clearExpiredWarns(db.collection('users'))
   setInterval(async () => { await clearExpiredWarns(db.collection('users')) }, 5 * 60 * 1000)
-  cacheInteractiveMessages(client.channels.cache);
   await embedsenders(client.channels.cache);
   for (const [guildId, guild] of client.guilds.cache) {
     const guildinvites = await guild.invites.fetch();
