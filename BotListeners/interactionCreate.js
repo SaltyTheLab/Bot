@@ -1,4 +1,4 @@
-import { ButtonBuilder, ButtonStyle, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, EmbedBuilder, AuditLogEvent, PermissionFlagsBits, MessageFlags, LabelBuilder } from "discord.js";
+import { ButtonStyle, ModalBuilder, TextInputStyle, EmbedBuilder, AuditLogEvent, PermissionFlagsBits, MessageFlags, LabelBuilder } from "discord.js";
 import punishUser from "../moderation/punishUser.js";
 import { appealsinsert, appealsget, appealupdate } from '../Database/databaseAndFunctions.js';
 import { load, save } from "../utilities/fileeditors.js";
@@ -11,9 +11,7 @@ export async function interactionCreate(interaction) {
         let command = interaction.client.commands.get(commandName) ?? interaction.client.commands.get(`${interaction.guild.id}:${commandName}`)
         if (!command) {
             console.warn(`[WARN] Command '${commandName}' not found in map.`);
-            if (!interaction.deferred && !interaction.replied) {
-                interaction.reply({ content: 'Sorry, that command is not currently available.', flags: MessageFlags.Ephemeral });
-            }
+            if (!interaction.deferred && !interaction.replied) interaction.reply({ content: 'Sorry, that command is not currently available.', flags: MessageFlags.Ephemeral });
             return;
         }
         try {
@@ -49,19 +47,20 @@ export async function interactionCreate(interaction) {
                     footer: { text: `User ID: ${interaction.user.id}` },
                     timestamp: Date.now()
                 })],
-                components: [new ActionRowBuilder({
+                components: [{
+                    type: 1,
                     components: [
-                        new ButtonBuilder({ custom_id: `unban_approve_${interaction.user.id}_${guild.id}`, label: 'Approve', style: ButtonStyle.Success }),
-                        new ButtonBuilder({ custom_id: `unban_reject_${interaction.user.id}_${guild.id}`, label: 'Reject', style: ButtonStyle.Danger })
+                        { type: 2, custom_id: `unban_approve_${interaction.user.id}_${guild.id}`, label: 'Approve', style: ButtonStyle.Success },
+                        { type: 2, custom_id: `unban_reject_${interaction.user.id}_${guild.id}`, label: 'Reject', style: ButtonStyle.Danger }
                     ]
-                })]
+                }]
             })
             message.startThread({ name: interaction.user.tag })
             interaction.reply({ content: 'Your appeal has been submitted and our team will look into it.' })
             appealsinsert(interaction.user.id, guild.id, reason, justification, extra);
         }
         if (interaction.customId.startsWith('situations')) {
-            const applications = load(filepath);
+            const applications = await load(filepath);
             const application = applications[interaction.user.id]
             const guild = interaction.guild
             application.dmmember = interaction.fields.getTextInputValue('dmmember')
@@ -102,14 +101,12 @@ export async function interactionCreate(interaction) {
             save(filepath, applications)
         }
         if (interaction.customId.startsWith('Defs, reasons, and issues')) {
-            const applications = load(filepath)
+            const applications = await load(filepath)
             const application = applications[interaction.user.id]
             if (application.Memberreport) {
                 await interaction.reply({
                     content: 'You have already filled out this section. Click the button below to continue to the next section.',
-                    components: [new ActionRowBuilder({
-                        components: [new ButtonBuilder({ custom_id: 'next_modal_three', label: 'skip section', style: ButtonStyle.Primary })]
-                    })],
+                    components: [{ type: 1, components: [{ type: 2, custom_id: 'next_modal_three', label: 'skip section', style: ButtonStyle.Primary }] }],
                     flags: MessageFlags.Ephemeral
                 });
                 return;
@@ -122,16 +119,16 @@ export async function interactionCreate(interaction) {
                 await save(filepath, applications);
                 await interaction.reply({
                     content: 'Part 2 of your application has been submitted! Click the button below to continue to the next section.',
-                    components: new ActionRowBuilder({
-                        components: new ButtonBuilder({ custom_id: 'next_modal_three', label: 'Continue Application', style: ButtonStyle.Primary })
-                    }),
+                    components: [{
+                        type: 1, components: [{ type: 2, custom_id: 'next_modal_three', label: 'Continue Application', style: ButtonStyle.Primary }]
+                    }],
                     flags: MessageFlags.Ephemeral
                 });
 
             }
         }
         if (interaction.customId.startsWith('server')) {
-            const applications = load(filepath)
+            const applications = await load(filepath)
             const application = applications[interaction.user.id]
             application.Agerange = interaction.fields.getStringSelectValues('age');
             application.Experience = interaction.fields.getTextInputValue('experience')
@@ -141,9 +138,10 @@ export async function interactionCreate(interaction) {
             await save(filepath, applications)
             interaction.reply({
                 content: 'Part 1 of your application has been submitted! Click the button below to continue to the next section.',
-                components: new ActionRowBuilder({
-                    components: [new ButtonBuilder({ custom_id: 'next_modal_two', label: 'Continue Application', style: ButtonStyle.Primary })]
-                }),
+                components: [{
+                    type: 1,
+                    components: [{ type: 2, custom_id: 'next_modal_two', label: 'Continue Application', style: ButtonStyle.Primary }]
+                }],
                 flags: MessageFlags.Ephemeral
             })
         }
@@ -165,9 +163,10 @@ export async function interactionCreate(interaction) {
                 const banbuttonLabel = interaction.message.components[0].components[0].label;
                 if (banbuttonLabel == '🔨 Ban User & Delete Invite' || banbuttonLabel === '🔨 Ban') {
                     await interaction.message.edit({
-                        components: [new ActionRowBuilder({
-                            components: new ButtonBuilder({ custom_id: interaction.customId, label: banbuttonLabel == '🔨 Ban User & Delete Invite' ? '🔨 Ban User & Delete Invite (Expired)' : '🔨 Ban (Expired)', style: ButtonStyle.Danger, disabled: true })
-                        })]
+                        components: [{
+                            type: 1,
+                            components: { type: 2, custom_id: interaction.customId, label: banbuttonLabel == '🔨 Ban User & Delete Invite' ? '🔨 Ban User & Delete Invite (Expired)' : '🔨 Ban (Expired)', style: ButtonStyle.Danger, disabled: true }
+                        }]
                     })
                 }
                 return;
@@ -197,9 +196,10 @@ export async function interactionCreate(interaction) {
             interaction.reply({ embeds: [new EmbedBuilder({ description: finalMessage })] });
             const originalMessage = await interaction.channel.messages.fetch(interaction.message.id);
             originalMessage.edit({
-                components: [new ActionRowBuilder({
-                    components: new ButtonBuilder({ custom_id: interaction.customId, label: inviterId !== 'no inviter' ? '🔨 Banned User and Inviter!' : '🔨 Banned!', style: ButtonStyle.Danger, disabled: true })
-                })]
+                components: [{
+                    type: 1,
+                    components: { type: 2, custom_id: interaction.customId, label: inviterId !== 'no inviter' ? '🔨 Banned User and Inviter!' : '🔨 Banned!', style: ButtonStyle.Danger, disabled: true }
+                }]
             });
         }
         if (interaction.customId.startsWith('unban_')) {
@@ -259,12 +259,13 @@ export async function interactionCreate(interaction) {
             }
             await interaction.message.edit({
                 embeds: [appealEmbed],
-                components: [new ActionRowBuilder({
+                components: [{
+                    type: 1,
                     components: [
-                        new ButtonBuilder({ custom_id: `unban_approve_${targetUser.id}_${interaction.guild.id}`, label: 'Approve', style: ButtonStyle.Success, disabled: true }),
-                        new ButtonBuilder({ custom_id: `unban_reject_${targetUser.id}_${interaction.guild.id}`, label: 'Reject', style: ButtonStyle.Danger, disabled: true })
+                        { type: 2, custom_id: `unban_approve_${targetUser.id}_${interaction.guild.id}`, label: 'Approve', style: ButtonStyle.Success, disabled: true },
+                        { type: 2, custom_id: `unban_reject_${targetUser.id}_${interaction.guild.id}`, label: 'Reject', style: ButtonStyle.Danger, disabled: true }
                     ]
-                })]
+                }]
             })
             await appealupdate(targetUser.id, guild.id, outcome)
             targetUser.send({ embeds: [response] })
@@ -274,27 +275,23 @@ export async function interactionCreate(interaction) {
 
             const dmmember = new LabelBuilder({
                 label: 'A member messages you about being harrassed',
-                component: new TextInputBuilder({
-                    custom_id: 'dmmember', placeholder: 'How would you handle the situation?', required: true, style: TextInputStyle.Paragraph, max_length: 350
-                })
+                component: { type: 4, custom_id: 'dmmember', placeholder: 'How would you handle the situation?', required: true, style: TextInputStyle.Paragraph, max_length: 350 }
             })
             const argument = new LabelBuilder({
                 label: 'Users are arguing in general chat',
-                component: new TextInputBuilder({ custom_id: 'arguments', placeholder: 'explain your de-escalation steps', style: TextInputStyle.Paragraph, required: true, max_length: 350 })
+                component: { type: 4, custom_id: 'arguments', placeholder: 'explain your de-escalation steps', style: TextInputStyle.Paragraph, required: true, max_length: 350 }
             })
             const ambiguous = new LabelBuilder({
                 label: 'A member DMs you about a rule-breaking DM',
-                component: new TextInputBuilder({ custom_id: 'rulebreakdm', placeholder: 'What is your course of action?', required: true, style: TextInputStyle.Paragraph, max_length: 350 })
+                component: { type: 4, custom_id: 'rulebreakdm', placeholder: 'What is your course of action?', required: true, style: TextInputStyle.Paragraph, max_length: 350 }
             })
             const staffbreakrule = new LabelBuilder({
                 label: 'Staff is failing to follow the rules',
-                component: new TextInputBuilder({ custom_id: 'staffrulebreak', placeholder: 'What is your course of action', required: true, style: TextInputStyle.Paragraph, max_length: 350 })
+                component: { type: 4, custom_id: 'staffrulebreak', placeholder: 'What is your course of action', required: true, style: TextInputStyle.Paragraph, max_length: 350 }
             })
             const illegalcontent = new LabelBuilder({
                 label: 'A user shares illegal content',
-                component: new TextInputBuilder({
-                    custom_id: 'illegal', placeholder: 'What are the steps you take?', required: true, style: TextInputStyle.Paragraph, max_length: 350
-                })
+                component: { type: 4, custom_id: 'illegal', placeholder: 'What are the steps you take?', required: true, style: TextInputStyle.Paragraph, max_length: 350 }
             })
             interaction.showModal(new ModalBuilder({
                 custom_id: 'situations',
@@ -303,36 +300,34 @@ export async function interactionCreate(interaction) {
             }))
         }
         if (interaction.customId.startsWith('next_modal_two')) {
-            const applications = load(filepath);
+            const applications = await load(filepath);
             const application = applications[interaction.user.id]
             if (application.Memberreport) {
                 await interaction.reply({
                     content: 'You have already filled out this part. Click the button below to continue to the next section.',
-                    components: [new ActionRowBuilder({
-                        components: [new ButtonBuilder({ custom_id: 'next_modal_three', label: 'skip part 2', style: ButtonStyle.Primary })]
-                    })],
+                    components: [{ type: 1, components: [{ type: 2, custom_id: 'next_modal_three', label: 'skip part 2', style: ButtonStyle.Primary }] }],
                     flags: MessageFlags.Ephemeral
                 });
             } else {
                 const questionOne = new LabelBuilder({
                     label: 'Why pick you & Tell us about yourself',
-                    component: new TextInputBuilder({ custom_id: 'why', required: true, style: TextInputStyle.Paragraph, max_length: 500 })
+                    component: { type: 4, custom_id: 'why', required: true, style: TextInputStyle.Paragraph, max_length: 500 }
                 })
                 const questionTwo = new LabelBuilder({
                     label: 'What is your definition of a troll?',
-                    component: new TextInputBuilder({ custom_id: 'trolldef', required: true, style: TextInputStyle.Short, max_length: 65 })
+                    component: { type: 4, custom_id: 'trolldef', required: true, style: TextInputStyle.Short, max_length: 65 }
                 })
                 const questionThree = new LabelBuilder({
                     label: 'What is your definition of a raid?',
-                    component: new TextInputBuilder({ custom_id: 'raiddef', required: true, style: TextInputStyle.Short, max_length: 65 })
+                    component: { type: 4, custom_id: 'raiddef', required: true, style: TextInputStyle.Short, max_length: 65 }
                 })
                 const questionFour = new LabelBuilder({
                     label: 'You disagree with a staff punishment...',
-                    component: new TextInputBuilder({ custom_id: 'staffissues', placeholder: 'What would you do?', required: true, style: TextInputStyle.Paragraph, max_length: 300 })
+                    component: { type: 4, custom_id: 'staffissues', placeholder: 'What would you do?', required: true, style: TextInputStyle.Paragraph, max_length: 300 }
                 })
                 const questionFive = new LabelBuilder({
                     label: 'How would you handle a member report?',
-                    component: new TextInputBuilder({ custom_id: 'memberreport', placeholder: 'Describe the steps you would take to investigate and resolve it', required: true, style: TextInputStyle.Paragraph, max_length: 300 })
+                    component: { type: 4, custom_id: 'memberreport', placeholder: 'Describe the steps you would take to investigate and resolve it', required: true, style: TextInputStyle.Paragraph, max_length: 300 }
                 })
                 interaction.showModal(new ModalBuilder({
                     components: [questionOne, questionTwo, questionThree, questionFour, questionFive],
@@ -350,14 +345,9 @@ export async function interactionCreate(interaction) {
             const reactions = guildChannelMap[guildid].roles
             const rolesAdded = [];
             const rolesRemoved = [];
-
-            const allPossibleSelectValues = Object.keys(reactions).filter(() => {
-                return true;
-            });
-
+            const allPossibleSelectValues = Object.keys(reactions)
             for (const roleValue of allPossibleSelectValues) {
                 const roleID = reactions[roleValue];
-
                 if (!roleID) {
                     console.warn(`⚠️ No role mapped for select menu value: ${roleValue}.Skipping.`);
                     continue;
@@ -380,9 +370,6 @@ export async function interactionCreate(interaction) {
             }
             if (rolesRemoved.length > 0) {
                 replyContent += `Removed: ${rolesRemoved.join(', ')} \n`;
-            }
-            if (!replyContent) {
-                replyContent = 'No role changes were made.';
             }
             interaction.editReply({ content: replyContent, flags: MessageFlags.Ephemeral });
         }

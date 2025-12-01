@@ -1,4 +1,4 @@
-import { InteractionContextType, SlashCommandBuilder, StringSelectMenuBuilder, LabelBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } from "discord.js";
+import { InteractionContextType, SlashCommandBuilder, LabelBuilder, ModalBuilder, TextInputStyle } from "discord.js";
 import { appealsget } from '../Database/databaseAndFunctions.js';
 
 export const data = new SlashCommandBuilder()
@@ -24,25 +24,19 @@ export async function execute(interaction) {
         return interaction.reply('I could not find any ban records for any servers i am in.')
     const guildid = new LabelBuilder({
         label: "Guild ID",
-        component: new StringSelectMenuBuilder({
-            custom_id: 'guildId',
-            max_values: 1,
-            options: options
-        })
+        component: { type: 3, custom_id: 'guildId', max_values: 1, options: options }
     })
     const reason = new LabelBuilder({
         label: "Why were you banned?",
-        component: new TextInputBuilder({ custom_id: 'reason', style: TextInputStyle.Paragraph, required: true, placeholder: 'Put your ban reason here' })
+        component: { type: 4, custom_id: 'reason', style: TextInputStyle.Paragraph, required: true, placeholder: 'Put your ban reason here' }
     })
     const justification = new LabelBuilder({
         label: "Why should accept your ban appeal?",
-        component: new TextInputBuilder({ custom_id: 'justification', style: TextInputStyle.Paragraph, required: true, placeholder: 'Put your explaination here' })
+        component: { type: 4, custom_id: 'justification', style: TextInputStyle.Paragraph, required: true, placeholder: 'Put your explaination here' }
     })
     const extra = new LabelBuilder({
         label: 'Anything else we need to know?',
-        component: new TextInputBuilder({
-            custom_id: 'extra', style: TextInputStyle.Paragraph, required: false, placeholder: 'Put anything else here'
-        })
+        component: { type: 4, custom_id: 'extra', style: TextInputStyle.Paragraph, required: false, placeholder: 'Put anything else here' }
     })
     interaction.showModal(new ModalBuilder({
         custom_id: 'appealModal',

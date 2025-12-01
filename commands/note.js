@@ -1,4 +1,4 @@
-import { EmbedBuilder, SlashCommandBuilder, PermissionFlagsBits, InteractionContextType, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from "discord.js";
+import { EmbedBuilder, SlashCommandBuilder, PermissionFlagsBits, InteractionContextType, ButtonStyle, MessageFlags } from "discord.js";
 import { viewNotes, getUser, editNote } from '../Database/databaseAndFunctions.js';
 async function buildNoteEmbed(interaction, targetUser, index, currentNote, length) {
     const mod = await interaction.client.users.fetch(currentNote.moderatorId);
@@ -40,8 +40,7 @@ export async function execute(interaction) {
         case 'add':
             try {
                 editNote({ userId: targetUser.id, moderatorId: interaction.user.id, note: note, guildId: guildId })
-            } catch (err) {
-                console.warn(`is not in the user database.`, err)
+            } catch {
                 return interaction.reply({ content: `${targetUser.tag} is not in the User Database` });
             }
             interaction.reply({
@@ -65,13 +64,14 @@ export async function execute(interaction) {
             let currentnote = allnotes[currentIndex]
             const initialResponse = await interaction.reply({
                 embeds: [await buildNoteEmbed(interaction, targetUser, currentIndex, currentnote, allnotes.length)],
-                components: [new ActionRowBuilder({
+                components: [{
+                    type: 1,
                     components: [
-                        new ButtonBuilder({ custom_id: `prev`, label: '◀️ prev', style: ButtonStyle.Secondary, disabled: currentIndex === 0 }),
-                        new ButtonBuilder({ custom_id: `next`, label: '▶️ next', style: ButtonStyle.Secondary, disabled: currentIndex >= allnotes.length - 1 }),
-                        new ButtonBuilder({ custom_id: `del`, label: '🗑️ delete', style: ButtonStyle.Danger, disabled: false })
+                        { type: 2, custom_id: `prev`, label: '◀️ prev', style: ButtonStyle.Secondary, disabled: currentIndex === 0 },
+                        { type: 2, custom_id: `next`, label: '▶️ next', style: ButtonStyle.Secondary, disabled: currentIndex >= allnotes.length - 1 },
+                        { type: 2, custom_id: `del`, label: '🗑️ delete', style: ButtonStyle.Danger, disabled: false }
                     ]
-                })],
+                }],
                 withResponse: true
             });
             const collector = initialResponse.resource.message.createMessageComponentCollector({
@@ -109,24 +109,26 @@ export async function execute(interaction) {
                 currentnote = allnotes[currentIndex]
                 replyMessage = await replyMessage.edit({
                     embeds: [await buildNoteEmbed(interaction, targetUser, currentIndex, currentnote, allnotes.length)],
-                    components: [new ActionRowBuilder({
+                    components: [{
+                        type: 1,
                         components: [
-                            new ButtonBuilder({ custom_id: `prev`, label: '◀️ prev', style: ButtonStyle.Secondary, disabled: currentIndex === 0 }),
-                            new ButtonBuilder({ custom_id: `next`, label: '▶️ next', style: ButtonStyle.Secondary, disabled: currentIndex >= allnotes.length - 1 }),
-                            new ButtonBuilder({ custom_id: `del`, label: '🗑️ delete', style: ButtonStyle.Danger, disabled: false })
+                            { type: 2, custom_id: `prev`, label: '◀️ prev', style: ButtonStyle.Secondary, disabled: currentIndex === 0 },
+                            { type: 2, custom_id: `next`, label: '▶️ next', style: ButtonStyle.Secondary, disabled: currentIndex >= allnotes.length - 1 },
+                            { type: 2, custom_id: `del`, label: '🗑️ delete', style: ButtonStyle.Danger, disabled: false }
                         ]
-                    })]
+                    }]
                 });
             });
             collector.on('end', async () => {
                 if (allnotes.length > 0) replyMessage.edit({
-                    components: [new ActionRowBuilder({
+                    components: [{
+                        type: 1,
                         components: [
-                            new ButtonBuilder({ custom_id: `prev`, label: '◀️ prev', style: ButtonStyle.Secondary, disabled: true }),
-                            new ButtonBuilder({ custom_id: `next`, label: '▶️ next', style: ButtonStyle.Secondary, disabled: true }),
-                            new ButtonBuilder({ custom_id: `del`, label: '🗑️ delete', style: ButtonStyle.Danger, disabled: true })
+                            { type: 2, custom_id: `prev`, label: '◀️ prev', style: ButtonStyle.Secondary, disabled: true },
+                            { type: 2, custom_id: `next`, label: '▶️ next', style: ButtonStyle.Secondary, disabled: true },
+                            { type: 2, custom_id: `del`, label: '🗑️ delete', style: ButtonStyle.Danger, disabled: true }
                         ]
-                    })]
+                    }]
                 });
             });
         }

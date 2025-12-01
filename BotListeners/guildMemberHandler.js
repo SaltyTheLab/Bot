@@ -1,4 +1,4 @@
-import { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } from "discord.js";
+import { EmbedBuilder, ButtonStyle } from "discord.js";
 import { load, save } from "../utilities/fileeditors.js";
 import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'}
 
@@ -55,14 +55,16 @@ async function MemberHandler(member, action) {
 
             const message = await welcomeChannel.send({
                 embeds: [welcomeEmbed],
-                components: [new ActionRowBuilder({
-                    components: [new ButtonBuilder({
+                components: [{
+                    type: 1,
+                    components: [{
+                        type: 2,
                         custom_id: isPersistentInvite && inviter.id !== owner.user.id ? `ban_${member.id}_${inviter.id}_${invite.code}` : `ban_${member.id}_no inviter_no invite code`,
                         label: isPersistentInvite && inviter.id !== owner.user.id ? '🔨 Ban User & Delete Invite' : '🔨 Ban',
                         style: ButtonStyle.Danger,
                         disabled: false
-                    })]
-                })]
+                    }]
+                }]
             });
             if (Date.now() - user.createdTimestamp < 2 * 24 * 60 * 60 * 1000) {
                 member.kick({ reason: `Account under the age of 2 days` });
@@ -98,15 +100,17 @@ async function MemberHandler(member, action) {
                 const buttonComponent = message.components[0];
                 if (buttonComponent && !buttonComponent.disabled) {
                     message.edit({
-                        components: [new ActionRowBuilder({
-                            components: [new ButtonBuilder({
+                        components: [{
+                            type: 1,
+                            components: [{
+                                type: 2,
                                 custom_id: buttonComponent.components[0].customId,
                                 label: buttonComponent.components[0].label === '🔨 Ban User & Delete Invite' ? '🔨 Ban User & Delete Invite (Expired)'
                                     : '🔨 Ban (Expired)',
                                 style: ButtonStyle.Danger,
                                 disabled: true
-                            })]
-                        })]
+                            }]
+                        }]
                     })
                 }
             }, 15 * 60 * 1000)
@@ -123,10 +127,26 @@ async function MemberHandler(member, action) {
     }
     actionMap[action]()
 }
-
 export function guildMemberAdd(member) {
     MemberHandler(member, 'add')
 }
 export function guildMemberRemove(member) {
     MemberHandler(member, 'leave')
+}
+export async function guildMemberUpdate(oldMember, newMember) {
+    if (oldMember.nickname === newMember.nickname) return;
+    const logChannel = oldMember.client.channels.cache.get(guildChannelMap[oldMember.guild.id].modChannels.namelogChannel);
+    if (!logChannel) { console.warn('⚠️ Name log channel not found.'); return; }
+    const oldNick = oldMember.nickname ?? oldMember.user.username;
+    const newNick = newMember.nickname ?? newMember.user.username;
+    await logChannel.send({
+        embeds: [new EmbedBuilder({
+            thumbnail: { url: newMember.user.displayAvatarURL() },
+            color: 0x4e85b6,
+            description: `<@${newMember.id}> **changed their nickname**\n\n` +
+                `**Before:**\n${oldNick}\n\n` +
+                `**After:**\n${newNick}`,
+            timestamp: Date.now()
+        })]
+    });
 }

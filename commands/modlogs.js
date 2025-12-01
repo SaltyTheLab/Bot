@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, InteractionContextType, ActionRowBuilder, ButtonStyle, ButtonBuilder } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, InteractionContextType, ButtonStyle } from 'discord.js';
 import { editPunishment, getPunishments, getUser } from '../Database/databaseAndFunctions.js';
 async function buildLogEmbed(interaction, targetUser, log, idx, totalLogs) {
     const LOG_COLORS = { Warn: 0xffcc00, Mute: 0xff4444, Ban: 0xd10000, Kick: 0x838383 };
@@ -12,7 +12,7 @@ async function buildLogEmbed(interaction, targetUser, log, idx, totalLogs) {
         fields: [
             { name: 'Member', value: `<@${log.userId}>`, inline: true },
             { name: 'Type', value: `\`${log.type}\``, inline: true },
-            ...log.duration ? { name: 'Duration', value: `\`${hours > 0 ? `${hours} hour${hours > 1 ? 's' : ''}` : `${mins} minute${mins !== 1 ? 's' : ''}`}\``, inline: false } : [],
+            ...log.duration ? [{ name: 'Duration', value: `\`${hours > 0 ? `${hours} hour${hours > 1 ? 's' : ''}` : `${mins} minute${mins !== 1 ? 's' : ''}`}\``, inline: false }] : [],
             { name: 'Reason', value: `\`${log.reason}\``, inline: false },
             { name: 'Warns at Log Time', value: `\`${log.weight}\``, inline: true },
             { name: 'Log Status', value: log.active == 1 ? '✅ Active' : '❌ Inactive/cleared', inline: true },
@@ -48,12 +48,13 @@ export async function execute(interaction) {
     let currentLog = allLogs[currentIndex];
     const initialResponse = await interaction.reply({
         embeds: [await buildLogEmbed(interaction, targetUser, currentLog, currentIndex, allLogs.length)],
-        components: [new ActionRowBuilder({
+        components: [{
+            type: 1,
             components:
-                [new ButtonBuilder({ custom_id: `prev`, label: '⬅️ Back', style: ButtonStyle.Secondary, disabled: currentIndex === 0 }),
-                new ButtonBuilder({ custom_id: `next`, label: 'Next ➡️', style: ButtonStyle.Secondary, disabled: currentIndex >= allLogs.length - 1 }),
-                isAdmin ? new ButtonBuilder({ custom_id: `del`, label: 'Delete', style: ButtonStyle.Danger, disabled: false }) : []]
-        })],
+                [{ type: 2, custom_id: `prev`, label: '⬅️ Back', style: ButtonStyle.Secondary, disabled: currentIndex === 0 },
+                { type: 2, custom_id: `next`, label: 'Next ➡️', style: ButtonStyle.Secondary, disabled: currentIndex >= allLogs.length - 1 },
+                isAdmin ? { type: 2, custom_id: `del`, label: 'Delete', style: ButtonStyle.Danger, disabled: false } : []]
+        }],
         withResponse: true
     });
     const collector = initialResponse.resource.message.createMessageComponentCollector({
@@ -83,30 +84,28 @@ export async function execute(interaction) {
         currentLog = allLogs[currentIndex];
         replyMessage = await replyMessage.edit({
             embeds: [await buildLogEmbed(interaction, targetUser, currentLog, currentIndex, allLogs.length)],
-            components: [new ActionRowBuilder({
+            components: {
+                type: 1,
                 components: [
-                    new ButtonBuilder({ custom_id: `prev`, label: '⬅️ Back', style: ButtonStyle.Secondary, disabled: currentIndex === 0 }),
-                    new ButtonBuilder({ custom_id: `next`, label: 'Next ➡️', style: ButtonStyle.Secondary, disabled: currentIndex >= allLogs.length - 1 }),
-                    ...(isAdmin ? new ButtonBuilder({ custom_id: `del`, label: 'Delete', style: ButtonStyle.Danger, disabled: false }) : [])
+                    { type: 2, custom_id: `prev`, label: '⬅️ Back', style: ButtonStyle.Secondary, disabled: currentIndex === 0 },
+                    { type: 2, custom_id: `next`, label: 'Next ➡️', style: ButtonStyle.Secondary, disabled: currentIndex >= allLogs.length - 1 },
+                    ...isAdmin ? [{ type: 2, custom_id: `del`, label: 'Delete', style: ButtonStyle.Danger, disabled: false }] : []
                 ]
-            })],
-        });
+            }
+        })
     });
     collector.on('end', async () => {
         if (allLogs.length > 0) {
-            try {
-                replyMessage.edit({
-                    components: [new ActionRowBuilder({
-                        components: [
-                            new ButtonBuilder({ custom_id: `prev`, label: '⬅️ Back', style: ButtonStyle.Secondary, disabled: true }),
-                            new ButtonBuilder({ custom_id: `next`, label: 'Next ➡️', style: ButtonStyle.Secondary, disabled: true }),
-                            ...(isAdmin ? new ButtonBuilder({ custom_id: `del`, label: 'Delete', style: ButtonStyle.Danger, disabled: true }) : [])
-                        ]
-                    })]
-                });
-            } catch (error) {
-                console.error('Error editing message on collector end:', error);
-            }
+            replyMessage.edit({
+                components: [{
+                    type: 1,
+                    components: [
+                        { type: 2, custom_id: `prev`, label: '⬅️ Back', style: ButtonStyle.Secondary, disabled: true },
+                        { type: 2, custom_id: `next`, label: 'Next ➡️', style: ButtonStyle.Secondary, disabled: true },
+                        ...isAdmin ? [{ type: 2, custom_id: `del`, label: 'Delete', style: ButtonStyle.Danger, disabled: true }] : []
+                    ]
+                }]
+            })
         }
     });
 }
