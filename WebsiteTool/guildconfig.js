@@ -25,7 +25,6 @@ document.addEventListener('DOMContentLoaded', () => {
         messageBox: document.getElementById('messageBox'),
         channelsContainer: document.getElementById('channelsContainer')
     }
-
     function updateGuildSelect() {
         const { guildSelect } = elements;
         const selectedValue = guildSelect.value;
@@ -40,16 +39,12 @@ document.addEventListener('DOMContentLoaded', () => {
         guildSelect.value = selectedValue || (guildIds.length > 0 ? guildIds[0] : "");
         updateGuildUI();
     };
-
     function updateGuildUI() {
         const { guildSelect, guildIdInput, deleteConfigBtn } = elements;
         const currentGuildId = guildSelect.value;
         guildIdInput.value = currentGuildId;
         let configToRender;
-        if (allGuildConfigs[currentGuildId]) {
-            configToRender = allGuildConfigs[currentGuildId]
-            console.log(`Loading pre-existing config for guild: ${currentGuildId}`, configToRender);
-        }
+        if (allGuildConfigs[currentGuildId]) configToRender = allGuildConfigs[currentGuildId]
         else {
             configToRender = {
                 modChannels: {
@@ -69,12 +64,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 reactions: {},
                 roles: {},
                 automodsettings: {
-                    spamwindow: 4000,
-                    spamthreshold: 5,
                     Duplicatespamthreshold: 3,
-                    capsratio: 0.7,
                     mediathreshold: 5,
-                    capscheckminlength: 20,
                     messagethreshold: 15
                 }
             }
@@ -83,7 +74,6 @@ document.addEventListener('DOMContentLoaded', () => {
         renderConfig(configToRender)
         deleteConfigBtn.classList.toggle('hidden', !currentGuildId)
     }
-
     function renderConfig(config) {
         const sections = {
             modChannels: 'mod',
@@ -102,7 +92,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         updateJsonPreview();
     }
-
     function getSectionValues(container, type) {
         const values = {};
         const divs = container.querySelectorAll('div');
@@ -141,8 +130,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (nameInput && idInput) {
                         name = nameInput.value.trim();
                         id = idInput.value.trim();
-                        if (name)
-                            if (id.includes(',')) id = id.split(',').map(item => item.trim());
+                        if (name) if (id.includes(',')) id = id.split(',').map(item => item.trim());
                         values[name] = id;
                     }
                     break;
@@ -172,8 +160,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     case 'automod': {
                         div.innerHTML = `
                                 <span class="w-full md:w-1/3 bg-gray-700 text-gray-200 rounded-lg p-2 font-bold text-xl" data-automod-name="${key}">${key}</span>
-                                <input type="text" placeholder="Value" value="${data[key]}" class="w-full md:w-2/3 bg-gray-900 text-gray-200 border border-gray-600 rounded-lg p-2" data-automod-value>
-                            `;
+                                <input type="text" placeholder="Value" value="${data[key]}" class="w-full md:w-2/3 bg-gray-900 text-gray-200 border border-gray-600 rounded-lg p-2" data-automod-value>`;
                         break;
                     }
                     case 'mod': {
@@ -190,8 +177,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         div.innerHTML = `
                                 <input type="text" placeholder="${namePlaceholder}" value="${key}" class="w-1/2 md:w-1/3 bg-gray-900 text-gray-200 border border-gray-600 rounded-lg p-2" data-channel-name="${type}">
-                                <input type="text" placeholder="${idPlaceholder}" value="${value}" class="w-1/2 md:w-3/4 bg-gray-900 text-gray-200 border border-gray-600 rounded-lg p-2" data-channel-id="${type}">
-                                <button class="remove-btn bg-gray-500 p-6  rounded-xl text-red-400 font-bold hover:text-red-500 transition-colors p-2 text-x1 leading-none absolute right-0 top-1/3 -translate-y-1/2">&times;</button>
+                                <input type="text" placeholder="${idPlaceholder}" value="${value}" class="w-1/2 md:w-1/3 bg-gray-900 text-gray-200 border border-gray-600 rounded-lg p-2" data-channel-id="${type}">
+                                <button class="remove-btn text-x1 bg-gray-500 p-2 rounded-lg text-red-400 font-bold hover:text-red-500 transition-colors p-2 right-1/4">&times;</button>
                             `;
                         div.querySelector('.remove-btn').onclick = () => {
                             div.remove();
@@ -215,12 +202,8 @@ document.addEventListener('DOMContentLoaded', () => {
         div.innerHTML = ` 
          <input type="text" placeholder="${namePlaceholder}" value="${name}" class="w-1/2 md:w-1/3 bg-gray-900 text-gray-200 border border-gray-600 rounded-lg p-2" data-channel-name="${type}">
         <input type="text" placeholder="${idPlaceholder}" value="${value}" class="w-1/2 md:w-1/3 bg-gray-900 text-gray-200 border border-gray-600 rounded-lg p-2" data-channel-id="${type}">
-        <button class="remove-btn bg-gray-500  rounded-xl text-red-400 font-bold hover:text-red-500 transition-colors p-2 text-x1 leading-none">&times;</button>
-      `;
-        div.querySelector('.remove-btn').onclick = () => {
-            div.remove();
-            updateJsonPreview();
-        };
+        <button class="remove-btn text-x1 bg-gray-500 p-2 rounded-lg text-red-400 font-bold hover:text-red-500 transition-colors p-2 right-1/4">&times;</button>`;
+        div.querySelector('.remove-btn').onclick = () => { div.remove(); updateJsonPreview(); };
         container.appendChild(div);
     }
 
@@ -275,10 +258,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleSaveConfig() {
         const { guildId, config } = getFormValues();
-        if (!guildId) {
-            showMessage('Please enter a Guild ID to save.', 'bg-red-500');
-            return;
-        }
+        if (!guildId) { showMessage('Please enter a Guild ID to save.', 'bg-red-500'); return; }
         if (Object.keys(config.modChannels).length === 0) {
             config.modChannels = {
                 mutelogChannel: "channel Id here",
@@ -292,7 +272,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 adminChannel: "channel Id here"
             }
         }
-
         allGuildConfigs[guildId] = config;
         updateGuildSelect();
         showMessage('Configuration saved to memory!', 'bg-green-500');
@@ -301,10 +280,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function handleDeleteConfig() {
         const { guildSelect } = elements;
         const currentGuildId = guildSelect.value;
-        if (!currentGuildId) {
-            showMessage('No guild selected to delete.', 'bg-red-500');
-            return;
-        }
+        if (!currentGuildId) { showMessage('No guild selected to delete.', 'bg-red-500'); return; }
         const shouldDelete = await confirm(`Are you sure you want to delete the data for Guild ID: ${currentGuildId} from memory ? `)
         if (!shouldDelete) return;
         delete allGuildConfigs[currentGuildId];

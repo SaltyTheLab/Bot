@@ -85,7 +85,6 @@ export default async function punishUser({ interaction = null, guild, target, mo
       break;
     }
   }
-
   const buttonmessage = messageid ? `https://discord.com/channels/${guild.id}/${channel.id}/${messageid}` : null
   isAutomated ? sentMessage = await channel.send({ embeds: [new EmbedBuilder({ color: logcolor, author: { name: commandTitle, iconURL: icon } })] })
     : !buttonmessage ? sentMessage = await interaction.reply({ embeds: [new EmbedBuilder({ color: logcolor, author: { name: commandTitle, iconURL: icon } })], withResponse: true })
@@ -107,7 +106,7 @@ export default async function punishUser({ interaction = null, guild, target, mo
     fields: [
       { name: 'Target:', value: `${target}`, inline: true },
       { name: 'Channel:', value: `${channel}`, inline: true },
-      { name: 'History:', value: `${refrences.length > 0 ? refrences.join(' | ') : 'none'}`, inline: true },
+      ...refrences ? [{ name: 'History:', value: `${refrences.join(' | ')}`, inline: true }] : [],
       { name: 'Reason:', value: `\`${reason}\``, inline: false },
       ...punishmentFields],
     timestamp: Date.now(),
@@ -124,12 +123,7 @@ export default async function punishUser({ interaction = null, guild, target, mo
   try {
     target.send({
       embeds: [new EmbedBuilder({
-        color: logcolor,
-        author: { name: `${userTag}`, iconURL: icon },
-        thumbnail: { url: guild.iconURL() },
-        description: dmDescription,
-        fields: [{ name: 'Reason:', value: `\`${reason}\``, inline: false }, ...dmExtraFields],
-        timestamp: Date.now()
+        color: logcolor, author: { name: `${userTag}`, iconURL: icon }, thumbnail: { url: guild.iconURL() }, description: dmDescription, fields: [{ name: 'Reason:', value: `\`${reason}\``, inline: false }, ...dmExtraFields], timestamp: Date.now()
       })]
     })
   } catch { logEmbed.setFooter({ text: 'User DMed 🚫' }) }

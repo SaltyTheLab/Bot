@@ -225,12 +225,8 @@
         },
         "roles": {},
         "automodsettings": {
-            "spamwindow": 4000,
-            "spamthreshold": 5,
             "Duplicatespamthreshold": 3,
-            "capsratio": 0.7,
             "mediathreshold": 1,
-            "capscheckminlength": 20,
             "messagethreshold": 5
         }
     },
@@ -479,12 +475,8 @@
             "role_game_Borderlands": "1347423007282430007"
         },
         "automodsettings": {
-            "spamwindow": 4000,
-            "spamthreshold": 5,
             "Duplicatespamthreshold": 3,
-            "capsratio": 0.7,
             "mediathreshold": 1,
-            "capscheckminlength": 20,
             "messagethreshold": 15
         }
     },
@@ -574,13 +566,9 @@
             "🍆": "1388115995419349132"
         },
         "automodsettings": {
-            "spamwindow": 4000,
-            "spamthreshold": 5,
             "Duplicatespamthreshold": 3,
-            "capsratio": 0.7,
             "mediathreshold": 1,
-            "capscheckminlength": 20,
-            "messagethreshold": 15
+            "messagethreshold": 5
         }
     },
     "1410055430889275515": {
@@ -588,6 +576,7 @@
         "publicChannels": {},
         "exclusions": {},
         "mediaexclusions": {},
+        "reactions": {},
         "roles": {},
         "automodsettings": {}
     }
