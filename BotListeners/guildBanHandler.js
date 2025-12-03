@@ -20,7 +20,7 @@ async function sendMassBanEmbed(executorId, channel) {
 }
 async function handleban(ban, action) {
     const filepath = "Extravariables\\commandsbans.json"
-    let bans = load(filepath);
+    let bans = await load(filepath);
     const user = ban.user
     const banlogChannel = await ban.guild.channels.fetch(guildChannelMap[ban.guild.id].modChannels.banlogChannel);
     const auditLogs = await ban.guild.fetchAuditLogs({ type: AuditLogEvent.MemberBanAdd, limit: 10 });
