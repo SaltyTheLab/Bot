@@ -9,11 +9,6 @@ export async function interactionCreate(interaction) {
     if (interaction.isChatInputCommand()) {
         const commandName = interaction.commandName;
         let command = interaction.client.commands.get(commandName) ?? interaction.client.commands.get(`${interaction.guild.id}:${commandName}`)
-        if (!command) {
-            console.warn(`[WARN] Command '${commandName}' not found in map.`);
-            if (!interaction.deferred && !interaction.replied) interaction.reply({ content: 'Sorry, that command is not currently available.', flags: MessageFlags.Ephemeral });
-            return;
-        }
         try {
             command.execute(interaction);
         } catch (error) {
@@ -287,7 +282,7 @@ export async function interactionCreate(interaction) {
             })
             const staffbreakrule = new LabelBuilder({
                 label: 'Staff is failing to follow the rules',
-                component: { type: 4, custom_id: 'staffrulebreak', placeholder: 'What is your course of action', required: true, style: TextInputStyle.Paragraph, max_length: 350 }
+                component: { type: 4, custom_id: 'staffrulebreak', placeholder: 'What is your course of action?', required: true, style: TextInputStyle.Paragraph, max_length: 350 }
             })
             const illegalcontent = new LabelBuilder({
                 label: 'A user shares illegal content',
