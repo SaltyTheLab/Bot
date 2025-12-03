@@ -14,14 +14,14 @@ export async function execute(interaction) {
     const targetUser = interaction.options.getUser('user') || interaction.user;
     const { userData, rank } = await getUser({ userId: targetUser.id, guildId: interaction.guild.id, modflag: true });
     let image;
-    let xpNeeded;
     switch (interaction.options.getSubcommand()) {
-        case 'rank':
+        case 'rank': {
             if (!userData || userData.xp === undefined || userData.level === undefined)
                 return interaction.editReply({ content: 'User data not found or incomplete. They might need to gain some XP first!', flags: MessageFlags.Ephemeral });
-            xpNeeded = Math.round(((userData.level - 1) ** 1.5 * 52 + 40) / 20) * 20
+            const xpNeeded = Math.round(((userData.level - 1) ** 1.5 * 52 + 40) / 20) * 20
             image = await generateRankCard({ userData: userData, targetUser: targetUser, xpNeeded: xpNeeded, rank: rank })
             break;
+        }
         case 'profile':
             if (!userData) {
                 return interaction.reply({

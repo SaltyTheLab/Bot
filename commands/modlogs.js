@@ -84,14 +84,14 @@ export async function execute(interaction) {
         currentLog = allLogs[currentIndex];
         replyMessage = await replyMessage.edit({
             embeds: [await buildLogEmbed(interaction, targetUser, currentLog, currentIndex, allLogs.length)],
-            components: {
+            components: [{
                 type: 1,
                 components: [
                     { type: 2, custom_id: `prev`, label: '⬅️ Back', style: ButtonStyle.Secondary, disabled: currentIndex === 0 },
                     { type: 2, custom_id: `next`, label: 'Next ➡️', style: ButtonStyle.Secondary, disabled: currentIndex >= allLogs.length - 1 },
                     ...isAdmin ? [{ type: 2, custom_id: `del`, label: 'Delete', style: ButtonStyle.Danger, disabled: false }] : []
                 ]
-            }
+            }]
         })
     });
     collector.on('end', async () => {

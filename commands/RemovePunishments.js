@@ -14,7 +14,7 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
     const user = interaction.options.getUser('target')
-    switch (interaction.options.geSubcommand()) {
+    switch (interaction.options.getSubcommand()) {
         case 'warn': {
             let punishments = await getPunishments(user.id, interaction.guild.id, true)
             if (punishments.length < 1)
