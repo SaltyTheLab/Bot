@@ -1,4 +1,4 @@
-import { EmbedBuilder, AuditLogEvent } from "discord.js";
+import { EmbedBuilder } from "discord.js";
 import { load, save } from "../utilities/fileeditors.js";
 import { getPunishments } from '../Database/databaseAndFunctions.js';
 import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'}
@@ -22,64 +22,43 @@ async function handleban(ban, action) {
     const filepath = "Extravariables\\commandsbans.json"
     let bans = await load(filepath);
     const user = ban.user
-    const banlogChannel = await ban.guild.channels.fetch(guildChannelMap[ban.guild.id].modChannels.banlogChannel);
-    const auditLogs = await ban.guild.fetchAuditLogs({ type: AuditLogEvent.MemberBanAdd, limit: 10 });
-    const banEntry = auditLogs.entries.find(entry => entry.target.id === user.id);
+    const banlogChannel = ban.guild.channels.cache.get(guildChannelMap[ban.guild.id].modChannels.banlogChannel);
+    const banEntry = await ban.guild.bans.fetch({ user: ban.user.id, force: true });
     const executorId = banEntry.executor.id;
-    const newBanData = {
-        user: user,
-        userTag: user.tag,
-        userId: user.id,
-        reason: banEntry.reason || "No reason provided."
-    };
     const existingEntry = recentBans.get(executorId);
-    if (!banEntry) {
-        console.log(`Audit log entry not found for ban of ${user.tag}.`);
-        return;
-    }
     if (!banlogChannel) return;
     switch (action) {
         case 'add':
-            if (bans.includes(user.id)) {
-                save(filepath, [])
-                return;
-            }
+            if (bans.includes(user.id)) { save(filepath, []); return; }
             if (existingEntry) {
                 clearTimeout(existingEntry.timeout);
-                existingEntry.bans.push(newBanData);
+                existingEntry.bans.push({ user: user, userTag: user.tag, userId: user.id, reason: banEntry.reason || "No reason provided." });
                 existingEntry.timeout = setTimeout(() => sendMassBanEmbed(executorId, banlogChannel), 3000);
-                recentBans.set(executorId, existingEntry);
-            } else {
-                const newEntry = {
-                    executor: banEntry.executor,
-                    bans: [newBanData],
-                    timeout: setTimeout(() => sendMassBanEmbed(executorId, banlogChannel), 3000)
-                }
-                recentBans.set(executorId, newEntry);
             }
+            recentBans.set(executorId, existingEntry ?? {
+                executor: banEntry.executor,
+                bans: [{ user: user, userTag: user.tag, userId: user.id, reason: banEntry.reason || "No reason provided." }],
+                timeout: setTimeout(() => sendMassBanEmbed(executorId, banlogChannel), 3000)
+            });
             break;
         case 'remove': {
-            bans = await getPunishments(user, ban.guild)
-            const embed = new EmbedBuilder({
-                color: 0x309eff,
-                title: 'A member was unbanned',
-                thumbnail: user.displayAvatarURL({ dynamic: true }),
-                description: [
-                    `**User**: ${user}`,
-                    `**Tag**: \`${user.tag}\``,
-                    `**Id**: \`${user.id}\`\n`,
-                    `**Reason**: \`${bans.length > 0 ? `Ban Command: ${bans[0].reason}` : 'No reasons provided'}\``
-                ].join('\n'),
-                timestamp: Date.now()
-            })
-            banlogChannel.send({ embeds: [embed] });
+            bans = await getPunishments(user.id, ban.guild)
+            const ban = bans.filter(ban => ban.type == 'Ban')
+            banlogChannel.send({
+                embeds: [new EmbedBuilder({
+                    color: 0x309eff,
+                    title: 'A member was unbanned',
+                    thumbnail: user.displayAvatarURL({ dynamic: true }),
+                    description: `**User**: ${user}\n**Tag**: \`${user.tag}\`\n**Id**: \`${user.id}\`\n\n**Reason**: \`${`Ban Command: ${ban[0].reason}`}\``,
+                    timestamp: Date.now()
+                })]
+            });
         }
-
     }
 }
-export function guildBanAdd(ban) {
+export async function guildBanAdd(ban) {
     handleban(ban, 'add')
 }
-export function guildBanRemove(ban) {
+export async function guildBanRemove(ban) {
     handleban(ban, 'remove')
 }
