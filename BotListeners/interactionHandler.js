@@ -1,4 +1,4 @@
-import { ButtonStyle, ModalBuilder, TextInputStyle, EmbedBuilder, AuditLogEvent, PermissionFlagsBits, MessageFlags, LabelBuilder } from "discord.js";
+import { ModalBuilder, EmbedBuilder, PermissionFlagsBits, LabelBuilder } from "discord.js";
 import punishUser from "../moderation/punishUser.js";
 import { appealsinsert, appealsget, appealupdate } from '../Database/databaseAndFunctions.js';
 import { load, save } from "../utilities/fileeditors.js";
@@ -6,17 +6,14 @@ import guildChannelMap from "../Extravariables/guildconfiguration.json" with {ty
 
 const filepath = "Extravariables/applications.json"
 export async function interactionCreate(interaction) {
-    if (interaction.isChatInputCommand()) {
+    if (interaction.isChatInputCommand() || interaction.isContextMenuCommand()) {
         const commandName = interaction.commandName;
         let command = interaction.client.commands.get(commandName) ?? interaction.client.commands.get(`${interaction.guild.id}:${commandName}`)
-        try {
-            command.execute(interaction);
-        } catch (error) {
+        try { command.execute(interaction) }
+        catch (error) {
             console.error(`❌ Error executing command ${commandName}: `, error);
-            if (interaction.replied || interaction.deferred)
-                interaction.followUp({ content: 'There was an error while executing this command!', flags: MessageFlags.Ephemeral });
-            else
-                interaction.reply({ content: 'There was an error while executing this command!', flags: MessageFlags.Ephemeral });
+            if (interaction.replied || interaction.deferred) interaction.followUp({ content: 'Error executing command!', flags: 64 });
+            else interaction.reply({ content: 'Error executing command!', flags: 64 });
         }
     }
     if (interaction.isModalSubmit()) {
@@ -45,8 +42,8 @@ export async function interactionCreate(interaction) {
                 components: [{
                     type: 1,
                     components: [
-                        { type: 2, custom_id: `unban_approve_${interaction.user.id}_${guild.id}`, label: 'Approve', style: ButtonStyle.Success },
-                        { type: 2, custom_id: `unban_reject_${interaction.user.id}_${guild.id}`, label: 'Reject', style: ButtonStyle.Danger }
+                        { type: 2, custom_id: `unban_approve_${interaction.user.id}_${guild.id}`, label: 'Approve', style: 3 },
+                        { type: 2, custom_id: `unban_reject_${interaction.user.id}_${guild.id}`, label: 'Reject', style: 4 }
                     ]
                 }]
             })
@@ -100,9 +97,9 @@ export async function interactionCreate(interaction) {
             const application = applications[interaction.user.id]
             if (application.Memberreport) {
                 await interaction.reply({
-                    content: 'You have already filled out this section. Click the button below to continue to the next section.',
-                    components: [{ type: 1, components: [{ type: 2, custom_id: 'next_modal_three', label: 'skip section', style: ButtonStyle.Primary }] }],
-                    flags: MessageFlags.Ephemeral
+                    content: 'You have already filled out this section. Click below to continue to the next section.',
+                    components: [{ type: 1, components: [{ type: 2, custom_id: 'next_modal_three', label: 'skip section', style: 1 }] }],
+                    flags: 64
                 });
                 return;
             } else {
@@ -113,11 +110,9 @@ export async function interactionCreate(interaction) {
                 application.Memberreport = interaction.fields.getTextInputValue('memberreport')
                 await save(filepath, applications);
                 await interaction.reply({
-                    content: 'Part 2 of your application has been submitted! Click the button below to continue to the next section.',
-                    components: [{
-                        type: 1, components: [{ type: 2, custom_id: 'next_modal_three', label: 'Continue Application', style: ButtonStyle.Primary }]
-                    }],
-                    flags: MessageFlags.Ephemeral
+                    content: 'Part 2 of your application has saved! Click below to continue to the next section.',
+                    components: [{ type: 1, components: [{ type: 2, custom_id: 'next_modal_three', label: 'Next Section', style: 1 }] }],
+                    flags: 64
                 });
 
             }
@@ -132,12 +127,9 @@ export async function interactionCreate(interaction) {
             application.Activity = interaction.fields.getTextInputValue('activity')
             await save(filepath, applications)
             interaction.reply({
-                content: 'Part 1 of your application has been submitted! Click the button below to continue to the next section.',
-                components: [{
-                    type: 1,
-                    components: [{ type: 2, custom_id: 'next_modal_two', label: 'Continue Application', style: ButtonStyle.Primary }]
-                }],
-                flags: MessageFlags.Ephemeral
+                content: 'Part 1 of your application has been saved! Click below to continue to the next section.',
+                components: [{ type: 1, components: [{ type: 2, custom_id: 'next_modal_two', label: 'Next Section', style: 1 }] }],
+                flags: 64
             })
         }
     }
@@ -147,20 +139,16 @@ export async function interactionCreate(interaction) {
             const memberToBan = await interaction.guild.members.fetch(customIdParts[1]).catch(() => null) ?? await interaction.client.users.fetch(customIdParts[1]).catch(() => null);
             const inviterId = customIdParts[2];
             const inviteCode = customIdParts[3];
-
-            if (!interaction.member.permissions.has('BAN_MEMBERS')) {
-                await interaction.reply({ content: 'You do not have permission to ban members.', flags: MessageFlags.Ephemeral });
-                return;
-            }
+            if (!interaction.member.permissions.has('BAN_MEMBERS')) { await interaction.reply({ content: 'Missing permission.', flags: 64 }); return; }
 
             if (Date.now() - interaction.message.createdTimestamp > 15 * 60 * 1000) {
-                await interaction.reply({ content: 'This ban button has expired (15 mins have already passed since they joined).', flags: MessageFlags.Ephemeral });
+                await interaction.reply({ content: 'This ban button has expired (15 mins have already passed since they joined).', flags: 64 });
                 const banbuttonLabel = interaction.message.components[0].components[0].label;
                 if (banbuttonLabel == '🔨 Ban User & Delete Invite' || banbuttonLabel === '🔨 Ban') {
                     await interaction.message.edit({
                         components: [{
                             type: 1,
-                            components: { type: 2, custom_id: interaction.customId, label: banbuttonLabel == '🔨 Ban User & Delete Invite' ? '🔨 Ban User & Delete Invite (Expired)' : '🔨 Ban (Expired)', style: ButtonStyle.Danger, disabled: true }
+                            components: { type: 2, custom_id: interaction.customId, label: banbuttonLabel == '🔨 Ban User & Delete Invite' ? '🔨 Ban User & Delete Invite (Expired)' : '🔨 Ban (Expired)', style: 4, disabled: true }
                         }]
                     })
                 }
@@ -179,10 +167,10 @@ export async function interactionCreate(interaction) {
             if (inviteCode !== 'no invite code') {
                 const invite = await interaction.guild.invites.fetch(inviteCode);
                 if (invite) {
-                    let invitesCache = load("Extravariables/invites.json");
-                    if (invitesCache && invitesCache[interaction.guild.id]) {
+                    let invitesCache = await load("Extravariables/invites.json");
+                    if (invitesCache[interaction.guild.id]) {
                         invitesCache[interaction.guild.id] = invitesCache[interaction.guild.id].filter(inv => inv.code !== invite.code);
-                        save("Extravariables/invites.json", invitesCache);
+                        await save("Extravariables/invites.json", invitesCache);
                     }
                     invite.delete();
                     finalMessage += ' Associated Invite was deleted'
@@ -193,7 +181,7 @@ export async function interactionCreate(interaction) {
             originalMessage.edit({
                 components: [{
                     type: 1,
-                    components: { type: 2, custom_id: interaction.customId, label: inviterId !== 'no inviter' ? '🔨 Banned User and Inviter!' : '🔨 Banned!', style: ButtonStyle.Danger, disabled: true }
+                    components: { type: 2, custom_id: interaction.customId, label: inviterId !== 'no inviter' ? '🔨 Banned User and Inviter!' : '🔨 Banned!', style: 4, disabled: true }
                 }]
             });
         }
@@ -203,10 +191,9 @@ export async function interactionCreate(interaction) {
             const targetUser = await interaction.client.users.fetch(customIdParts[2])
             const guild = interaction.client.guilds.cache.get(customIdParts[3]);
             const appeals = await appealsget(targetUser.id, guild.id)
-            let outcome = false
             const Adminchannel = interaction.client.channels.cache.get(guildChannelMap[guild.id].modChannels.adminChannel);
             if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-                interaction.editReply({ content: `Please wait for an admin to make a decision. `, flags: MessageFlags.Ephemeral })
+                interaction.editReply({ content: `Please wait for an admin to make a decision. `, flags: 64 })
                 Adminchannel.send({ content: `Letting you know ${interaction.user} tried to jump the gun on an appeal.` })
                 return;
             }
@@ -223,28 +210,26 @@ export async function interactionCreate(interaction) {
                 timestamp: Date.now()
             })
             const response = new EmbedBuilder({ author: { name: `${targetUser.tag} `, iconURL: targetUser.displayAvatarURL({ dynamic: true }) } })
+            let outcome = null
             switch (customIdParts[1]) {
                 case 'reject':
                     response
                         .setColor(0x890000)
                         .setTitle('Appeal Denied...')
-                        .setDescription(`${targetUser} your ban appeal has unfortunantly been denied from ${interaction.guild.name}.`)
+                        .setDescription(`${targetUser} your ban appeal has been denied from ${interaction.guild.name}.`)
                     appealEmbed
                         .setColor(0x890000)
                         .addFields({ name: 'Denied by:', value: `${interaction.user} `, inline: true })
                     break;
                 case 'approve': {
                     const appealinvites = { '1231453115937587270': 'https://discord.gg/xpYnPrSXDG', '1342845801059192913': 'https://discord.gg/nWj5KvgUt9' }
-                    const fetchedlogs = await guild.fetchAuditLogs({ type: AuditLogEvent.MemberBanAdd, limit: 25 })
-                    if (!fetchedlogs.entries.find(log => log.target.id === targetUser.id)) {
-                        interaction.editReply(`Could not find a recent ban entry for user ${targetUser}`);
-                        return;
-                    }
+                    try { await guild.bans.fetch({ userId: targetUser.id, force: true }) }
+                    catch { interaction.editReply(`No recent ban for ${targetUser} found`); return; }
                     await guild.bans.remove(targetUser, `Ban Command: ${appeals[0].reason}`)
                     response
                         .setColor(0x008900)
                         .setTitle('Appeal Accepted!')
-                        .setDescription(`${targetUser} your ban appeal has been accepted, click below to rejoin the server!\n\n invite: ${appealinvites[guild.id]} `)
+                        .setDescription(`${targetUser} your ban appeal has been accepted! click below to rejoin the server!\n\n invite: ${appealinvites[guild.id]}`)
                     appealEmbed
                         .setColor(0x008900)
                         .addFields({ name: 'Approved by:', value: `${interaction.user} `, inline: true })
@@ -257,9 +242,8 @@ export async function interactionCreate(interaction) {
                 components: [{
                     type: 1,
                     components: [
-                        { type: 2, custom_id: `unban_approve_${targetUser.id}_${interaction.guild.id}`, label: 'Approve', style: ButtonStyle.Success, disabled: true },
-                        { type: 2, custom_id: `unban_reject_${targetUser.id}_${interaction.guild.id}`, label: 'Reject', style: ButtonStyle.Danger, disabled: true }
-                    ]
+                        { type: 2, custom_id: `unban_approve_${targetUser.id}_${interaction.guild.id}`, label: 'Approve', style: 3, disabled: true },
+                        { type: 2, custom_id: `unban_reject_${targetUser.id}_${interaction.guild.id}`, label: 'Reject', style: 4, disabled: true }]
                 }]
             })
             await appealupdate(targetUser.id, guild.id, outcome)
@@ -267,32 +251,12 @@ export async function interactionCreate(interaction) {
             interaction.deleteReply();
         }
         if (interaction.customId.startsWith('next_modal_three')) {
-
-            const dmmember = new LabelBuilder({
-                label: 'A member messages you about being harrassed',
-                component: { type: 4, custom_id: 'dmmember', placeholder: 'How would you handle the situation?', required: true, style: TextInputStyle.Paragraph, max_length: 350 }
-            })
-            const argument = new LabelBuilder({
-                label: 'Users are arguing in general chat',
-                component: { type: 4, custom_id: 'arguments', placeholder: 'explain your de-escalation steps', style: TextInputStyle.Paragraph, required: true, max_length: 350 }
-            })
-            const ambiguous = new LabelBuilder({
-                label: 'A member DMs you about a rule-breaking DM',
-                component: { type: 4, custom_id: 'rulebreakdm', placeholder: 'What is your course of action?', required: true, style: TextInputStyle.Paragraph, max_length: 350 }
-            })
-            const staffbreakrule = new LabelBuilder({
-                label: 'Staff is failing to follow the rules',
-                component: { type: 4, custom_id: 'staffrulebreak', placeholder: 'What is your course of action?', required: true, style: TextInputStyle.Paragraph, max_length: 350 }
-            })
-            const illegalcontent = new LabelBuilder({
-                label: 'A user shares illegal content',
-                component: { type: 4, custom_id: 'illegal', placeholder: 'What are the steps you take?', required: true, style: TextInputStyle.Paragraph, max_length: 350 }
-            })
-            interaction.showModal(new ModalBuilder({
-                custom_id: 'situations',
-                title: 'Situations (3/3)',
-                components: [dmmember, argument, ambiguous, staffbreakrule, illegalcontent]
-            }))
+            const dmmember = new LabelBuilder({ label: 'A member messages you about being harrassed', component: { type: 4, custom_id: 'dmmember', required: true, style: 2, max_length: 350 } })
+            const argument = new LabelBuilder({ label: 'Users are arguing in general chat', component: { type: 4, custom_id: 'arguments', style: 2, required: true, max_length: 350 } })
+            const ambiguous = new LabelBuilder({ label: 'A member DMs you about a rule-breaking DM', component: { type: 4, custom_id: 'rulebreakdm', required: true, style: 2, max_length: 350 } })
+            const staffbreakrule = new LabelBuilder({ label: 'Staff is failing to follow the rules', component: { type: 4, custom_id: 'staffrulebreak', required: true, style: 2, max_length: 350 } })
+            const illegalcontent = new LabelBuilder({ label: 'A user shares illegal content', component: { type: 4, custom_id: 'illegal', required: true, style: 2, max_length: 350 } })
+            interaction.showModal(new ModalBuilder({ custom_id: 'situations', title: 'Situations (3/3)', components: [dmmember, argument, ambiguous, staffbreakrule, illegalcontent] }))
         }
         if (interaction.customId.startsWith('next_modal_two')) {
             const applications = await load(filepath);
@@ -300,30 +264,15 @@ export async function interactionCreate(interaction) {
             if (application.Memberreport) {
                 await interaction.reply({
                     content: 'You have already filled out this part. Click the button below to continue to the next section.',
-                    components: [{ type: 1, components: [{ type: 2, custom_id: 'next_modal_three', label: 'skip part 2', style: ButtonStyle.Primary }] }],
-                    flags: MessageFlags.Ephemeral
+                    components: [{ type: 1, components: [{ type: 2, custom_id: 'next_modal_three', label: 'skip Section', style: 1 }] }],
+                    flags: 64
                 });
             } else {
-                const questionOne = new LabelBuilder({
-                    label: 'Why pick you & Tell us about yourself',
-                    component: { type: 4, custom_id: 'why', required: true, style: TextInputStyle.Paragraph, max_length: 500 }
-                })
-                const questionTwo = new LabelBuilder({
-                    label: 'What is your definition of a troll?',
-                    component: { type: 4, custom_id: 'trolldef', required: true, style: TextInputStyle.Short, max_length: 65 }
-                })
-                const questionThree = new LabelBuilder({
-                    label: 'What is your definition of a raid?',
-                    component: { type: 4, custom_id: 'raiddef', required: true, style: TextInputStyle.Short, max_length: 65 }
-                })
-                const questionFour = new LabelBuilder({
-                    label: 'You disagree with a staff punishment...',
-                    component: { type: 4, custom_id: 'staffissues', placeholder: 'What would you do?', required: true, style: TextInputStyle.Paragraph, max_length: 300 }
-                })
-                const questionFive = new LabelBuilder({
-                    label: 'How would you handle a member report?',
-                    component: { type: 4, custom_id: 'memberreport', placeholder: 'Describe the steps you would take to investigate and resolve it', required: true, style: TextInputStyle.Paragraph, max_length: 300 }
-                })
+                const questionOne = new LabelBuilder({ label: 'Why should you be on the team?', component: { type: 4, custom_id: 'why', required: true, style: 2, max_length: 500 } })
+                const questionTwo = new LabelBuilder({ label: 'What is your definition of a troll?', component: { type: 4, custom_id: 'trolldef', required: true, style: 1, max_length: 65 } })
+                const questionThree = new LabelBuilder({ label: 'What is your definition of a raid?', component: { type: 4, custom_id: 'raiddef', required: true, style: 1, max_length: 65 } })
+                const questionFour = new LabelBuilder({ label: 'You disagree with an action from staff', component: { type: 4, custom_id: 'staffissues', required: true, style: 2, max_length: 300 } })
+                const questionFive = new LabelBuilder({ label: 'How would you handle a member report?', component: { type: 4, custom_id: 'memberreport', required: true, style: 2, max_length: 300 } })
                 interaction.showModal(new ModalBuilder({
                     components: [questionOne, questionTwo, questionThree, questionFour, questionFive],
                     custom_id: 'Defs, reasons, and issues',
@@ -334,39 +283,22 @@ export async function interactionCreate(interaction) {
     }
     if (interaction.isStringSelectMenu()) {
         if (interaction.customId === 'role_select') {
-            await interaction.deferReply({ flags: MessageFlags.Ephemeral })
+            await interaction.deferReply({ flags: 64 })
             const member = interaction.member;
-            const guildid = interaction.guild.id;
-            const reactions = guildChannelMap[guildid].roles
+            const reactions = guildChannelMap[interaction.guild.id].roles
             const rolesAdded = [];
             const rolesRemoved = [];
             const allPossibleSelectValues = Object.keys(reactions)
             for (const roleValue of allPossibleSelectValues) {
                 const roleID = reactions[roleValue];
-                if (!roleID) {
-                    console.warn(`⚠️ No role mapped for select menu value: ${roleValue}.Skipping.`);
-                    continue;
-                }
-                if (interaction.values.includes(roleValue)) {
-                    if (!member.roles.cache.has(roleID)) {
-                        await member.roles.add(roleID);
-                        rolesAdded.push(`<@&${roleID}> `);
-                    }
-                } else {
-                    if (member.roles.cache.has(roleID)) {
-                        await member.roles.remove(roleID);
-                        rolesRemoved.push(`<@&${roleID}> `);
-                    }
-                }
+                if (!roleID) { console.warn(`⚠️ No role mapped for select menu value: ${roleValue}.Skipping.`); continue; }
+                await member.roles.add(roleID); rolesAdded.push(`<@&${roleID}> `);
+                if (member.roles.cache.has(roleID)) { await member.roles.remove(roleID); rolesRemoved.push(`<@&${roleID}> `); }
             }
             let replyContent = '';
-            if (rolesAdded.length > 0) {
-                replyContent += `Added: ${rolesAdded.join(', ')} \n`;
-            }
-            if (rolesRemoved.length > 0) {
-                replyContent += `Removed: ${rolesRemoved.join(', ')} \n`;
-            }
-            interaction.editReply({ content: replyContent, flags: MessageFlags.Ephemeral });
+            if (rolesAdded.length > 0) replyContent += `Added: ${rolesAdded.join(', ')} \n`;
+            if (rolesRemoved.length > 0) replyContent += `Removed: ${rolesRemoved.join(', ')} \n`;
+            interaction.editReply({ content: replyContent, flags: 64 });
         }
     }
 }
