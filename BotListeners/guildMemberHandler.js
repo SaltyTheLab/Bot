@@ -1,7 +1,8 @@
-import { EmbedBuilder, ButtonStyle } from "discord.js";
+import { EmbedBuilder } from "discord.js";
 import { load, save } from "../utilities/fileeditors.js";
 import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'}
-
+const filepath = "Extravariables/invites.json"
+const invitesCache = await load(filepath);
 async function MemberHandler(member, action) {
     const owner = await member.guild.fetchOwner();
     const user = member.user;
@@ -14,34 +15,13 @@ async function MemberHandler(member, action) {
     const actionMap = {
         'add': async () => {
             const newInvites = await member.guild.invites.fetch();
-            const filepath = "Extravariables/invites.json"
-            const invitesCache = load(filepath) || {};
-            const guildInvitesArray = invitesCache[guild.id] || [];
+            let guildInvitesArray = invitesCache[guild.id];
             const oldInvitesMap = new Map(guildInvitesArray.map(item => [item.code, item.uses]));
-            let inviter, invite = null;
-            let isPersistentInvite = false;
-            invite = newInvites.find(i => {
-                const oldUses = oldInvitesMap.get(i.code) || 0;
-                return i.uses === oldUses + 1;
-            });
-            if (invite) {
-                inviter = invite.inviter;
-                isPersistentInvite = true;
-                const updatedInvitesArray = guildInvitesArray.map(item => {
-                    if (item.code === invite.code) {
-                        return { code: invite.code, uses: invite.uses };
-                    }
-                    return item;
-                });
-                if (!updatedInvitesArray.find(item => item.code === invite.code)) {
-                    updatedInvitesArray.push({ code: invite.code, uses: invite.uses });
-                }
-                invitesCache[guild.id] = updatedInvitesArray;
-                save(filepath, invitesCache);
-            } else {
-                invitesCache[guild.id] = newInvites.map(i => ({ code: i.code, uses: i.uses }));
-                save(filepath, invitesCache);
-            }
+            let inviter, invite, isPersistentInvite = null;
+            invite = newInvites.find(i => { const oldUses = oldInvitesMap.get(i.code); return i.uses === oldUses + 1; });
+            if (invite) { inviter = invite.inviter; isPersistentInvite = true; }
+            guildInvitesArray = newInvites.map(item => { return { code: item.code, uses: item.uses } });
+            await save(filepath, invitesCache);
             const welcomeEmbed = new EmbedBuilder({
                 color: 0x00FF99,
                 description: `${member} joined the Server!`,
@@ -61,7 +41,7 @@ async function MemberHandler(member, action) {
                         type: 2,
                         custom_id: isPersistentInvite && inviter.id !== owner.user.id ? `ban_${member.id}_${inviter.id}_${invite.code}` : `ban_${member.id}_no inviter_no invite code`,
                         label: isPersistentInvite && inviter.id !== owner.user.id ? '🔨 Ban User & Delete Invite' : '🔨 Ban',
-                        style: ButtonStyle.Danger,
+                        style: 4,
                         disabled: false
                     }]
                 }]
@@ -97,19 +77,11 @@ async function MemberHandler(member, action) {
                 })
             }
             setTimeout(async () => {
-                const buttonComponent = message.components[0];
+                const buttonComponent = message.components[0].components[0];
                 if (buttonComponent && !buttonComponent.disabled) {
                     message.edit({
                         components: [{
-                            type: 1,
-                            components: [{
-                                type: 2,
-                                custom_id: buttonComponent.components[0].customId,
-                                label: buttonComponent.components[0].label === '🔨 Ban User & Delete Invite' ? '🔨 Ban User & Delete Invite (Expired)'
-                                    : '🔨 Ban (Expired)',
-                                style: ButtonStyle.Danger,
-                                disabled: true
-                            }]
+                            type: 1, components: [{ type: 2, custom_id: buttonComponent.customId, label: buttonComponent.label === '🔨 Ban User & Delete Invite' ? '🔨 Ban User & Delete Invite (Expired)' : '🔨 Ban (Expired)', style: 4, disabled: true }]
                         }]
                     })
                 }
@@ -127,10 +99,10 @@ async function MemberHandler(member, action) {
     }
     actionMap[action]()
 }
-export function guildMemberAdd(member) {
+export async function guildMemberAdd(member) {
     MemberHandler(member, 'add')
 }
-export function guildMemberRemove(member) {
+export async function guildMemberRemove(member) {
     MemberHandler(member, 'leave')
 }
 export async function guildMemberUpdate(oldMember, newMember) {
