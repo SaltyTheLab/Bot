@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, Collection, Options, ActivityType, Sweepers, Routes } from 'discord.js';
+import { Client, GatewayIntentBits, Collection, Options, ActivityType, Sweepers, Events } from 'discord.js';
 import { config } from 'dotenv';
 import { pathToFileURL } from 'node:url';
 import { save } from './utilities/fileeditors.js';
@@ -36,12 +36,9 @@ async function clearExpiredWarns(usersCollection) {
 function updateStatus() {
   const elapsedMs = Date.now() - starttime;
   let seconds = Math.floor(elapsedMs / 1000);
-  const days = Math.floor(seconds / 86400);
-  seconds %= 86400
-  const hours = Math.floor(seconds / 3600);
-  seconds %= 3600;
-  const minutes = Math.floor(seconds / 60);
-  seconds %= 60;
+  const days = Math.floor(seconds / 86400); seconds %= 86400;
+  const hours = Math.floor(seconds / 3600); seconds %= 3600;
+  const minutes = Math.floor(seconds / 60); seconds %= 60;
   client.user.setActivity(`${days}d ${hours}h ${minutes}m ${seconds}s`, { type: ActivityType.Watching });
 }
 async function getCommandData(filePaths) {
@@ -49,21 +46,15 @@ async function getCommandData(filePaths) {
   const jsonPayloads = [];
   for (const filePath of filePaths) {
     const command = await import(pathToFileURL(filePath).href);
-    if (command.data && typeof command.execute === 'function') {
-      fullmodule.push(command);
-      jsonPayloads.push(command.data.toJSON());
-    } else
-      console.warn(`⚠️ Skipping invalid file: ${filePath} (missing 'data' or 'execute' property).`);
+    if (command.data && typeof command.execute === 'function') { fullmodule.push(command); jsonPayloads.push(command.data.toJSON()); }
+    else console.warn(`⚠️ Skipping invalid file: ${filePath} (missing 'data' or 'execute' property).`);
   }
   return { fullmodule, jsonPayloads };
 }
 async function findFiles(dir) {
   const filePaths = [];
   try {
-    for (const dirent of await readdir(dir, { withFileTypes: true }))
-      if (dirent.isFile() && dirent.name.endsWith('.js'))
-        filePaths.push(join(dir, dirent.name));
-      else continue;
+    for (const dirent of await readdir(dir, { withFileTypes: true })) if (dirent.isFile() && dirent.name.endsWith('.js')) filePaths.push(join(dir, dirent.name)); else continue;
   } catch {/* empty */ }
   return filePaths;
 }
@@ -71,49 +62,32 @@ async function main() {
   if (!process.env.CLIENT_ID || !process.env.TOKEN) { console.error('❌ Missing required environment variables: TOKEN or CLIENT_ID.'); process.exit(1) }
   initializeRankCardBase();
   await client.login(process.env.TOKEN);
-  await new Promise(resolve => client.once('clientReady', resolve))
+  await new Promise(resolve => client.once(Events.ClientReady, resolve))
   client.removeAllListeners();
-  const eventsNeedingClient = new Set(['messageCreate']);
-  for (const filePath of await findFiles("BotListeners"))
-    for (const [eventName, listenerFunc] of Object.entries(await import(pathToFileURL(filePath).href)))
-      client.on(eventName, (...args) => eventsNeedingClient.has(eventName) ? listenerFunc(client, ...args) : listenerFunc(...args));
+  const listenerModules = await Promise.all((await findFiles("BotListeners")).map(filePath => import(pathToFileURL(filePath).href)));
+  listenerModules.forEach(module => { Object.entries(module).forEach(([eventName, listenerFunc]) => { client.on(eventName, listenerFunc); }); });
   client.commands.clear();
-  const globalPaths = await findFiles('commands')
-  const globalProcessed = await getCommandData(globalPaths)
-  globalProcessed.fullmodule.forEach(command => client.commands.set(command.data.name, command))
-  client.rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: globalProcessed.jsonPayloads });
-  const guildPaths = {};
-  for (const guildId of client.guilds.cache.map(guild => guild.id))
-    guildPaths[guildId] = await findFiles(`C:/Users/micha/Desktop/Bot/commands/${guildId}`)
-  for (const guildId in guildPaths) {
-    const guildProcessed = await getCommandData(guildPaths[guildId]);
-    guildProcessed.fullmodule.forEach(command => client.commands.set(`${guildId}:${command.data.name}`, command))
-    if (guildProcessed.jsonPayloads.length > 0) client.rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, guildId), { body: guildProcessed.jsonPayloads });
-  }
-  updateStatus();
-  setInterval(updateStatus, 5000)
-  await clearExpiredWarns(db.collection('users'))
-  setInterval(async () => { await clearExpiredWarns(db.collection('users')) }, 5 * 60 * 1000)
+  const globalProcessed = await getCommandData(await findFiles('commands'))
+  globalProcessed.fullmodule.forEach(command => client.commands.set(command.data.name, command));
+  client.application.commands.set(globalProcessed.jsonPayloads)
+  updateStatus(); setInterval(updateStatus, 5000)
+  await clearExpiredWarns(db.collection('users')); setInterval(async () => { await clearExpiredWarns(db.collection('users')) }, 5 * 60 * 1000)
   await embedsenders(client.channels.cache);
   const invites = {}
   for (const [guildId, guild] of client.guilds.cache) {
+    const guildProcessed = await getCommandData(await findFiles(`commands/${guildId}`));
+    guildProcessed.fullmodule.forEach(command => client.commands.set(`${guildId}:${command.data.name}`, command))
+    if (guildProcessed.jsonPayloads.length > 0) await client.application.commands.set(guildProcessed.jsonPayloads, guildId);
     const guildinvites = await guild.invites.fetch();
-    invites[guildId] = guildinvites.map(invite => { return { id: invite.code, uses: invite.uses } })
+    invites[guildId] = guildinvites.map(invite => { return { code: invite.code, uses: invite.uses } })
     if (guildChannelMap[guildId].publicChannels?.countingChannel) {
       let Countingchannel = client.channels.cache.get(guildChannelMap[guildId].publicChannels.countingChannel)
       await Countingchannel.messages.fetch({ limit: 5 });
       const lastmessages = Countingchannel.messages.cache.filter(message => !message.author.bot)
-      for (const [, message] of lastmessages) {
-        const messagenumber = parseInt(message.content.trim())
-        if (!isNaN(messagenumber) && message.embeds.length === 0) {
-          client.countingState.initialize(messagenumber, guildId);
-          break;
-        }
-      }
+      for (const [, message] of lastmessages) if (!isNaN(parseInt(message.content.trim())) && message.embeds.length === 0) { client.countingState.initialize(parseInt(message.content.trim()), guildId); break; }
     }
   }
   save("Extravariables/invites.json", invites)
   client.commands.forEach((command, name) => console.log(name))
-  console.log(`✅ Logged in as ${client.user.tag}`);
 }
 await main().catch(console.error());
