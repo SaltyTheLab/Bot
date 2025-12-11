@@ -86,7 +86,7 @@
                     },
                     {
                         "title": "Staff HandBook",
-                        "description": "All moderation commands are to be executed within <#1307212814036893716> channel, utilizing <@1420927654701301951>\n\n\n__The following links provide direct navigation to specific sections of these guidelines__\n\n[Core Guidelines](https://discord.com/channels/1231453115937587270/1391582104952770570)\nSTAFF ROLES AND RESPONSIBILITES\nOPERATIONAL PROCEDURES\nERROR CORRECTION PROTOCOL\n\n\n[Ticket System Overview](https://discord.com/channels/1231453115937587270/1391586898392387706)\nAPPEAL PROCESS GUIDELINES\nHANDING INDIVIDUAL TICKETS\n\n\n[Identifying and Addressing Malicious Users](https: //discord.com/channels/1231453115937587270/1391591076413964370)\nRAID RESPONSE AND BAN PROTOCOLS\nRESPONDING TO COMPROMISED ACCOUNTS"
+                        "description": "All moderation commands are to be executed within <#1307212814036893716> channel, utilizing <@1420927654701301951>\n\n\n__The following links provide direct navigation to specific sections of these guidelines__\n\n[Core Guidelines](https://discord.com/channels/1231453115937587270/1391582104952770570)\nSTAFF ROLES AND RESPONSIBILITES\nOPERATIONAL PROCEDURES\nERROR CORRECTION PROTOCOL\n\n\n[Ticket System Overview](https://discord.com/channels/1231453115937587270/1391586898392387706)\nAPPEAL PROCESS GUIDELINES\nHANDING INDIVIDUAL TICKETS\n\n\n[Identifying and Addressing Malicious Users](https://discord.com/channels/1231453115937587270/1391591076413964370)\nRAID RESPONSE AND BAN PROTOCOLS\nRESPONDING TO COMPROMISED ACCOUNTS"
                     }
                 ]
             },
@@ -476,8 +476,8 @@
         },
         "automodsettings": {
             "Duplicatespamthreshold": 3,
-            "mediathreshold": 1,
-            "messagethreshold": 15
+            "mediathreshold": 5,
+            "messagethreshold": 5
         }
     },
     "1342845801059192913": {
@@ -567,7 +567,7 @@
         },
         "automodsettings": {
             "Duplicatespamthreshold": 3,
-            "mediathreshold": 1,
+            "mediathreshold": 5,
             "messagethreshold": 5
         }
     },

@@ -4,8 +4,7 @@ import embedIDs from '../embeds/EmbedIDs.json' with {type: 'json'};
 async function handleReactionChange(reaction, user, action) {
   if (user.bot) return;
   const member = await reaction.message.guild.members.fetch(user.id)
-  const isValidMessageId = embedIDs[reaction.message.guild.id].some(embedInfo => embedInfo.messageId === reaction.message.id);
-  if (!isValidMessageId)
+  if (!embedIDs[reaction.message.guild.id].some(embedInfo => embedInfo.messageId === reaction.message.id))
     return;
   const roleID = guildChannelMap[reaction.message.guild.id].reactions[reaction.emoji.id || reaction.emoji.name];
   if (!roleID) { console.log(`⚠️ No role mapped to emoji: ${roleID}`); return; }

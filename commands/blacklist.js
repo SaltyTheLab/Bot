@@ -22,9 +22,7 @@ export async function execute(interaction) {
     const targetUser = interaction.options.getMember('target');
     const blacklist = await getblacklist(targetUser.id, interaction.guild.id)
     const role = interaction.options.getRole('role') ?? null
-    const embed = new EmbedBuilder({
-        description: `${targetUser}'s blacklist\n\nblacklist: ${blacklist.length > 0 ? blacklist.map(role => `<@&${role}>`).join(',') : 'empty'}`
-    })
+    const embed = new EmbedBuilder({ description: `${targetUser}'s blacklist\n\nblacklist: ${blacklist.length > 0 ? blacklist.map(role => `<@&${role}>`).join(',') : 'empty'}` })
     switch (interaction.options.getSubcommand()) {
         case 'add':
             embed.setDescription(`${role} was blacklisted from ${targetUser}`)

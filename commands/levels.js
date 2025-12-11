@@ -18,24 +18,14 @@ export const data = new SlashCommandBuilder()
     .setContexts(InteractionContextType.Guild)
 
 export async function execute(interaction) {
-    const embed = new EmbedBuilder({
-        author: { user: interaction.user, iconURL: interaction.user.displayAvatarURL({ dynamic: true }) }
-    })
+    const embed = new EmbedBuilder({ author: { user: interaction.user, iconURL: interaction.user.displayAvatarURL({ dynamic: true }) } })
     const target = interaction.options.getUser('target')
     const xp = interaction.options.getNumber('xp') ?? null;
     const level = interaction.options.getNumber('level') ?? null;
-    const { userData } = await getUser(target.id, interaction.guild.id, true)
+    const { userData } = await getUser({ userId: target.id, guildId: interaction.guild.id, modflag: true })
     switch (interaction.options.getSubcommand()) {
-        case 'xp': {
-            userData.xp += xp
-            embed.setDescription(`${xp} xp added to ${target} `)
-            break;
-        }
-        case 'levels': {
-            userData.level += level
-            embed.setDescription(`${level} levels added to ${target} `)
-            break;
-        }
+        case 'xp': { userData.xp += xp; embed.setDescription(`${xp} xp added to ${target} `); break; }
+        case 'levels': { userData.level += level; embed.setDescription(`${level} levels added to ${target} `); break; }
     }
     saveUser({ userId: target.id, guildId: interaction.guild.id, userData: userData });
     interaction.reply({
