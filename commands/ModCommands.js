@@ -1,4 +1,4 @@
-import { InteractionContextType, PermissionFlagsBits, SlashCommandBuilder, GuildMember, MessageFlags, EmbedBuilder } from "discord.js";
+import { InteractionContextType, PermissionFlagsBits, SlashCommandBuilder, GuildMember, EmbedBuilder } from "discord.js";
 import { getPunishments, editPunishment } from "../Database/databaseAndFunctions.js";
 import punishUser from "../moderation/punishUser.js";
 import guildchannelmap from "../Extravariables/guildconfiguration.json" with {type: 'json'}
@@ -33,26 +33,23 @@ export const data = new SlashCommandBuilder()
     .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
     .setContexts([InteractionContextType.Guild])
 export async function execute(interaction) {
-    const command = interaction.options.getSubcommand();
     const target = await interaction.options.getMember('target') ?? await interaction.options.getUser('target');
-    const reason = interaction.options.getString('reason');
     const staffcheck = target instanceof GuildMember ? target.permissions.has(PermissionFlagsBits.ModerateMembers) : null
-    const duration = interaction.options.getInteger('duration') ?? null
     const adminChannel = interaction.client.channels.cache.get(guildchannelmap[interaction.guild.id].modChannels.adminChannel) ?? null
     let banflag = false
     let kick = false
-    if (target.bot) return interaction.reply({ content: 'You cannot ban a bot.', flags: MessageFlags.Ephemeral });
-    if (target.id === interaction.user.id) return interaction.reply({ content: '⚠️ You cannot execute mod commands on yourself.', flags: MessageFlags.Ephemeral });
-    if (staffcheck) return interaction.reply({ content: `${target.user.tag} is staff, please handle this with an admin, co-owner, or owner.`, flags: MessageFlags.Ephemeral })
-    switch (command) {
+    if (target.bot) return interaction.reply({ content: 'You cannot ban a bot.', flags: 64 });
+    if (target.id === interaction.user.id) return interaction.reply({ content: '⚠️ You cannot execute mod commands on yourself.', flags: 64 });
+    if (staffcheck) return interaction.reply({ content: `${target.user.tag} is staff, please handle this with an admin, co-owner, or owner.`, flags: 64 })
+    switch (interaction.options.getSubcommand()) {
         case 'mute':
-            if (duration <= 0) return interaction.reply({ content: '❌ Invalid duration', flags: MessageFlags.Ephemeral });
-            if (target.communicationDisabledUntilTimestamp && target.communicationDisabledUntilTimestamp > Date.now()) return interaction.reply({ content: '⚠️ User is already muted.', flags: MessageFlags.Ephemeral });
+            if (interaction.options.getInteger('duration') <= 0) return interaction.reply({ content: '❌ Invalid duration', flags: 64 });
+            if (target.communicationDisabledUntilTimestamp && target.communicationDisabledUntilTimestamp > Date.now()) return interaction.reply({ content: '⚠️ User is already muted.', flags: 64 });
             break;
         case 'ban':
             if (!interaction.member.permissions.has(PermissionFlagsBits.BanMembers)) {
                 adminChannel.send({ content: `Jr. mod ${interaction.user} tried to use the ban command, please talk to them if you see multiple instances of this message...` })
-                return interaction.reply({ content: 'Jr mods do not have access to this command, please contact a mod or higher in the jr mod chat.', flags: MessageFlags.Ephemeral });
+                return interaction.reply({ content: 'Jr mods do not have access to this command, please contact a mod or higher in the jr mod chat.', flags: 64 });
             }
             banflag = true
             break;
@@ -74,5 +71,5 @@ export async function execute(interaction) {
             return interaction.reply({ embeds: [embed] })
         }
     }
-    punishUser({ interaction: interaction, guild: interaction.guild, target: target, moderatorUser: interaction.user, reason: reason, channel: interaction.channel, banflag: banflag, kick: kick });
+    punishUser({ interaction: interaction, guild: interaction.guild, target: target, moderatorUser: interaction.user, reason: interaction.options.getString('reason'), channel: interaction.channel, banflag: banflag, kick: kick });
 }
