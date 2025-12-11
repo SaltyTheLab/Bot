@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, InteractionContextType, ButtonBuilder } from "discord.js";
+import { SlashCommandBuilder, EmbedBuilder, InteractionContextType } from "discord.js";
 import { getUser, saveUser } from '../Database/databaseAndFunctions.js';
 import { resolve } from 'node:path'
 import logos from "../Database/logos.json" with {type: 'json'};
@@ -22,15 +22,12 @@ function generateEmbed(description, color = 0x0000ff) {
 function generateButtons(gameBoard, disabled = false) {
     const rows = [];
     for (let i = 0; i < 3; i++) {
-        const row = new ActionRowBuilder()
+        const row = { type: 1, components: [] }
         for (let j = 0; j < 3; j++) {
             const index = i * 3 + j;
-            row.addComponents(new ButtonBuilder({
-                custom_id: `tictactoe-${index}`,
-                label: gameBoard[index] === ' ' ? '\u200b' : gameBoard[index],
-                style: gameBoard[index] === 'X' ? 1 : gameBoard[index] === 'O' ? 4 : 2,
-                disabled: disabled || gameBoard[index] !== ' '
-            }))
+            row.components.push({
+                type: 2, custom_id: `${index}`, label: gameBoard[index] === ' ' ? '\u200b' : gameBoard[index], style: gameBoard[index] === 'X' ? 1 : gameBoard[index] === 'O' ? 4 : 2, disabled: disabled || gameBoard[index] !== ' '
+            })
         }
         rows.push(row);
     }
@@ -69,7 +66,7 @@ export async function execute(interaction) {
                 isCPU = true
                 break;
             case 'user':
-                player2 = interaction.options.getUser('opponent');;
+                player2 = interaction.options.getUser('opponent');
                 if (player1.id === player2.id) return interaction.reply({ content: "You can't play against yourself.", flags: 64 })
                 break;
         }
@@ -114,7 +111,7 @@ export async function execute(interaction) {
         collector.on('collect', async i => {
             if (i.user.id !== player1.id && i.user.id !== player2.id) return i.reply({ content: 'You are not a participant in this game.', flags: 64 })
             if (i.user.id !== currentplayer.id) return i.reply({ content: 'It\'s not your turn!', flags: 64 })
-            const move = parseInt(i.customId.split('-')[1]);
+            const move = parseInt(i.customId);
             const playerMark = players.get(currentplayer.id);
             if (gameBoard[move] !== ' ') return i.reply({ content: "That cell is already taken!", flags: 64 });
             gameBoard[move] = playerMark;
