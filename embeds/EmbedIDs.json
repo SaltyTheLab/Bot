@@ -1,73 +1,65 @@
 {
   "1231453115937587270": [
     {
-      "name": "staff",
-      "messageId": "1442734528333479948",
-      "channelid": "1262533685002113155"
+      "name": "aboutme",
+      "messageId": null
     },
     {
       "name": "mental",
-      "messageId": "1443491465622982706",
-      "channelid": "1390128922712342659"
+      "messageId": "1451762088153190462"
     },
     {
-      "name": "rules",
-      "messageId": "1443491465782235241",
-      "channelid": "1235295566356025354"
+      "name": "staff",
+      "messageId": "1451762340113547286"
     },
     {
       "name": "scams",
-      "messageId": "1443495502284062730",
-      "channelid": "1436157325214875789"
+      "messageId": "1451762340293902458"
     },
     {
-      "name": "aboutMe",
-      "messageId": "1443496385830981632",
-      "channelid": "1235323618582466621"
-    },
-    {
-      "name": "getcolor",
-      "messageId": "1443496386871165012",
-      "channelid": "1235323618582466621"
+      "name": "rules",
+      "messageId": "1451762339857830031"
     },
     {
       "name": "extra",
-      "messageId": "1443496387726540922",
-      "channelid": "1235323618582466621"
+      "messageId": "1451768208586444870"
+    },
+    {
+      "name": "getcolor",
+      "messageId": "1451768207076757569"
+    },
+    {
+      "name": "aboutMe",
+      "messageId": "1451768206455996498"
     }
   ],
   "1342845801059192913": [
     {
       "name": "staff",
-      "messageId": "1442734528446595274",
-      "channelid": "1423830604952240170"
-    },
-    {
-      "name": "getroles",
-      "messageId": "1443491465568190545",
-      "channelid": "1410696524849217578"
-    },
-    {
-      "name": "dirty",
-      "messageId": "1443495502271348787",
-      "channelid": "1415773272934715534"
+      "messageId": "1451762107635990599"
     },
     {
       "name": "rules",
-      "messageId": "1443495502330204201",
-      "channelid": "1388104789514129468"
+      "messageId": "1451762348753948785"
+    },
+    {
+      "name": "dirty",
+      "messageId": "1451768282263847026"
+    },
+    {
+      "name": "getroles",
+      "messageId": "1451768282268041281"
     }
   ],
   "1347217846991851541": [
     {
-      "name": "rules",
-      "messageId": "1442734528216174593",
-      "channelid": "1347399775951257704"
+      "name": "getRoles",
+      "messageId": "1451291819018031266"
     },
     {
-      "name": "getRoles",
-      "messageId": "1443500506302382134",
-      "channelid": "1347227575998484538"
+      "name": "rules",
+      "messageId": "1451762352776286219"
     }
-  ]
+  ],
+  "1410055430889275515": []
 }

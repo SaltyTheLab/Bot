@@ -1,4 +1,3 @@
-import { EmbedBuilder, GuildMember } from 'discord.js';
 import { editPunishment, getPunishments, getUser } from '../Database/databaseAndFunctions.js';
 import { load, save } from '../utilities/fileeditors.js';
 import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'}
@@ -22,51 +21,49 @@ function getNextPunishment(weightedWarns) {
 const unitMap = { min: 60000, hour: 3600000, day: 86400000 };
 const LOG_COLORS = { Warn: 0xffcc00, Mute: 0xff4444, Ban: 0xd10000, Kick: 0x838383 };
 const MAX_TIMEOUT_MS = 2419200000;
-export default async function punishUser({ interaction = null, guild, target, moderatorUser, reason, channel, isAutomated = false, currentWarnWeight = 1, banflag = false, messageid = null, kick = false }) {
-  if (!await getUser({ userId: target.id, guildId: guild.id, modflag: true }) && interaction) { interaction.reply('❌ User does not exist in the Database.'); return; }
-  const user = target instanceof GuildMember ? target.user : target;
-  const icon = user.displayAvatarURL({ dynamic: true });
-  const bans = await load("Extravariables/commandsbans.json");
-  const modchannels = guildChannelMap[guild.id].modChannels;
-  let activeWarns = await getPunishments(target.id, guild.id, true);
-  let dmDescription = `<@${target.id}>, you were given a \`warning\` in ${guild.name}.`;
-  let logAuthor = `${moderatorUser.tag} warned a member`;
-  let commandTitle = `${user.tag} was issued a warning`;
-  let action = Promise.resolve();
-  let logChannelid = modchannels.mutelogChannel;
-  let logcolor = LOG_COLORS['Warn']
-  let sentMessage = null;
-  let warnType = banflag ? 'Ban' : kick ? 'Kick' : (interaction && interaction.options.getSubcommand() === 'mute') ? 'Mute' : 'Warn';
+export default async function punishUser({ api, guild, target, moderatorUser, reason, channelId, interaction = null, isAutomated = false, currentWarnWeight = 1, banflag = false, messageid = null, kick = false }) {
+  api.interactions.defer(interaction.id, interaction.token);
+  const userId = target.id;
+  const userTag = target.username
+  const modChannels = guildChannelMap[guild.id].modChannels;
+  const ext = target.avatar.startsWith('a_') ? 'gif' : 'png'
+  const avatar = `https://cdn.discordapp.com/avatars/${userId}/${target.avatar}.${ext}`
+  const guildIconURL = `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.${ext}`
+  const logavatar = `https://cdn.discordapp.com/avatars/${moderatorUser.id}/${moderatorUser.avatar}.png`
+  let activeWarns = await getPunishments(userId, guild.id, true);
+  let warnType = banflag ? 'Ban' : kick ? 'Kick' : (interaction && interaction.data.options[0].name === 'mute') ? 'Mute' : 'Warn';
   let durationMs = 0;
   let durationStr = '';
+  let logChannelId = modChannels.mutelogChannel;
+  if (!await getUser({ userId: userId, guildId: guild.id, modflag: true }) && interaction) {
+    await api.interactions.reply(interaction.id, interaction.token, { content: '❌ User does not exist in the Database.' }); return;
+  }
+  const bans = await load("Extravariables/commandsbans.json");
+  let dmDescription = `<@${userId}>, you were given a \`warning\` in ${guild.name}.`;
+  let logAuthor = `${moderatorUser.username} warned a member`;
+  let logcolor = LOG_COLORS['Warn']
+  let command = `${userTag} was issued a warning`
   switch (warnType) {
     case 'Ban':
-      bans.push(target.id);
-      await save("Extravariables/commandsbans.json", bans)
-      commandTitle = `${user.tag} was banned`;
-      dmDescription = `${target}, you have been \`banned\` from ** ${guild.name} **.\n\n ** Reason **: \n\`${reason}\`\nRight click or tap my user profile to appeal your ban.\n\nYou can use this invite link to reenable dms: https://discord.gg/qMjjyXyYbr`
-      logAuthor = `${moderatorUser.tag} banned a member`
-      logChannelid = modchannels.banlogChannel;
-      action = guild.bans.create(target.id, { reason: `Ban command: ${reason}`, deleteMessageSeconds: 604800 })
-      logcolor = LOG_COLORS['Ban'];
+      bans.push(userId);
+      await save("Extravariables/commandsbans.json", bans);
+      logChannelId = modChannels.banlogChannel;
+      await api.guilds.banUser(guild.id, userId, { delete_message_seconds: 604800, reason: `AutoMod: ${reason}` });
+      dmDescription = `<@${target.id}>, you were banned from ${guild.name}.`;
+      logAuthor = `${moderatorUser.username} banned a member`;
+      command = `${userTag} was banned`
       break;
     case 'Mute':
       durationMs = interaction.options.getInteger('duration') * unitMap[interaction.options.getString('unit')];
-      durationStr = durationMs >= unitMap.day ? `${Math.ceil(durationMs / unitMap.day)} day(s)`
-        : durationMs >= unitMap.hour ? `${Math.ceil(durationMs / unitMap.hour)} hour(s)`
-          : `${Math.ceil(durationMs / unitMap.min)} minute(s)`;
-      commandTitle = `${user.tag} was issued a ${durationStr} mute`
+      durationStr = `${interaction.options.getInteger('duration')} ${interaction.options.getString('unit')}`;
+      await api.guilds.editMember(guild.id, userId, { communication_disabled_until: new Date(Date.now() + Math.min(durationMs, MAX_TIMEOUT_MS)).toISOString(), reason });
       dmDescription = `<@${target.id}>, you were given a \`${durationStr} mute\` in ${guild.name}.`;
-      logAuthor = `${moderatorUser.tag} muted a member`;
-      action = target.timeout(Math.min(durationMs, MAX_TIMEOUT_MS), reason)
-      logcolor = LOG_COLORS['Mute'];
+      logAuthor = `${moderatorUser.username} muted a member`;
       break;
     case 'Kick':
-      commandTitle = `${user.tag} was kicked`
+      await api.guilds.removeMember(guild.id, userId, { reason });
+      logAuthor = `${moderatorUser.username} kicked a member`;
       dmDescription = `<@${target.id}>, you were kicked from ${guild.name}.`;
-      logAuthor = `${moderatorUser.tag} kicked a member`;
-      action = target.kick({ reason: reason })
-      logcolor = LOG_COLORS['Kick'];
       break;
     default: {
       const { type, duration, unit } = getNextPunishment(activeWarns.length + currentWarnWeight);
@@ -74,54 +71,60 @@ export default async function punishUser({ interaction = null, guild, target, mo
         durationMs = Math.min(duration * unitMap[unit], MAX_TIMEOUT_MS);
         durationStr = unit === 'hour' ? `${Math.ceil(durationMs / unitMap.hour)} hour(s)`
           : `${Math.ceil(durationMs / unitMap.min)} minute(s)`;
-        commandTitle = `${user.tag} was issued a ${durationStr} mute`
-        dmDescription = `<@${target.id}>, you were given a \`${durationStr} mute\` in ${guild.name}.`;
+        dmDescription = `<@${target.id}>, you were given a \`${durationStr} mute\` in ${api.guilds.name}.`;
         logAuthor = `${moderatorUser.tag} muted a member`;
-        action = target.timeout(durationMs, reason)
-        logcolor = LOG_COLORS['Mute'];
-        warnType = 'Mute'
+        await api.guilds.editMember(guild.id, userId, { communication_disabled_until: new Date(Date.now() + durationMs).toISOString() })
+        command = `${userTag} was issued a \`${durationStr} mute\``
       }
       break;
     }
   }
-  const buttonmessage = messageid ? `https://discord.com/channels/${guild.id}/${channel.id}/${messageid}` : null
-  if (isAutomated) sentMessage = await channel.send({ embeds: [new EmbedBuilder({ color: logcolor, author: { name: commandTitle, iconURL: icon } })] })
-  else if (!buttonmessage) sentMessage = await interaction.reply({ embeds: [new EmbedBuilder({ color: logcolor, author: { name: commandTitle, iconURL: icon } })] })
-  editPunishment({ userId: target.id, guildId: guild.id, moderatorId: moderatorUser.id, reason: reason, durationMs: durationMs, warnType: warnType, weight: currentWarnWeight, channel: channel.id, messagelink: buttonmessage ?? `https://discord.com/channels/${guild.id}/${channel.id}/${sentMessage.id}` }).catch(err => console.warn(err));
-  activeWarns = await getPunishments(target.id, guild.id, true);
+  const logColor = LOG_COLORS[warnType]
+  let finalMessage;
+  if (isAutomated) {
+    finalMessage = await api.channels.createMessage(channelId, { embeds: [{ color: logColor, author: { name: command, icon_url: avatar } }] });
+    console.log(finalMessage)
+  } else if (interaction) {
+    finalMessage = await api.interactions.editReply(interaction.application_id, interaction.token, { embeds: [{ color: logColor, author: { name: command, icon_url: avatar } }] });
+  }
+  const messageLink = messageid ? `https://discord.com/channels/${guild.id}/${channelId}/${messageid}` : `https://discord.com/channels/${guild.id}/${channelId}/${finalMessage.id}`
+  await editPunishment({ userId: userId, guildId: guild.id, moderatorId: isAutomated ? finalMessage.author.id : moderatorUser.id, reason, durationMs, warnType: warnType, weight: currentWarnWeight, channel: channelId, messagelink: messageLink }).catch(console.warn);
+  activeWarns = await getPunishments(userId, guild.id, true);
   const refrences = (warnType === 'Ban' ? activeWarns.filter(r => r.type === 'Ban') : activeWarns.filter(r => r.type !== 'Kick'))
     .slice(0, 10)
     .map((punishment, index) => { if (punishment.refrence) return `[Case ${index + 1}](${punishment.refrence})` }).filter(Boolean)
-  const logEmbed = new EmbedBuilder({
+  const logEmbed = {
     color: logcolor,
-    author: { name: logAuthor, iconURL: moderatorUser.displayAvatarURL({ dynamic: true }) },
-    thumbnail: { url: icon },
+    author: { name: logAuthor, icon_url: logavatar },
+    thumbnail: { url: avatar },
     fields: [
-      { name: 'Target:', value: `${target}`, inline: true },
-      { name: 'Channel:', value: `${channel}`, inline: true },
+      { name: 'Target:', value: `<@${userId}>`, inline: true },
+      { name: 'Channel:', value: `<#${channelId}>`, inline: true },
       ...refrences ? [{ name: 'History:', value: `${refrences.join(' | ')}`, inline: true }] : [],
       { name: 'Reason:', value: `\`${reason}\``, inline: false },
       ...(warnType !== 'Ban' && warnType !== 'Kick') ? [{ name: 'Punishment:', value: `\`${currentWarnWeight} warn\`${durationStr !== '' ? `, \`${durationStr}\`` : ''}`, inline: false }, { name: 'Active Warnings:', value: `\`${activeWarns.length}\``, inline: false }, { name: 'Next Punishment:', value: `\`${getNextPunishment(activeWarns.length).label}\``, inline: false }] : []
     ],
-    timestamp: Date.now(),
+    timestamp: new Date().toISOString(),
     footer: { text: 'User DMed ✅' }
-  })
+  }
   try {
-    target.send({
-      embeds: [new EmbedBuilder({
+    const dmchannel = await api.users.createDM(userId)
+    await api.channels.createMessage(dmchannel.id, {
+      embeds: [{
         color: logcolor,
-        author: { name: `${user.tag}`, iconURL: icon },
-        thumbnail: { url: guild.iconURL() },
+        author: { name: `${target.username}`, icon_url: avatar },
+        thumbnail: { url: guildIconURL },
         description: dmDescription,
         fields: [
           { name: 'Reason:', value: `\`${reason}\``, inline: false },
-          ...(warnType !== 'Ban' && warnType !== 'Kick') ? [{ name: 'Punishment:', value: `\`${currentWarnWeight} warn\`${durationStr !== '' ? `, \`${durationStr}\`` : ''}`, inline: false }, { name: 'Active Warnings:', value: `\`${activeWarns.length}\``, inline: false },
-          { name: 'Next Punishment:', value: `\`${getNextPunishment(activeWarns.length).label}\``, inline: false }, { name: 'Warn expires:', value: `<t:${Math.floor((Date.now() + unitMap.day) / 1000)}:F>` }] : []
-        ], timestamp: Date.now()
-      })]
+          ...(warnType !== 'Ban' && warnType !== 'Kick') ? [{ name: 'Punishment:', value: `\`${currentWarnWeight} warn\`${durationStr !== '' ? `, \`${durationStr}\`` : ''}`, inline: false },
+          { name: 'Active Warnings:', value: `\`${activeWarns.length}\``, inline: false },
+          { name: 'Next Punishment:', value: `\`${getNextPunishment(activeWarns.length).label}\``, inline: false },
+          { name: 'Warn expires:', value: `<t:${Math.floor((Date.now() + unitMap.day) / 1000)}:F>` }] : []
+        ],
+        timestamp: new Date().toISOString()
+      }]
     })
-  } catch { logEmbed.setFooter({ text: 'User DMed 🚫' }) }
-  const logChannel = guild.channels.cache.get(logChannelid);
-  logChannel.send({ embeds: [logEmbed] });
-  action
+  } catch { logEmbed.footer = { text: 'User DMed 🚫' } }
+  await api.channels.createMessage(logChannelId, { embeds: [logEmbed] });
 }

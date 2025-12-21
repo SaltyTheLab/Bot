@@ -1,27 +1,28 @@
-import { InteractionContextType, PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
 import { save } from "../utilities/fileeditors.js";
 import guildChannelMap from "../Extravariables/guildconfiguration.json" with {type: 'json'}
-export const data = new SlashCommandBuilder()
-    .setName('applications')
-    .setDescription('Open/close applications')
-    .addSubcommand(command => command.setName('open').setDescription('Open mod applications'))
-    .addSubcommand(command => command.setName('close').setDescription('close applications'))
-    .setDescription('open up the mod applications channel')
-    .setContexts(InteractionContextType.Guild)
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-
-export async function execute(interaction) {
-    const channel = interaction.guild.channels.cache.get(guildChannelMap[interaction.guild.id].modChannels.applyChannel)
-    const everyone = interaction.guild.roles.everyone;
-    if (!channel.permissionsFor(interaction.client.user).has(PermissionFlagsBits.ManageChannels))
-        return interaction.editReply({ content: `❌ I do not have the **Manage Channels** permission.`, });
-    switch (interaction.options.getSubcommand()) {
-        case 'open':
-            channel.permissionOverwrites.edit(everyone, { ViewChannel: true, UseApplicationCommands: true })
-            return interaction.reply({ content: 'Apps have now been opened!' });
-        case 'close':
-            channel.permissionOverwrites.edit(everyone, { ViewChannel: false, UseApplicationCommands: false })
-            await save("Extravariables/invites.json", {});
-            return interaction.reply({ content: 'Apps have now been closed!' });
+export default {
+    data: {
+        name: 'applications',
+        description: 'Open/close applications',
+        options: [
+            { name: 'open', description: 'Open applications', type: 1 },
+            { name: 'close', description: 'Close Applications', type: 1 }
+        ],
+        contexts: 0,
+        default_member_permission: 1 << 3,
+    },
+    async execute({ interaction, api }) {
+        const channel = await api.channels.get(guildChannelMap[interaction.guild.id].modChannels.applyChannel)
+        if (!BigInt(interaction.member.permissions) & 0x8n === 0x8n)
+            return interaction.editReply({ content: `❌ You do not have Channel editing Perms.`, });
+        switch (interaction.options[0].name) {
+            case 'open':
+                await api.channels.edit(channel, { permissionOverwrites: [{ id: interaction.guild_id, type: 0, allow: "2147848672", deny: "0" }] })
+                return await api.interactions.editReply(interaction.application_id, interaction.token, { content: 'Apps have now been opened!' });
+            case 'close':
+                await api.channels.edit(channel, { permissionOverwrites: [{ id: interaction.guild_id, type: 0, allow: "0", deny: "2147848672" }] })
+                await save("Extravariables/invites.json", {});
+                return await api.interactions.editReply(interaction.application_id, interaction.token, { content: 'Apps have now been closed!' });
+        }
     }
 }

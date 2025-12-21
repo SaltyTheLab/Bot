@@ -1,11 +1,9 @@
-import { EmbedBuilder, InteractionContextType, PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
 import embedsenders from "../embeds/embeds.js";
-export const data = new SlashCommandBuilder()
-    .setName('refresh')
-    .setDescription('Refreshes the Posted embeds')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-    .setContexts(InteractionContextType.Guild)
-export async function execute(interaction) {
-    await embedsenders(interaction.client.channels.cache)
-    interaction.reply({ embeds: [new EmbedBuilder({ description: 'Embeds have been updated!' })] })
+export default {
+    data: { name: 'refresh', description: 'Refreshes the Posted embeds', default_member_permission: 1 << 3, contexts: 0 },
+    async execute({ interaction, api }) {
+        await embedsenders(interaction.guild_id, api);
+        await api.interactions.reply(interaction.id, interaction.token, { embeds: [{ description: 'Embeds updated!' }] })
+    }
 }
+

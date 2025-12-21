@@ -57,7 +57,10 @@ async function generateRankCard({ userData, targetUser, xpNeeded = null, rank = 
     const avatarSize = 100;
     const avatarX = 20;
     const avatarY = canvas.height / 2 - avatarSize / 2;
-    const avatar = await loadImage(targetUser.displayAvatarURL({ extension: 'png', size: 128 }))
+    const avatarUrl = targetUser.avatar
+        ? `https://cdn.discordapp.com/avatars/${targetUser.id}/${targetUser.avatar}.png?size=128`
+        : `https://cdn.discordapp.com/embed/avatars/${(BigInt(targetUser.id) >> 22n) % 6n}.png`;
+    const avatar = await loadImage(avatarUrl)
     ctx.save();
     // 2. Create the circular clipping path for the avatar.
     ctx.beginPath();

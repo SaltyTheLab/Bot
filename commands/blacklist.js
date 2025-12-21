@@ -1,41 +1,42 @@
-import { EmbedBuilder, SlashCommandBuilder, InteractionContextType, PermissionFlagsBits } from "discord.js";
 import { getblacklist, editblacklist } from '../Database/databaseAndFunctions.js';
-
-export const data = new SlashCommandBuilder()
-    .setName('blacklist')
-    .setDescription('edit/show a users blacklist')
-    .addSubcommand(command =>
-        command.setName('add').setDescription('add a role to a users blacklist')
-            .addUserOption(opt => opt.setName('target').setDescription('The user you want to modify').setRequired(true))
-            .addRoleOption(opt => opt.setName('role').setDescription('The role to add').setRequired(true)))
-    .addSubcommand(command =>
-        command.setName('show').setDescription('get a users black list')
-            .addUserOption(opt => opt.setName('target').setDescription('user to show').setRequired(true)))
-    .addSubcommand(command =>
-        command.setName('remove').setDescription('remove a role from a blacklist')
-            .addUserOption(opt => opt.setName('target').setDescription('user you want to modify').setRequired(true))
-            .addRoleOption(opt => opt.setName('role').setDescription('the role you want to remove').setRequired(true)))
-    .setContexts(InteractionContextType.Guild)
-    .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
-
-export async function execute(interaction) {
-    const targetUser = interaction.options.getMember('target');
-    const blacklist = await getblacklist(targetUser.id, interaction.guild.id)
-    const role = interaction.options.getRole('role') ?? null
-    const embed = new EmbedBuilder({ description: `${targetUser}'s blacklist\n\nblacklist: ${blacklist.length > 0 ? blacklist.map(role => `<@&${role}>`).join(',') : 'empty'}` })
-    switch (interaction.options.getSubcommand()) {
-        case 'add':
-            embed.setDescription(`${role} was blacklisted from ${targetUser}`)
-            if (!blacklist.includes(role.id)) {
-                editblacklist(targetUser.id, interaction.guild.id, role.id, 'pull')
-                targetUser.roles.remove(role)
-            } else
-                embed.setDescription(`${role} is already blacklisted from ${targetUser}`)
-            break;
-        case 'remove':
-            editblacklist(targetUser.id, interaction.guild.id, role.id)
-            embed.setDescription(`${role} was removed from ${targetUser}'s blacklist`)
-            break;
+export default {
+    data: {
+        name: 'blacklist',
+        description: 'edit/show a users blacklist',
+        contexts: 0,
+        default_member_permission: 1 << 8,
+        options: [
+            {
+                name: 'add', description: 'add a role ',
+                options: [{ name: 'target', description: 'User', required: true, type: 6 }, { name: 'role', description: 'role', required: true, type: 8 }]
+            },
+            { name: 'show', description: 'show blacklist', options: [{ name: 'target', description: 'user to show', required: true, type: 6 }] },
+            {
+                name: 'remove', description: 'remove a role',
+                options: [{ name: 'target', description: 'User', required: true, type: 6 }, { name: 'role', description: 'Role', required: true, type: 8 }]
+            }
+        ]
+    },
+    async execute({ interaction, api }) {
+        const targetUser = interaction.data.options[0].options[0].value
+        const blacklist = await getblacklist(targetUser, interaction.guild_id)
+        let role = null
+        const embed = { description: `<@${targetUser}>'s blacklist\n\nblacklist: ${blacklist.length > 0 ? blacklist.map(role => `<@&${role}>`).join(',') : 'empty'}` }
+        switch (interaction.data.options[0].name) {
+            case 'add':
+                role = interaction.data.options[0].options[1].value
+                embed.description = `<@&${role}> was blacklisted from <@${targetUser}>`
+                if (!blacklist.includes(role.id)) {
+                    await editblacklist(targetUser, interaction.guild_id, role, 'push')
+                    await api.guilds.removeRoleFromMember(interaction.guild_id, targetUser, role)
+                } else embed.description = `<@&${role}> is already blacklisted from <@${targetUser}>`
+                break;
+            case 'remove':
+                role = interaction.data.options[0].options[1].value
+                editblacklist(targetUser, interaction.guild_id, role, 'pull')
+                embed.description = `<@&${role}> was removed from <@${targetUser}>'s blacklist`
+                break;
+        }
+        await api.interactions.reply(interaction.id, interaction.token, { embeds: [embed] })
     }
-    interaction.reply({ embeds: [embed] })
 }
