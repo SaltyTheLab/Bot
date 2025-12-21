@@ -4,6 +4,21 @@ await client.connect().catch(error => { console.error("Failed to connect to Mong
 export default client.db("Database");
 const appeals = client.db("Database").collection('appeals');
 const usersCollection = client.db("Database").collection('users');
+const counting = client.db("Database").collection('counting state')
+// --- Counting ---
+export async function increment(guildId, lastUser) {
+  const state = await counting.findOne({ guildId: guildId }, { projection: { lastuser: 1, count: 1 } })
+  state.count++;
+  state.lastuser = lastUser
+  counting.updateOne({ guildId: guildId }, { $set: { count: state.count, lastuser: state.lastuser } })
+}
+export async function fetch(guildId) { return await counting.findOne({ guildId: guildId }, { projection: { lastuser: 1, count: 1 } }); }
+export async function initialize(guildId, count) {
+  const state = await counting.findOne({ guildId: guildId });
+  if (state) { await counting.updateOne({ guildId: guildId }, { $set: { count: count, lastuser: null } }); return; }
+  await counting.insertOne({ guildId: guildId, count: count, lastuser: null })
+}
+export async function reset(guildId) { await counting.updateOne({ guildId: guildId }, { $set: { count: 0, lastuser: null } }) }
 // --- USER XP/LEVEL SYSTEM ---
 export async function getUser({ userId, guildId, modflag = false }) {
   let userData = await usersCollection.findOne({ userId: userId, guildId: guildId }, { projection: { xp: 1, level: 1, coins: 1, totalmessages: 1 } });
