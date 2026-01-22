@@ -1,5 +1,5 @@
 import { createCanvas, loadImage } from 'canvas';
-let rankCardBaseCanvas = null;
+export let rankCardBaseCanvas = null;
 function initializeRankCardBase() {
     const canvas = createCanvas(500, 150);
     const ctx = canvas.getContext('2d')
