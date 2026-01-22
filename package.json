@@ -1,13 +1,13 @@
 {
   "dependencies": {
-    "@discordjs/core": "^2.4.0",
-    "@discordjs/rest": "^2.6.0",
-    "@discordjs/ws": "^2.0.4",
-    "canvas": "^3.2.0",
+    "canvas": "^3.2.1",
     "dotenv": "^17.2.3",
-    "lru-cache": "^11.1.0",
+    "express": "^5.2.1",
+    "lru-cache": "^11.2.4",
     "mongodb": "^6.21.0",
-    "pm2": "^6.0.14"
+    "pm2": "^6.0.14",
+    "tweetnacl": "^1.0.3",
+    "undici": "^7.16.0"
   },
   "type": "module",
   "scripts": {
@@ -19,6 +19,7 @@
     "output": "pm2 logs Febot --out --lines 200"
   },
   "devDependencies": {
+    "@types/node": "^25.0.3",
     "eslint": "^9.39.1",
     "globals": "^16.5.0"
   }
