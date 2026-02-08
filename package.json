@@ -1,26 +1,13 @@
 {
   "dependencies": {
-    "canvas": "^3.2.1",
-    "dotenv": "^17.2.3",
-    "express": "^5.2.1",
-    "lru-cache": "^11.2.4",
-    "mongodb": "^6.21.0",
-    "pm2": "^6.0.14",
-    "tweetnacl": "^1.0.3",
-    "undici": "^7.16.0"
+    "lru-cache": "^11.2.5",
+    "mongodb": "^7.0.0",
+    "ngrok": "^5.0.0-beta.2",
+    "sharp": "^0.34.5"
   },
   "type": "module",
-  "scripts": {
-    "start": "pm2 start ecosystem.config.cjs --time ",
-    "stop": "pm2 stop ecosystem.config.cjs",
-    "dash": "pm2 dashboard",
-    "errors": "pm2 logs Febot  --err --lines 200",
-    "kill": "pm2 kill",
-    "output": "pm2 logs Febot --out --lines 200"
-  },
   "devDependencies": {
-    "@types/node": "^25.0.3",
-    "eslint": "^9.39.1",
-    "globals": "^16.5.0"
+    "@types/bun": "^1.3.8",
+    "typescript-eslint": "^8.54.0"
   }
 }
