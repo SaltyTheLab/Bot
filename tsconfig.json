@@ -1,0 +1,32 @@
+{
+    "compilerOptions": {
+        /* Base Options */
+        "target": "es2024",
+        "generateCpuProfile": "profile.cpuprofile",
+        "module": "es2022",
+        "moduleResolution": "bundler",
+        "lib": [
+            "ES2024"
+        ],
+        "esModuleInterop": true,
+        "allowJs": true,
+        "checkJs": false,
+        "resolveJsonModule": true,
+        "isolatedModules": true,
+        "noEmit": true,
+        "types": [
+            "bun",
+        ]
+    },
+    "include": [
+        "**/*.ts",
+        "**/*.js",
+        "ecosystem.config.cjs",
+    ],
+    "exclude": [
+        "node_modules"
+    ],
+    "ts-node": {
+        "compiler": "typescript"
+    }
+}

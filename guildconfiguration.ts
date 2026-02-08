@@ -1,6 +1,18 @@
-{
+import { ActionRow, ComponentType, EmbedObject } from "./types";
+interface GuildData {
+    [guildId: string]: {
+        messageConfigs: Record<string, { channelid: string; embeds: Array<EmbedObject>; reactions?: Array<string>; components?: Array<ActionRow> }>,
+        modChannels: Record<string, string>;
+        publicChannels: Record<string, string>;
+        mediaexclusions?: Record<string, string>;
+        reactions: Record<string, string | string[]>;
+        roles?: Record<string, string>;
+        automodsettings: Record<string, number>
+    }
+}
+const guildChannelMap: GuildData = {
     "1231453115937587270": {
-        "messageConfigs": {
+        messageConfigs: {
             "rules": {
                 "channelid": "1235295566356025354",
                 "embeds": [
@@ -71,7 +83,7 @@
                 "embeds": [
                     {
                         "title": "Common Scams",
-                        "color": "0xc27013",
+                        "color": 0xc27013,
                         "description": "There are a few common scams to look out for and be weary of. Most of these will give you a seeming too good to be true or impossible deadline. They will promise that you can pay in installments as you get paid. These are the well known ones:\n\n1. The artist scam:\n These are the easiest to spot with a user dming you hey i like your pfp or Is that your OC, it looks really good and I have an Idea for your sona. These guys are usually bots or actual people trying to steal your hard earned money.\n\n2. The VrChat Avatar scam:\n These start out with a user claiming to play vrchat then try to ask how long you have been playing for. Once they have talked to you enough they will most likely ask if you have a public or private avatar, your answer will not matter and they\"ll try to rope you into looking at their work. The alternative version of this scam is someone acting as a satisfied customer from a modeler. These guys will also try to show you their work.\n\n3. The Game Tester scam:\n These start out as a user claiming to make a game and ask you to test it for them, the file they send you is certain to be malicous and will certainly be damaging to your computer or are data miners that scan and send your info back to the scammer to be sold off or used later. Block and report these accounts ASAP.4. The Nitro Scam:\n This is a classic one, always verify that the nitro you recieved is legit, most fake gifts will use bot embed buttons for you to click on a link, offical discord nitro gifts have a very different look to them, so if you recieve a nitro gift and the accept button isn\"t green but gray, then it is not real.\n\n5. The Steam account Scam:\n This usually starts with a I accidentally reported your account to steam instead of another person These ones will try to steal your steam account credentials. If there is a problem with your account steam would contact you via an offical email and not discord.\n\nHow can I protect myself?\n Always enable 2fa on your account, this is a small additional security measure but it ensures someone else cannot access your account without a short number that is sent to your phone"
                     }
                 ]
@@ -81,7 +93,7 @@
                 "embeds": [
                     {
                         "title": "Moderation Guidelines",
-                        "color": "0x1daf0a",
+                        "color": 0x1daf0a,
                         "description": "Welcome to the staff team! Below are the Guidelines that we expect you to follow as a mod of the community:\n\n1) Respect everyone that is in the community\n\n2) Try to maintain a level of professionalism when handling situations. You are leaders in the community and should be setting an example\n\n3) Enforce every rule and issue it\"s respective punishment when necessary (some have direct consequences so see server rules)\n\n4) As a part of the staff team, you were selected based on your activity in the server, so we expect you to keep that activity as part of the staff team\n\n5) You are not to moderate other members of the staff team. If you find someone in violation of rules, report them to admins in your individual channel\n\n6) You are not to unban someone unless you have admin approval\n\n7) If you are unclear about a specific issue, please go through the line of command, do not immeditely ping salty for every issue\n\n8) Do not share or discuss contents of staff channels with anyone outside of staff (this includes Screenshots and screenshares of messages, tickets, and applications\n\n9) Have fun!! This is supposed to be a fun and friendly enviroment, so try your best to have fun!\n\n"
                     },
                     {
@@ -96,17 +108,17 @@
                     {
                         "title": "Identity?",
                         "description": "🧡: <@&1235323773473783989>\n💛: <@&1235323773973168274>\n💜: <@&1235323774505582634>\n💚: <@&1235323775772528766>\n",
-                        "color": "0x458910"
+                        "color": 0x458910
                     },
                     {
                         "title": "Where you on the earth?",
                         "description": " 🇪🇺: <@&1235335164436025415>\n🦅: <@&1235335164758855781>\n🌄: <@&1235335165631397909>\n🐼: <@&1235335166772117694>\n🐨: <@&1235335167560912927>\n🦒: <@&1235335168458231951>\n",
-                        "color": "0x458910"
+                        "color": 0x458910
                     },
                     {
                         "title": "What do you play on?",
                         "description": "💻:<@&1235323729936908379>\n📦: <@&1235323730628968530>\n🚉: <@&1235323732273397893>\n🟥: <@&1235323733246476329>\n📱: <@&1235323733795799154>\n🎧: <@&1272280467940573296>\n",
-                        "color": "0x458910"
+                        "color": 0x458910
                     }
                 ],
                 "reactions": [
@@ -134,7 +146,7 @@
                     {
                         "title": "Get Your Colors here!",
                         "description": "🔴: <@&1235323620163846294>\n🟣: <@&1235323621015158827>\n🟢: <@&1235323622546083991>\n🩷: <@&1235323622969835611>\n🟠: <@&1235323624055902289>\n🟡: <@&1235323625037500466>\n🔵: <@&1235323625452601437>\n🔷: <@&1418796891138687107>\n",
-                        "color": "0x458910"
+                        "color": 0x458910
                     }
                 ],
                 "reactions": [
@@ -154,7 +166,7 @@
                     {
                         "title": "Extra Roles",
                         "description": "React 🚧 to get the divider roles\n\nReact ▶️ for <@&1331028469794209913> to be notified when <@857445139416088647> is live! ",
-                        "color": "0x380b5e"
+                        "color": 0x380b5e
                     }
                 ],
                 "reactions": [
@@ -163,7 +175,7 @@
                 ]
             }
         },
-        "modChannels": {
+        modChannels: {
             "mutelogChannel": "1311483105206472745",
             "deletedlogChannel": "1353555735614849044",
             "welcomeChannel": "1262950864889319434",
@@ -175,11 +187,11 @@
             "adminChannel": "1257411106520043680",
             "applyChannel": "1411435140164616252"
         },
-        "publicChannels": {
+        publicChannels: {
             "generalChannel": "1231453115937587273",
             "countingChannel": "1406810924806832218"
         },
-        "mediaexclusions": {
+        mediaexclusions: {
             "hobbies": "1262972525642649610",
             "artcatagory": "1423410099124437083",
             "tickets": "1269482672389099594",
@@ -190,7 +202,7 @@
             "nsfwart": "1257424392586002613",
             "nsfwmemes": "1356057865453834372"
         },
-        "reactions": {
+        reactions: {
             "💻": "1235323729936908379",
             "📦": "1235323730628968530",
             "🚉": "1235323732273397893",
@@ -224,15 +236,16 @@
             ],
             "🔷": "1418796891138687107"
         },
-        "roles": {},
-        "automodsettings": {
-            "Duplicatespamthreshold": 3,
-            "mediathreshold": 1,
-            "messagethreshold": 15
+        roles: {},
+        automodsettings: {
+            Duplicatespamthreshold: 3,
+            mediathreshold: 1,
+            messagethreshold: 15,
+            spamthreshold: 4
         }
     },
     "1347217846991851541": {
-        "messageConfigs": {
+        messageConfigs: {
             "rules": {
                 "channelid": "1347399775951257704",
                 "embeds": [
@@ -247,7 +260,7 @@
                         ]
                     }
                 ],
-                "reactions": null
+                "reactions": []
             },
             "getRoles": {
                 "channelid": "1347227575998484538",
@@ -255,7 +268,7 @@
                     {
                         "title": "Get some content updates and Game roles here!",
                         "description": "Use the drop down menu to get your roles!",
-                        "color": "0x9900ff"
+                        "color": 0x9900ff
                     },
                     {
                         "title": "Pick your color",
@@ -264,7 +277,7 @@
                 ],
                 "components": [
                     {
-                        "type": 1,
+                        "type": ComponentType.STRING_SELECT,
                         "components": [
                             {
                                 "type": 3,
@@ -436,7 +449,7 @@
                 ]
             }
         },
-        "modChannels": {
+        modChannels: {
             "mutelogChannel": "1403065255126503537",
             "banlogChannel": "1403065225472643174",
             "welcomeChannel": "1403065196653842604",
@@ -444,27 +457,24 @@
             "updatedlogChannel": "1403065299216891985",
             "namelogChannel": "1403065343202693181"
         },
-        "publicChannels": {
+        publicChannels: {
             "generalChannel": "1347403115573542942"
         },
-        "exclusions": {
-            "adultcatagorey": "1347589981513711656"
-        },
-        "mediaexclusions": {
+        mediaexclusions: {
             "adultimages": "1347590233994301480",
             "vrcnsfw": "1427427598136512706",
             "vrcpics": "1427426871838244874",
             "media": "1400204426639311003",
             "irlphotos": "1347408649978380422"
         },
-        "reactions": {
+        reactions: {
             "🔴": "1347447588919443557",
             "🟣": "1347447590928519199",
             "🔵": "1347447594690805933",
             "🟢": "1347447605847920640",
             "🟤": "1347447591901859882"
         },
-        "roles": {
+        roles: {
             "role_twitch_updates": "1347445883851112541",
             "role_youtube_updates": "1347446053426954241",
             "role_hulk_updates": "1347446235493175296",
@@ -491,19 +501,19 @@
             "role_game_DD": "1347422870867021844",
             "role_game_Borderlands": "1347423007282430007"
         },
-        "automodsettings": {
-            "Duplicatespamthreshold": 3,
-            "mediathreshold": 5,
-            "messagethreshold": 5
+        automodsettings: {
+            Duplicatespamthreshold: 3,
+            mediathreshold: 5,
+            messagethreshold: 5
         }
     },
     "1342845801059192913": {
-        "messageConfigs": {
+        messageConfigs: {
             "rules": {
                 "channelid": "1388104789514129468",
                 "embeds": [
                     {
-                        "color": "0x086ca5",
+                        "color": 0x086ca5,
                         "title": "Welcome to Bark!!",
                         "description": "This community is operated by <@1226077693548953630>. Adherence to these core mandates is non-negotiable and essential for maintaining order.\n\nThe following rules are in effect and strictly enforced:\n\n1) Access to the <#1388115293338996737> channel is exclusively restricted to users possessing the <@&1388111992287400089> verification role. **Lying about your age to gain access is an offense punishable by an immediate, permanent ban, with zero exceptions.** Due to the grave risks associated with minors accessing this content, an individual caught falsifying their age will never be permitted to hold the verification role again, regardless of subsequent age confirmation.\n\n2) All members must be at least 13 years of age or older, in strict compliance with Discord\"s Terms of Service (TOS).\n\n3) Maintain a baseline of respect toward all other members. Disruptive or hostile behavior will be addressed swiftly.\n\n4) All personal conflicts, private grievances (beef), and escalating arguments must remain strictly outside of this server\"s channels. Bring your drama elsewhere.\n\n5) The decisions rendered by <@1226077693548953630>, <@&1408636330124251157>, <@&1388113570369372181>, <@&1409208962091585607>, and <@&1402282104401821828> are **final**. Do not attempt to undermine their judgment or argue their rulings with excuses such as it was just a joke.\n\n6) Discussions or promotion of self-harm, or harm toward others, are strictly prohibited. While past events may be referenced briefly, active engagement with or encouragement of these topics will result in immediate disciplinary action.\n\n7) Blocking or muting any staff member is a violation of server protocol and is not permitted.\n\n8) Direct Messaging (DMing) staff members for user reports is no longer an accepted practice. All reports and issues must be submitted and managed through the dedicated ticket system.\n\nAutoMod(<@1420927654701301951>):\n\n\nWarnings:\n\n\nFor each warn you get from automod or manual, this becomes an Active Warning meaning that after 24 hours, the warn that was issued will expire. These will compound when you get multiple in a day and the timer will reset when you get a new one. Example: you get one warn for too many caps, then 6 hours later you get another for media. These will compound into a mute and then after 24 hours after the first warn it will expire.\n\n\nMedia:\n\n\nFor each message you send there is a media check, this does not count the number of attachments in the message but rather checks for the presence of an attachment. So sending one message with ten images will be treated the same as one message with one image. This is per user and not collectively in the server\n\nCircumventing AutoMod Filter:\n Trying to use placeholders or different letters to circumvent the automods filter will lead to a warn or mute"
                     }
@@ -525,7 +535,7 @@
                 "channelid": "1415773272934715534",
                 "embeds": [
                     {
-                        "color": "0xf700ff",
+                        "color": 0xf700ff,
                         "title": "Rules of the 18+ catagorey",
                         "description": "All sever rules apply here but there are a few supplemental rules here:\n\n1) all NSFW Art must go into the <#1388116277670842478> channel.\n2) There is a dedicated nsfw vc channel called dirty talk for the appropriate conversations\n3) No IRL pics in nsfw! We are adults here and expect common sense here. This will lead to a swift ban.\nreact with 🍆 to get access to <#1388116277670842478> and the dirty vc here!"
                     }
@@ -538,19 +548,19 @@
                 "channelid": "1423830604952240170",
                 "embeds": [
                     {
-                        "color": "0x1daf0a",
+                        "color": 0x1daf0a,
                         "title": "Moderation Guidelines",
                         "description": "Welcome to the staff team of Bark! Below are the Guidelines that we expect you to follow as a mod of the community:\n\n1) Respect everyone that is in the community\n\n2) Try to maintain a level of professionalism when handling situations. You are leaders in the community and should be setting an example\n\n3) Enforce every rule and issue it\"s respective punishment when necessary (some have direct consequences so see server rules)\n\n4) As a part of the staff team, you were selected based on your activity in the server, so we expect you to keep that activity as part of the staff team\n\n5) You are not to moderate other members of the staff team. If you find someone in violation of rules, report them to admins in your individual channel\n\n6) You are not to unban someone unless you have admin approval\n\n7) If you are unclear about a specific issue, please go through the line of command, do not immeaditely ping aussie for every issue\n\n8) Do not share or discuss contents of staff channels with anyone outside of staff (this includes Screenshots and screenshares of messages, tickets, and applications\n\n9) Have fun!! This is supposed to be a fun and friendly enviroment, so try your best to have fun!\n\n"
                     },
                     {
                         "title": "__**Staff HandBook**__",
-                        "color": "0x308796",
+                        "color": 0x308796,
                         "description": "Below are some guidelines to help you familiarize yourself with the commands of <@1420927654701301951>\n[click here](https://discord.com/channels/1342845801059192913/1423832190919114826/1423834091102666924)\nTHE ROLES\nINFORMATION\nPROCEDURE\nHUMAN ERROR\n\n[click here](https://discord.com/channels/1342845801059192913/1423834519345299568/1423834854906265791)\nBOT COMMANDS\nBAN APPEALS\nTICKETS\nFEBOT IS DOWN"
                     }
                 ]
             }
         },
-        "modChannels": {
+        modChannels: {
             "mutelogChannel": "1408174384342106234",
             "banlogChannel": "1408174241559482379",
             "welcomeChannel": "1408174219665211402",
@@ -562,40 +572,33 @@
             "adminChannel": "1412523674346717315",
             "applyChannel": "1411500933157752862"
         },
-        "publicChannels": {
+        publicChannels: {
             "generalChannel": "1342845802980048939"
         },
-        "exclusions": {
-            "adultcategory": "1388114900118667366",
-            "botcommands": "1386308567866409182",
-            "createdtickets": "1427976189124808855",
-            "clamedtickets": "1427976190664380418",
-            "adultdiscussions": "1388116277670842478"
-        },
-        "mediaexclusions": {
+        mediaexclusions: {
             "mediacatagory": "1422743777424179210",
             "createdtickets": "1427976189124808855",
             "clamedtickets": "1427976190664380418"
         },
-        "reactions": {
+        reactions: {
             "🔞": "1388113103081705502",
             "👨": "1388111992287400089",
             "🍆": "1388115995419349132"
         },
-        "automodsettings": {
-            "Duplicatespamthreshold": 3,
-            "mediathreshold": 5,
-            "messagethreshold": 5
+        automodsettings: {
+            Duplicatespamthreshold: 3,
+            mediathreshold: 5,
+            messagethreshold: 5
         }
     },
     "1410055430889275515": {
-        "messageConfigs": {},
-        "modChannels": {},
-        "publicChannels": {},
-        "exclusions": {},
-        "mediaexclusions": {},
-        "reactions": {},
-        "roles": {},
-        "automodsettings": {}
+        messageConfigs: {},
+        modChannels: {},
+        publicChannels: {},
+        mediaexclusions: {},
+        reactions: {},
+        roles: {},
+        automodsettings: { Duplicatespamthreshold: 67, mediathreshold: 34, messagethreshold: 23 }
     }
 }
+export default guildChannelMap
