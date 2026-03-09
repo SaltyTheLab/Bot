@@ -1,12 +1,10 @@
 import sharp from 'sharp';
 import { userObject } from './types';
-import { Document, WithId } from 'mongodb';
 function formatXP(xp: number) {
-    if (xp >= 10000)
-        return `${Math.floor(xp / 1000)}k`;
+    if (xp >= 10000) return `${Math.floor(xp / 1000)}k`;
     return xp.toString();
 }
-async function generateRankCard(userData: WithId<Document>, targetUser: userObject, xpNeeded: number, rank: number | null = null) {
+async function generateRankCard(userData: { coins: number, level: number, xp: number, totalmessages: number }, targetUser: userObject, xpNeeded: number, rank: number | null = null) {
     const avatarUrl = targetUser.avatar ? `https://cdn.discordapp.com/avatars/${targetUser.id}/${targetUser.avatar}.png?size=128` : `https://cdn.discordapp.com/embed/avatars/${(BigInt(targetUser.id) >> 22n) % 6n}.png`;
     const avatarResponse = await fetch(avatarUrl);
     const avatarBuffer = Buffer.from(await avatarResponse.arrayBuffer());
@@ -35,6 +33,6 @@ async function generateRankCard(userData: WithId<Document>, targetUser: userObje
         </svg>
     `);
     const finalImage = await sharp(svgLayer).composite([{ input: processedAvatar, top: 25, left: 20 }]).png().toBuffer();
-    return { file: finalImage, name: 'rank.png' };
+    return new Blob([finalImage], { type: "image/png", });
 };
 export default generateRankCard;
