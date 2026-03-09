@@ -2,7 +2,6 @@ import { ObjectId } from "mongodb";
 export enum InteractionType { PING = 1, APPLICATION_COMMAND = 2, MESSAGE_COMPONENT = 3, APPLICATION_COMMAND_AUTOCOMPLETE = 4, MODAL_SUBMIT = 5 }
 enum entitlementTypes { PURCHASE = 1, PREMIUM_SUBSCRIPTION = 2, DEVELOPER_GIFT = 3, TEST_MODE_PURCHASE = 4, FREE_PURCHASE = 5, USER_GIFT = 6, PREMIUM_PURCHASE = 7, APPLICATION_SUBSCRIPTION = 8 }
 export enum ComponentType { ACTION_ROW = 1, BUTTON = 2, STRING_SELECT = 3, TEXT_INPUT = 4, USER_SELECT = 5, ROLE_SELECT = 6, MENTIONABLE_SELECT = 7, CHANNEL_SELECT = 8, SECTION = 9, TEXT_DISPLAY = 10, THUMBNAIL = 11, MEDIA_GALLERY = 12, FILE = 13, SEPARATOR = 14, CONTAINER = 17, LABEL = 18, FILE_UPLOAD = 19 }
-
 export interface userObject {
     id: string,
     username: string,
@@ -108,69 +107,18 @@ export interface Punishment {
 export interface guildEmbedIds {
     name: string, messageId: string
 }
-interface BaseComponent {
-    type: ComponentType,
-    custom_id?: string,
-    disabled?: boolean
-}
-export interface ActionRow extends BaseComponent {
-    type: ComponentType,
-    components: Array<anyComponent>
-}
-export interface Button extends BaseComponent {
+export interface Button {
     type: ComponentType.BUTTON;
-    style: number;
-    label?: string;
-    emoji?: { id?: string; name: string; animated?: boolean };
     custom_id: string;
+    style: number;
+    label: string;
+    emoji?: { id?: string; name: string; animated?: boolean };
     url?: string;
     disabled?: boolean;
 }
-interface TextInput extends BaseComponent {
+export interface ActionRow {
     type: ComponentType,
-    id?: number,
-    custom_id: string,
-    style: number,
-    min_length?: number,
-    max_length?: number,
-    required?: boolean,
-    value?: string,
-    placeholder?: string
-}
-interface StringSelect extends BaseComponent {
-    type: ComponentType.STRING_SELECT,
-    id?: number,
-    value?: string
-    custom_id: string,
-    options: selectOptions[],
-    placeholder?: string,
-    min_values?: number,
-    max_values?: number,
-    required?: boolean,
-    disabled?: boolean
-}
-export interface TextInputResponse {
-    type: number
-    id: string,
-    custom_id: string,
-    value: string
-    component_type: number,
-}
-export interface StringSelectResponse {
-    type: number
-    id: string,
-    custom_id: string,
-    component_type: number,
-    values: string[]
-}
-type anyComponent = StringSelect | Button | options | TextInput
-interface resolvedData {
-    users?: Record<string, userObject>,
-    members?: Record<string, memberObject>,
-    roles?: Record<string, roleObject>,
-    channels?: Record<string, channelObject>,
-    messages?: Record<string, messageObject>,
-    attachments?: Record<string, attachmentObject>
+    components: Array<Button>
 }
 export interface channelObject {
     id: string,
@@ -210,36 +158,25 @@ export interface channelObject {
         member?: memberObject
     }
 }
-interface attachmentObject {
-    id: string,
-    filename: string,
-    title?: string,
-    description?: string,
-    content_type?: string,
-    size: number,
-    url: string,
-    proxy_url: string,
-    height?: number | null,
-    width?: number | null,
-    ephemeral?: boolean,
-    duration_secs?: number,
-    waveform?: string,
-    flags?: number
-}
 export interface reactionObject {
     count: number,
     count_details: object,
     me: boolean,
     me_burst: boolean,
-    emoji: emojiObject,
+    emoji: {
+        id: string,
+        name: string,
+        roles?: Array<roleObject>,
+        user?: userObject,
+        require_colons: boolean,
+        managed?: boolean,
+        animated?: boolean,
+        available?: boolean
+    },
     burst_colors: Array<number>,
     guild_id: string,
     user_id: string,
     message_id: string
-}
-export interface GuildBan {
-    guild_id: string,
-    user: userObject
 }
 export interface messageObject {
     id: string,
@@ -254,14 +191,38 @@ export interface messageObject {
     mentions: Array<userObject>,
     mention_roles: Array<roleObject>,
     mention_channels: Array<channelObject>,
-    attachments: Array<attachmentObject>,
+    attachments: Array<{
+        id: string,
+        filename: string,
+        title?: string,
+        description?: string,
+        content_type?: string,
+        size: number,
+        url: string,
+        proxy_url: string,
+        height?: number | null,
+        width?: number | null,
+        ephemeral?: boolean,
+        duration_secs?: number,
+        waveform?: string,
+        flags?: number
+    }>,
     embeds: Array<EmbedObject>,
     reactions?: Array<{
         count: number,
         count_details: object,
         me: boolean,
         me_burst: boolean,
-        emoji: emojiObject,
+        emoji: {
+            id: string,
+            name: string,
+            roles?: Array<roleObject>,
+            user?: userObject,
+            require_colons: boolean,
+            managed?: boolean,
+            animated?: boolean,
+            available?: boolean
+        },
         burst_colors: Array<number>,
         guild_id: string,
         user_id: string,
@@ -295,19 +256,58 @@ export interface messageObject {
         target_message_id?: string,
     },
     thread?: channelObject,
-    components?: ActionRow
-    stickers_items?: Array<stickerObject>,
-    stickers?: Array<stickerObject>,
+    components: ActionRow[]
+    stickers_items?: Array<{
+        id: string,
+        pack_id?: string,
+        name: string,
+        description: string | null,
+        tags: string,
+        type: number,
+        format_type: number,
+        available?: boolean,
+        guild_id?: string,
+        user?: userObject,
+        sort_value?: number
+    }>,
+    stickers?: Array<{
+        id: string,
+        pack_id?: string,
+        name: string,
+        description: string | null,
+        tags: string,
+        type: number,
+        format_type: number,
+        available?: boolean,
+        guild_id?: string,
+        user?: userObject,
+        sort_value?: number
+    }>,
     position?: number,
-    resolved: resolvedData,
+    resolved: {
+        users?: Record<string, userObject>,
+        members?: Record<string, memberObject>,
+        roles?: Record<string, roleObject>,
+        channels?: Record<string, channelObject>,
+        messages?: Record<string, messageObject>,
+        attachments?: Record<string, {
+            id: string,
+            filename: string,
+            title?: string,
+            description?: string,
+            content_type?: string,
+            size: number,
+            url: string,
+            proxy_url: string,
+            height?: number | null,
+            width?: number | null,
+            ephemeral?: boolean,
+            duration_secs?: number,
+            waveform?: string,
+            flags?: number
+        }>
+    },
     guild_id: string
-}
-interface entitlement {
-    id: string,
-    sku_id: string,
-    application_id: string,
-    user_id?: string,
-    type: entitlementTypes
 }
 export interface Invite {
     type: number;
@@ -320,7 +320,32 @@ export interface Invite {
     approximate_presence_count?: number;
     approximate_member_count?: number;
     expires_at?: string | null; // Usually an ISO8601 string
-    guild_scheduled_event?: GuildScheduledEvent,
+    guild_scheduled_event?: {
+        id: string;
+        guild_id: string;
+        channel_id: string | null;
+        creator_id?: string | null;
+        name: string;
+        description?: string | null;
+        scheduled_start_time: string; // ISO8601 string
+        scheduled_end_time?: string | null; // Fixed naming (end_time vs start_end)
+        privacy_level: number;
+        status: number;
+        entity_type: number; // This is usually an enum/number
+        entity_metadata?: { location?: string }; // Metadata holds the location
+        creator?: userObject;
+        user_count?: number;
+        image?: string | null;
+        recurrence_rule?: {
+            start: string;
+            end: string | null;
+            frequency: number;
+            interval: number;
+            by_weekday?: Array<number>;
+            by_n_weekday?: Array<{ n: number; day: number }>;
+            by_month?: Array<number>;
+        };
+    },
     flags?: number,
     roles?: Array<roleObject>,
     uses: number,
@@ -329,55 +354,6 @@ export interface Invite {
     temporary: boolean,
     created_at: number,
     guild_id: string
-}
-interface GuildScheduledEvent {
-    id: string;
-    guild_id: string;
-    channel_id: string | null;
-    creator_id?: string | null;
-    name: string;
-    description?: string | null;
-    scheduled_start_time: string; // ISO8601 string
-    scheduled_end_time?: string | null; // Fixed naming (end_time vs start_end)
-    privacy_level: number;
-    status: number;
-    entity_type: number; // This is usually an enum/number
-    entity_metadata?: { location?: string }; // Metadata holds the location
-    creator?: userObject;
-    user_count?: number;
-    image?: string | null;
-    recurrence_rule?: {
-        start: string;
-        end: string | null;
-        frequency: number;
-        interval: number;
-        by_weekday?: Array<number>;
-        by_n_weekday?: Array<{ n: number; day: number }>;
-        by_month?: Array<number>;
-    };
-}
-interface emojiObject {
-    id: string,
-    name: string,
-    roles?: Array<roleObject>,
-    user?: userObject,
-    require_colons: boolean,
-    managed?: boolean,
-    animated?: boolean,
-    available?: boolean
-}
-interface stickerObject {
-    id: string,
-    pack_id?: string,
-    name: string,
-    description: string | null,
-    tags: string,
-    type: number,
-    format_type: number,
-    available?: boolean,
-    guild_id?: string,
-    user?: userObject,
-    sort_value?: number
 }
 export interface guildObject {
     id: string,
@@ -398,7 +374,16 @@ export interface guildObject {
     default_message_notifications: number,
     explicit_content_filter: number,
     roles: roleObject[]
-    emojis: emojiObject[],
+    emojis: Array<{
+        id: string,
+        name: string,
+        roles?: Array<roleObject>,
+        user?: userObject,
+        require_colons: boolean,
+        managed?: boolean,
+        animated?: boolean,
+        available?: boolean
+    }>,
     features: string[],
     mfa_level: number,
     application_id: string | null,
@@ -422,7 +407,19 @@ export interface guildObject {
         welcome_channels: Array<{ channel_id: string, description: string, emoji_id: string | null, emoji_name: string | null }>
     },
     nsfw_level: number,
-    stickers?: stickerObject[],
+    stickers?: Array<{
+        id: string,
+        pack_id?: string,
+        name: string,
+        description: string | null,
+        tags: string,
+        type: number,
+        format_type: number,
+        available?: boolean,
+        guild_id?: string,
+        user?: userObject,
+        sort_value?: number
+    }>,
     premium_progress_bar_enabled: boolean,
     safety_alerts_channel_id: string | null,
     incidents_data: {
@@ -438,8 +435,8 @@ export interface options {
     description: string,
     required?: boolean,
     default_member_permission?: string
-    options?: options[],
-    contexts?: number[],
+    options?: Array<options>,
+    contexts?: Array<number>,
     choices?: Array<{ name: string, value: string }>
 }
 export interface optionData {
@@ -460,49 +457,114 @@ export interface BaseInteraction<T> {
     member: memberObject;
     user: userObject;
     app_permissions: string;
-    entitlements: Array<entitlement>;
+    entitlements: Array<{ id: string, sku_id: string, application_id: string, user_id?: string, type: entitlementTypes }>;
     attachment_size_limit: number,
-    message?: messageObject
+    message: messageObject
 }
 export interface AppCommandInteraction {
     type: InteractionType.APPLICATION_COMMAND
     id: string,
     name: string,
-    resolved?: resolvedData,
-    options: optionData[]
-    guild_id?: string,
-    target_id?: string
+    options: Array<optionData>;
+    resolved?: {
+        users?: Record<string, userObject>,
+        members?: Record<string, memberObject>,
+        roles?: Record<string, roleObject>,
+        channels?: Record<string, channelObject>,
+        messages?: Record<string, messageObject>,
+        attachments?: Record<string, {
+            id: string,
+            filename: string,
+            title?: string,
+            description?: string,
+            content_type?: string,
+            size: number,
+            url: string,
+            proxy_url: string,
+            height?: number | null,
+            width?: number | null,
+            ephemeral?: boolean,
+            duration_secs?: number,
+            waveform?: string,
+            flags?: number
+        }>,
+        options: Array<optionData>
+        guild_id?: string,
+        target_id?: string
+    }
 }
 export interface MessageComponentInteraction {
     type: InteractionType.MESSAGE_COMPONENT
-    options?: Array<optionData>,
+    options: Array<optionData>,
     custom_id: string,
     component_type: number,
-    values?: string[],
-    resolved?: resolvedData
-    message: messageObject,
+    values: Array<string>,
+    resolved?: {
+        users?: Record<string, userObject>,
+        members?: Record<string, memberObject>,
+        roles?: Record<string, roleObject>,
+        channels?: Record<string, channelObject>,
+        messages?: Record<string, messageObject>,
+        attachments?: Record<string, {
+            id: string,
+            filename: string,
+            title?: string,
+            description?: string,
+            content_type?: string,
+            size: number,
+            url: string,
+            proxy_url: string,
+            height?: number | null,
+            width?: number | null,
+            ephemeral?: boolean,
+            duration_secs?: number,
+            waveform?: string,
+            flags?: number
+        }>
+    }
 }
-
-type anyResponse = StringSelectResponse
+export interface labelComponent {
+    label: {
+        type: ComponentType.LABEL,
+        id?: number,
+        label: string,
+        description?: string,
+    },
+    component: any
+}
 export interface ModalComponentInteraction {
     type: InteractionType.MODAL_SUBMIT
     custom_id: string,
     values: Array<options>,
-    components: Array<{
-        label: {
-            type: ComponentType.LABEL,
-            id?: number,
-            label: string,
+    components: Array<labelComponent>,
+    resolved?: {
+        users?: Record<string, userObject>,
+        members?: Record<string, memberObject>,
+        roles?: Record<string, roleObject>,
+        channels?: Record<string, channelObject>,
+        messages?: Record<string, messageObject>,
+        attachments?: Record<string, {
+            id: string,
+            filename: string,
+            title?: string,
             description?: string,
-        },
-        component: Exclude<TextInputResponse, anyResponse> | Exclude<StringSelectResponse, anyResponse>,
-    }>,
-    resolved?: resolvedData
+            content_type?: string,
+            size: number,
+            url: string,
+            proxy_url: string,
+            height?: number | null,
+            width?: number | null,
+            ephemeral?: boolean,
+            duration_secs?: number,
+            waveform?: string,
+            flags?: number
+        }>
+    }
 }
 export interface EmbedObject {
     title?: string,
     type?: string,
-    author?: { name: string, avatar?: string | null },
+    author?: { name: string, icon_url?: string | null },
     thumbnail?: { url: string },
     description?: string,
     url?: string,
@@ -529,7 +591,7 @@ export interface AuditLogEntryObject {
 export interface AuditLogObject {
     audit_log_entries: Array<AuditLogEntryObject>
 }
-export interface error {
+export interface Err {
     code: number,
     message: string,
     errors: unknown
