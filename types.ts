@@ -1,6 +1,5 @@
 import { ObjectId } from "mongodb";
 export enum InteractionType { PING = 1, APPLICATION_COMMAND = 2, MESSAGE_COMPONENT = 3, APPLICATION_COMMAND_AUTOCOMPLETE = 4, MODAL_SUBMIT = 5 }
-enum entitlementTypes { PURCHASE = 1, PREMIUM_SUBSCRIPTION = 2, DEVELOPER_GIFT = 3, TEST_MODE_PURCHASE = 4, FREE_PURCHASE = 5, USER_GIFT = 6, PREMIUM_PURCHASE = 7, APPLICATION_SUBSCRIPTION = 8 }
 export enum ComponentType { ACTION_ROW = 1, BUTTON = 2, STRING_SELECT = 3, TEXT_INPUT = 4, USER_SELECT = 5, ROLE_SELECT = 6, MENTIONABLE_SELECT = 7, CHANNEL_SELECT = 8, SECTION = 9, TEXT_DISPLAY = 10, THUMBNAIL = 11, MEDIA_GALLERY = 12, FILE = 13, SEPARATOR = 14, CONTAINER = 17, LABEL = 18, FILE_UPLOAD = 19 }
 export interface userObject {
     id: string,
@@ -109,7 +108,7 @@ export interface guildEmbedIds {
 }
 export interface Button {
     type: ComponentType.BUTTON;
-    custom_id: string;
+    custom_id?: string;
     style: number;
     label: string;
     emoji?: { id?: string; name: string; animated?: boolean };
@@ -256,7 +255,7 @@ export interface messageObject {
         target_message_id?: string,
     },
     thread?: channelObject,
-    components: ActionRow[]
+    components: Array<ActionRow>
     stickers_items?: Array<{
         id: string,
         pack_id?: string,
@@ -434,7 +433,7 @@ export interface options {
     type?: number,
     description: string,
     required?: boolean,
-    default_member_permission?: string
+    default_member_permissions?: string
     options?: Array<options>,
     contexts?: Array<number>,
     choices?: Array<{ name: string, value: string }>
@@ -457,7 +456,7 @@ export interface BaseInteraction<T> {
     member: memberObject;
     user: userObject;
     app_permissions: string;
-    entitlements: Array<{ id: string, sku_id: string, application_id: string, user_id?: string, type: entitlementTypes }>;
+    entitlements: Array<{ id: string, sku_id: string, application_id: string, user_id?: string, type: number }>;
     attachment_size_limit: number,
     message: messageObject
 }
@@ -532,6 +531,22 @@ export interface labelComponent {
     },
     component: any
 }
+export interface AttachmentObject {
+    filename: string,
+    title?: string,
+    description?: string,
+    content_type?: string,
+    size: number,
+    url: string,
+    proxy_url: string,
+    height?: number | null,
+    width?: number | null,
+    ephemeral?: boolean,
+    duration_secs?: number,
+    waveform?: string,
+    flags?: number
+
+}
 export interface ModalComponentInteraction {
     type: InteractionType.MODAL_SUBMIT
     custom_id: string,
@@ -543,22 +558,7 @@ export interface ModalComponentInteraction {
         roles?: Record<string, roleObject>,
         channels?: Record<string, channelObject>,
         messages?: Record<string, messageObject>,
-        attachments?: Record<string, {
-            id: string,
-            filename: string,
-            title?: string,
-            description?: string,
-            content_type?: string,
-            size: number,
-            url: string,
-            proxy_url: string,
-            height?: number | null,
-            width?: number | null,
-            ephemeral?: boolean,
-            duration_secs?: number,
-            waveform?: string,
-            flags?: number
-        }>
+        attachments?: Record<string, AttachmentObject>
     }
 }
 export interface EmbedObject {
@@ -590,6 +590,13 @@ export interface AuditLogEntryObject {
 }
 export interface AuditLogObject {
     audit_log_entries: Array<AuditLogEntryObject>
+}
+export interface Ready {
+    v: 10,
+    user: userObject,
+    guilds: Array<guildObject>,
+    session_id: string,
+    resume_gateway_url: string,
 }
 export interface Err {
     code: number,

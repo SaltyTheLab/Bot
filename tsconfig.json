@@ -1,32 +1,31 @@
 {
     "compilerOptions": {
-        /* Base Options */
-        "target": "es2024",
-        "generateCpuProfile": "profile.cpuprofile",
-        "module": "es2022",
+        "target": "es2025",
+        "moduleDetection": "force",
         "moduleResolution": "bundler",
+        "module": "es2022",
+        "allowImportingTsExtensions": true,
+        "verbatimModuleSyntax": true,
+        "skipLibCheck": true,
+        "noFallthroughCasesInSwitch": true,
+        "noImplicitOverride": true,
         "lib": [
-            "ES2024"
+            "ES2025",
         ],
         "esModuleInterop": true,
         "allowJs": true,
         "checkJs": false,
-        "resolveJsonModule": true,
         "isolatedModules": true,
         "noEmit": true,
         "types": [
-            "bun",
+            "bun"
         ]
     },
     "include": [
-        "**/*.ts",
-        "**/*.js",
-        "ecosystem.config.cjs",
+        "**/*.ts"
     ],
     "exclude": [
-        "node_modules"
-    ],
-    "ts-node": {
-        "compiler": "typescript"
-    }
+        "node_modules",
+        "images"
+    ]
 }
