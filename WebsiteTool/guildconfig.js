@@ -5,7 +5,6 @@ document.addEventListener('DOMContentLoaded', () => {
         guildIdInput: document.getElementById('guildIdInput'),
         modChannelsSection: document.getElementById('modChannelsSection'),
         publicChannelsSection: document.getElementById('publicChannelsSection'),
-        exclusionsSection: document.getElementById('exclusionsSection'),
         mediaexclusionsSection: document.getElementById('mediaexclusionsSection'),
         reactionsSection: document.getElementById('reactionSection'),
         rolesSection: document.getElementById('stringSection'),
@@ -59,10 +58,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     adminChannel: "channel Id here"
                 },
                 publicChannels: {},
-                exclusions: {},
                 mediaexclusions: {},
                 reactions: {},
-                roles: {},
+                staffroles: [],
+                jrrole: "",
                 automodsettings: {
                     Duplicatespamthreshold: 3,
                     mediathreshold: 5,
@@ -78,7 +77,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const sections = {
             modChannels: 'mod',
             publicChannels: 'public',
-            exclusions: 'exclusions',
             mediaexclusions: 'media',
             reactions: 'reaction',
             roles: 'roles',
@@ -208,16 +206,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function getFormValues() {
-        const { guildIdInput, modChannelsSection, publicChannelsSection, mediaexclusionsSection, exclusionsSection, reactionsSection, rolesSection, automodSection } = elements;
+        const { guildIdInput, modChannelsSection, publicChannelsSection, mediaexclusionsSection, reactionsSection, rolesSection, automodSection } = elements;
         const guildId = guildIdInput.value.trim();
         const modChannels = getSectionValues(modChannelsSection, 'mod');
         const publicChannels = getSectionValues(publicChannelsSection, 'public');
-        const exclusions = getSectionValues(exclusionsSection, 'exclusion');
         const mediaexclusions = getSectionValues(mediaexclusionsSection, 'media')
         const reactions = getSectionValues(reactionsSection, 'reaction');
         const strings = getSectionValues(rolesSection, 'role');
         const automodsettings = getSectionValues(automodSection, 'automod');
-        return { guildId, config: { modChannels, publicChannels, exclusions, mediaexclusions, reactions, strings, automodsettings } };
+        return { guildId, config: { modChannels, publicChannels, mediaexclusions, reactions, strings, automodsettings } };
     }
 
     function updateJsonPreview() {
@@ -327,7 +324,6 @@ document.addEventListener('DOMContentLoaded', () => {
     elements.uploadConfigBtn.addEventListener('click', () => elements.fileInput.click());
     elements.fileInput.addEventListener('change', handleFileChange);
     elements.addPublicChannelBtn.addEventListener('click', () => createChannelInput(elements.publicChannelsSection, '', '', 'public'));
-    elements.addExclusionBtn.addEventListener('click', () => createChannelInput(elements.exclusionsSection, '', '', 'exculsion'));
     elements.addMediaBtn.addEventListener('click', () => createChannelInput(elements.mediaexclusionsSection, '', '', 'media'));
     elements.addReactionBtn.addEventListener('click', () => createChannelInput(elements.reactionsSection, '', '', 'reaction'));
     elements.addStringBtn.addEventListener('click', () => createChannelInput(elements.rolesSection, '', '', 'string'));
