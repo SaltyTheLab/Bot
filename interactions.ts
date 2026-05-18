@@ -2,15 +2,12 @@ import { ComponentType, InteractionType, type BaseInteraction, type AppCommandIn
 import { guildconfigs, usersCollection, logos } from "./Database";
 import { get, put, pull, patch, post } from "./rest"
 import { type Document, type WithId, ObjectId } from "mongodb";
-import xpconfigs from "./guildconfiguration"
 import { resolve } from "node:path";
 import punishUser from "./punishUser";
 import sharp from "sharp";
-import { readFile, writeFile, appendFile } from "node:fs/promises";
+import { readFile, appendFile } from "node:fs/promises";
 import { Elysia } from 'elysia'
-import { cors } from '@elysiajs/cors'
 import { staticPlugin } from '@elysiajs/static'
-cors();
 sharp.cache(false);
 const highermodcommands = ['ban', 'unwarn', 'unmute'];
 const publicKey = await crypto.subtle.importKey('raw', Buffer.from('069a7f3ba017ead748bac35f05bb9444b7758f9d9638b0f76d03d515b2b8ec90', 'hex'), { name: 'Ed25519', namedCurve: 'Ed25519' }, false, ['verify'])
@@ -207,13 +204,14 @@ async function handleCommands(body: BaseInteraction<AppCommandInteraction>) {
     }
     else if (name == 'rank') {
         const targetUserId = options ? options[0].value as string : member.user.id;
+        const { baseMultiplier, exponent, flatOffset, roundToNearest } = await guildconfigs.findOne({ guildId: guild_id }, { projection: { baseMultiplier: 1, exponent: 1, flatOffset: 1, roundToNearest: 1 } }) as Document;
         const { level, xp, coins, totalmessages, avatar } = await usersCollection.findOne({ userId: targetUserId, guildId: guild_id }, { projection: { xp: 1, level: 1, coins: 1, totalmessages: 1, joinedTime: 1, avatar: 1 } }) as Document
         const rank = await usersCollection.countDocuments({ guildId: guild_id, $or: [{ level: { $gt: level } }, { level: level, xp: { $gt: xp } }] });
         const targetUser = resolved?.users?.[targetUserId] || member.user;
         const avatarResponse = await fetch(avatar ? `https://cdn.discordapp.com/avatars/${targetUserId}/${avatar}.png?size=128` : `https://cdn.discordapp.com/embed/avatars/${(BigInt(targetUserId) >> 22n) % 6n}.png`);
         const avatarBuffer = Buffer.from(await avatarResponse.arrayBuffer());
         const processedAvatar = await sharp(avatarBuffer).resize(100, 100).composite([{ input: Buffer.from(`<svg><circle cx="50" cy="50" r="50" fill="white" /></svg>`), blend: 'dest-in' }]).png().toBuffer();
-        const xpPercent = xp / xpconfigs[guild_id].xp(level);
+        const xpPercent = xp / (Math.round(((level - 1) ** exponent * baseMultiplier + flatOffset) / roundToNearest) * 20);
         const svgLayer = Buffer.from(`
             <svg width="500" height="150" xmlns="http://www.w3.org/2000/svg">
             <style>
@@ -229,7 +227,7 @@ async function handleCommands(body: BaseInteraction<AppCommandInteraction>) {
             <text x="300" y="35" class="label" text-anchor="middle">Level ${level}</text>
             <text x="440" y="35" class="label" text-anchor="end">Rank #${rank + 1}</text>
             ${Math.max(350 * xpPercent, 25) > 0 ? `<rect x="130" y="85" width="${Math.max(350 * xpPercent, 25)}" height="20" rx="10" fill="#3ba55d" />` : ''}
-            <text x="480" y="75" class="stats" text-anchor="end">${formatXP(xp)} / ${formatXP(xpconfigs[guild_id].xp(level))} xp</text> 
+            <text x="480" y="75" class="stats" text-anchor="end">${formatXP(xp)} / ${formatXP(Math.round(((level - 1) ** exponent * baseMultiplier + flatOffset) / roundToNearest) * 20)} xp</text> 
             <text x="150" y="130" class="profile">Coins: ${coins} | Messages: ${totalmessages}</text>
         </svg>
     `);
@@ -500,10 +498,6 @@ async function handleCommands(body: BaseInteraction<AppCommandInteraction>) {
         })();
         return Response.json({ type: 5 })
 
-    }
-    else if (name == 'restart') {
-        await writeFile('restart.signal', '')
-        return Response.json({ type: 4, data: { embeds: [{ description: 'Restarting the bot...' }] } });
     }
 }
 async function handleModals(body: BaseInteraction<ModalComponentInteraction>) {
@@ -931,10 +925,14 @@ async function authenticate(req: Request) {
             })
         }
     )
+    if (!discordresponse.ok) {
+        console.error("Discord Token Exchange Failed:", await discordresponse.text());
+        return new Response(JSON.stringify({ success: false, error: "Discord authentication failed" }), { status: 400 });
+    }
     const tokenData: any = await discordresponse.json();
     const userResponse = await fetch('https://discord.com/api/v10/users/@me', { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
     const discordUserData: any = await userResponse.json();
-    const discordrole = await fetch(`https://discord.com/api/v10/users/@me/applications/${process.env.CLIENT_ID}/role-connection`, {
+    await fetch(`https://discord.com/api/v10/users/@me/applications/${process.env.CLIENT_ID}/role-connection`, {
         method: "PUT",
         headers: { 'Authorization': `Bearer ${tokenData.access_token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ platform_name: "Twitch", platform_username: username, metadata: { "twitch_linked": 1 } })
@@ -944,10 +942,9 @@ async function authenticate(req: Request) {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ "client_id": `${process.env.TWITCH_ID}`, "client_secret": `${process.env.TWITCH_SECRET}`, "grant_type": 'client_credentials' })
     });
+    if (!response.ok) return new Response(JSON.stringify({ success: false, error: "Twitch auth communication failed" }), { status: 500 });
     const data: any = await response.json();
-    const twitchResponse: Response = await fetch(`https://api.twitch.tv/helix/users?login=${username}`, {
-        headers: { 'Client-ID': process.env.TWITCH_ID, 'Authorization': `Bearer ${data.access_token}` }
-    })
+    const twitchResponse: Response = await fetch(`https://api.twitch.tv/helix/users?login=${username}`, { headers: { 'Client-ID': process.env.TWITCH_ID, 'Authorization': `Bearer ${data.access_token}` } })
     const twitch: any = await twitchResponse.json();
     const found = twitch.data && twitch.data.length > 0;
     if (!found) {
@@ -967,11 +964,8 @@ async function authenticate(req: Request) {
                 "Content-Type": "application/json"
             }
         });
-
-
 }
 const app = new Elysia()
-    .use(cors())
     .use(staticPlugin({ assets: 'public', prefix: '/public' }))
     .post('/interactions', async ({ request }) => { return await handleDiscordInteraction(request); })
     .get('/api/auth/discord/redirect*', async ({ request }) => { return await authenticate(request); })

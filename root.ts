@@ -3,7 +3,6 @@ import { type EmbedObject, type messageObject, type guildEmbedIds, type Invite, 
 import { usersCollection, guildconfigs } from './Database';
 import punishUser from './punishUser';
 import { type Document, type WithId } from 'mongodb';
-import xpconfigs from './guildconfiguration'
 import { client } from './CustomGateway';
 import { get, pull, put, patch, post } from './rest'
 import { appendFile } from 'fs/promises';
@@ -75,9 +74,7 @@ const commands: options[] = [
         name: 'note', description: 'add/show a user\'s notes', default_member_permissions: "1099511627776", contexts: [0], options: [{ name: 'show', description: 'Display a users notes', type: 1, options: [{ name: 'target', description: 'target User', required: true, type: 6 }] }, { name: 'add', description: 'Add note to a user', type: 1, options: [{ name: 'target', description: 'The User', required: true, type: 6 }, { name: 'note', description: 'note to add', required: true, type: 3 }] }]
     },
     { name: 'rank', description: 'See your xp and Level', contexts: [0], type: 1, options: [{ name: 'member', description: 'The Member', type: 6 }] },
-    { name: 'refresh', description: 'Refreshes the Posted embeds', default_member_permissions: "8", contexts: [0] },
-    { name: 'restart', description: 'Restart the bot', default_member_permissions: '8', contexts: [0] },
-    { name: 'link', description: 'link your twitch channel', contexts: [0], options: [{ name: 'channel', description: 'The channel name to link', type: 3, required: true }] }
+    { name: 'refresh', description: 'Refreshes the Posted embeds', default_member_permissions: "8", contexts: [0] }
 ]
 let massban = 0;
 function getComparableEmbed(embedData: EmbedObject) {
@@ -243,7 +240,7 @@ client.on("GUILD_MEMBER_UPDATE", async (member: memberObject) => {
 client.on("GUILD_BAN_ADD", async (ban: { guild_id: string, user: userObject }) => {
     const { user, guild_id } = ban;
     const { Ban } = await guildconfigs.findOne({ guildId: guild_id }, { projection: { ban: 1 } }) as Document
-    if (Ban !== '') { await guildconfigs.updateOne({ guildId: guild_id }, { $set: { ban: '' } }); return; }
+    if (Ban !== '' && Ban === user.id) { await guildconfigs.updateOne({ guildId: guild_id }, { $set: { ban: '' } }); return; }
     else {
         const { modChannels } = await guildconfigs.findOne({ guildId: guild_id }, { projection: { modChannels: 1 } }) as Document
         const auditLog = await get(`guilds/${guild_id}/audit-logs?limit=1&user_id=${user.id}&action_type=22`) as AuditLogObject;
@@ -364,7 +361,7 @@ client.on("MESSAGE_UPDATE", async (newMessage: messageObject) => {
 })
 client.on("MESSAGE_CREATE", async (message: messageObject) => {
     const { id, mention_everyone, guild_id, author, member, content, channel_id, attachments, flags, type, embeds } = message;
-    const { publicChannels, responses, staffroles, jrrole, mediaexclusions, automodsettings, count, lastuser } = await guildconfigs.findOne({ guildId: guild_id }, { projection: { publicChannels: 1, responses: 1, staffroles: 1, jrrole: 1, mediaexclusions: 1, automodsettings: 1, count: 1, lastuser: 1 } }) as Document
+    const { publicChannels, responses, staffroles, jrrole, mediaexclusions, automodsettings, count, lastuser, baseMultiplier, exponent, flatOffset, roundToNearest } = await guildconfigs.findOne({ guildId: guild_id }, { projection: { publicChannels: 1, responses: 1, staffroles: 1, jrrole: 1, mediaexclusions: 1, automodsettings: 1, count: 1, lastuser: 1, baseMultiplier: 1, exponent: 1, flatOffset: 1, roundToNearest: 1 } }) as Document
     if (author.bot == true || !guild_id || type == 20 || type == 7) return;
     if (channel_id == publicChannels.countingChannel) {
         if (!parseInt(content)) return;
@@ -404,7 +401,7 @@ client.on("MESSAGE_CREATE", async (message: messageObject) => {
         }
     }], { upsert: true, returnDocument: 'after', projection: { xp: 1, level: 1, avatar: 1, total: 1, mediaCount: 1, timestamps: 1, duplicateCounts: 1, lastmessage: 1 } }) as WithId<Document>
     const isNewUser = Date.now() - Date.parse(member.joined_at) < 2 * 24 * 60 * 60 * 1000 && level < 3
-    if (xp >= xpconfigs[guild_id].xp(level ? level : 1)) {
+    if (xp >= Math.round(((level - 1) ** exponent * baseMultiplier + flatOffset) / roundToNearest)) {
         const rank = await usersCollection.countDocuments({ guildId: guild_id, $or: [{ level: { $gt: level ? level + 1 : 2 } }, { level: level ? level + 1 : 2, xp: { $gt: xp } }] });
         await post(`channels/${channel_id}/messages`, {
             embeds: [{
@@ -444,6 +441,8 @@ client.on('VOICE_STATE_UPDATE', async (event) => {
     const { guild_id, channel_id, user_id, member } = event;
     const { modChannels } = await guildconfigs.findOne({ guildId: guild_id }, { projection: { modChannels: 1 } }) as Document
     const { vcchannel } = await usersCollection.findOneAndUpdate({ userId: user_id, guildId: guild_id }, { $set: { vcchannel: channel_id } }, { returnDocument: 'before' }) as Document;
+    if (!vcchannel)
+        await usersCollection.insertOne({ userId: user_id, guildId: guild_id, level: 1, coins: 100, xp: 0, totalmessages: 0, punishments: [], notes: [], joinedTime: Date.now(), blacklist: [], avatar: member.user.avatar, total: 0, mediaCount: 0, duplicateCounts: {}, timestamps: [], nick: member.user.username, vcchannel: channel_id })
     if (vcchannel === channel_id) return;
     await post(`channels/${modChannels.voicelogChannel}/messages`, {
         embeds: [{
