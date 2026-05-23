@@ -2,15 +2,10 @@ import { ComponentType, InteractionType, type BaseInteraction, type AppCommandIn
 import { guildconfigs, usersCollection, logos } from "./Database";
 import { get, put, pull, patch, post } from "./rest"
 import { type Document, type WithId, ObjectId } from "mongodb";
-import xpconfigs from "./guildconfiguration"
 import { resolve } from "node:path";
 import punishUser from "./punishUser";
 import sharp from "sharp";
-import { readFile, writeFile, appendFile } from "node:fs/promises";
-import { Elysia } from 'elysia'
-import { cors } from '@elysiajs/cors'
-import { staticPlugin } from '@elysiajs/static'
-cors();
+import { readFile, appendFile } from "node:fs/promises";
 sharp.cache(false);
 const highermodcommands = ['ban', 'unwarn', 'unmute'];
 const publicKey = await crypto.subtle.importKey('raw', Buffer.from('069a7f3ba017ead748bac35f05bb9444b7758f9d9638b0f76d03d515b2b8ec90', 'hex'), { name: 'Ed25519', namedCurve: 'Ed25519' }, false, ['verify'])
@@ -71,7 +66,7 @@ async function buildLogEmbed(targetUser: string, log: WithId<Document>, idx: num
     }
 };
 async function handleCommands(body: BaseInteraction<AppCommandInteraction>) {
-    const { token, guild_id, user, member, data: { options, name, resolved }, member: Rawuser, channel_id, application_id } = body;
+    const { token, guild_id, user, member, data: { options, name }, member: Rawuser, channel_id, application_id } = body;
     const { modChannels, jrrole, staffroles } = await guildconfigs.findOne({ guildId: guild_id }, { projection: { modChannels: 1, publicChannel: 1, staffroles: 1 } }) as Document;
     if (name == 'appeal') {
         const userdata = await usersCollection.find({ userId: Rawuser.user.id }).toArray() as WithId<Document>[]
@@ -207,13 +202,13 @@ async function handleCommands(body: BaseInteraction<AppCommandInteraction>) {
     }
     else if (name == 'rank') {
         const targetUserId = options ? options[0].value as string : member.user.id;
-        const { level, xp, coins, totalmessages, avatar } = await usersCollection.findOne({ userId: targetUserId, guildId: guild_id }, { projection: { xp: 1, level: 1, coins: 1, totalmessages: 1, joinedTime: 1, avatar: 1 } }) as Document
+        const { baseMultiplier, exponent, flatOffset, roundToNearest } = await guildconfigs.findOne({ guildId: guild_id }, { projection: { baseMultiplier: 1, exponent: 1, flatOffset: 1, roundToNearest: 1 } }) as Document;
+        const { level, xp, coins, totalmessages, avatar, nick } = await usersCollection.findOne({ userId: targetUserId, guildId: guild_id }, { projection: { xp: 1, level: 1, coins: 1, totalmessages: 1, joinedTime: 1, avatar: 1, nick: 1 } }) as Document
         const rank = await usersCollection.countDocuments({ guildId: guild_id, $or: [{ level: { $gt: level } }, { level: level, xp: { $gt: xp } }] });
-        const targetUser = resolved?.users?.[targetUserId] || member.user;
         const avatarResponse = await fetch(avatar ? `https://cdn.discordapp.com/avatars/${targetUserId}/${avatar}.png?size=128` : `https://cdn.discordapp.com/embed/avatars/${(BigInt(targetUserId) >> 22n) % 6n}.png`);
         const avatarBuffer = Buffer.from(await avatarResponse.arrayBuffer());
         const processedAvatar = await sharp(avatarBuffer).resize(100, 100).composite([{ input: Buffer.from(`<svg><circle cx="50" cy="50" r="50" fill="white" /></svg>`), blend: 'dest-in' }]).png().toBuffer();
-        const xpPercent = xp / xpconfigs[guild_id].xp(level);
+        const xpPercent = xp / (Math.round(((level - 1) ** exponent * baseMultiplier + flatOffset) / roundToNearest) * 20);
         const svgLayer = Buffer.from(`
             <svg width="500" height="150" xmlns="http://www.w3.org/2000/svg">
             <style>
@@ -225,11 +220,11 @@ async function handleCommands(body: BaseInteraction<AppCommandInteraction>) {
             <rect x="0" y="0" width="500" height="150" rx="16" fill="#2c2f33"/>
             <circle cx="70" cy="75" r="52" stroke="#3ba55d" stroke-width="3" fill="none" />
             <rect x="130" y="85" width="350" height="20" rx="10" fill="#484b4e"/>
-            <text x="130" y="60" class="username">${targetUser.username.slice(0, 15)}${targetUser.username.length > 15 ? '...' : ''}</text>
+            <text x="130" y="60" class="username">${nick.slice(0, 15)}${nick.length > 15 ? '...' : ''}</text>
             <text x="300" y="35" class="label" text-anchor="middle">Level ${level}</text>
             <text x="440" y="35" class="label" text-anchor="end">Rank #${rank + 1}</text>
             ${Math.max(350 * xpPercent, 25) > 0 ? `<rect x="130" y="85" width="${Math.max(350 * xpPercent, 25)}" height="20" rx="10" fill="#3ba55d" />` : ''}
-            <text x="480" y="75" class="stats" text-anchor="end">${formatXP(xp)} / ${formatXP(xpconfigs[guild_id].xp(level))} xp</text> 
+            <text x="480" y="75" class="stats" text-anchor="end">${formatXP(xp)} / ${formatXP(Math.round(((level - 1) ** exponent * baseMultiplier + flatOffset) / roundToNearest) * 20)} xp</text> 
             <text x="150" y="130" class="profile">Coins: ${coins} | Messages: ${totalmessages}</text>
         </svg>
     `);
@@ -501,10 +496,22 @@ async function handleCommands(body: BaseInteraction<AppCommandInteraction>) {
         return Response.json({ type: 5 })
 
     }
-    else if (name == 'restart') {
-        await writeFile('restart.signal', '')
-        return Response.json({ type: 4, data: { embeds: [{ description: 'Restarting the bot...' }] } });
+    else if (name == 'link') {
+        const response = await fetch('https://id.twitch.tv/oauth2/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ "client_id": `${process.env.TWITCH_ID}`, "client_secret": `${process.env.TWITCH_SECRET}`, "grant_type": 'client_credentials' })
+        });
+        if (!response.ok) return Response.json({ type: 4, data: { embeds: [{ description: `twitch api did not respond in time, try again later.` }] } })
+        const data: any = await response.json();
+        const twitchResponse: Response = await fetch(`https://api.twitch.tv/helix/users?login=${options[0].value}`, { headers: { 'Client-ID': process.env.TWITCH_ID!, 'Authorization': `Bearer ${data.access_token}` } })
+        const twitch: any = await twitchResponse.json();
+        if (!twitch.data && twitch.data.length > 0)
+            return Response.json({ type: 4, data: { embeds: [{ description: ` ${twitch.data[0].display_name} not found.` }] } })
+        await usersCollection.findOneAndUpdate({ userId: member.user.id, guildId: guild_id }, { $set: { twitchId: twitch.data[0].id } })
+        return Response.json({ type: 4, data: { embeds: [{ description: `<@${member.user.id}>, your rank is now linked with twitch channel ${twitch.data[0].display_name}` }] } })
     }
+    return new Response('Command not recognized', { status: 400 });
 }
 async function handleModals(body: BaseInteraction<ModalComponentInteraction>) {
     const { guild_id, member: Rawuser, data: { custom_id, components, resolved } } = body;
@@ -899,81 +906,32 @@ async function handleComponents(body: BaseInteraction<MessageComponentInteractio
         })
     }
 }
-async function handleDiscordInteraction(req: Request) {
-    const signature = req.headers.get('x-signature-ed25519');
-    const timestamp = req.headers.get('X-Signature-Timestamp');
-    const rawBody = await req.text()
-    const data = new TextEncoder().encode(timestamp + rawBody);
-    const isValid = await crypto.subtle.verify('Ed25519', publicKey, Buffer.from(signature!, 'hex'), data);
-    if (!isValid) return new Response('Unauthorized', { status: 401 });
-    const body = JSON.parse(rawBody);
-    switch (body.type) {
-        case 1: return Response.json({ type: 1 }); // PING
-        case InteractionType.APPLICATION_COMMAND: return await handleCommands(body);
-        case InteractionType.MESSAGE_COMPONENT: return await handleComponents(body);
-        case InteractionType.MODAL_SUBMIT: return await handleModals(body);
-    }
-};
-async function authenticate(req: Request) {
-    const url = new URL(req.url);
-    const username = url.searchParams.get("username");
-    const code = url.searchParams.get("code")
-    const discordresponse = await fetch(`https://discord.com/api/oauth2/token`,
-        {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({
-                'client_id': `${process.env.CLIENT_ID}`,
-                'client_secret': `${process.env.DISCORD_SECRET}`,
-                'grant_type': 'authorization_code',
-                'code': code,
-                'redirect_uri': 'http://localhost:3000/public/twitchlinked.html'
-            })
-        }
-    )
-    const tokenData: any = await discordresponse.json();
-    const userResponse = await fetch('https://discord.com/api/v10/users/@me', { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
-    const discordUserData: any = await userResponse.json();
-    const discordrole = await fetch(`https://discord.com/api/v10/users/@me/applications/${process.env.CLIENT_ID}/role-connection`, {
-        method: "PUT",
-        headers: { 'Authorization': `Bearer ${tokenData.access_token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ platform_name: "Twitch", platform_username: username, metadata: { "twitch_linked": 1 } })
-    });
-    const response = await fetch('https://id.twitch.tv/oauth2/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ "client_id": `${process.env.TWITCH_ID}`, "client_secret": `${process.env.TWITCH_SECRET}`, "grant_type": 'client_credentials' })
-    });
-    const data: any = await response.json();
-    const twitchResponse: Response = await fetch(`https://api.twitch.tv/helix/users?login=${username}`, {
-        headers: { 'Client-ID': process.env.TWITCH_ID, 'Authorization': `Bearer ${data.access_token}` }
-    })
-    const twitch: any = await twitchResponse.json();
-    const found = twitch.data && twitch.data.length > 0;
-    if (!found) {
-        return new Response(JSON.stringify({ success: false, error: "Twitch channel not found" }), {
-            status: 404,
-            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
-        });
-    }
-    await usersCollection.findOneAndUpdate({ userId: discordUserData.id, guildId: '1231453115937587270' }, { $set: { twitchId: twitch.data[0].id } })
-    return new Response(JSON.stringify(found ? { success: true, displayName: twitch.data[0].display_name } : { success: false, error: "Server Error" }),
-        {
-            status: found ? 200 : 500,
-            headers: {
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "GET, OPTIONS",
-                "Access-Control-Allow-Headers": "Content-Type",
-                "Content-Type": "application/json"
+Bun.serve({
+    port: 3000, routes: {
+        "/interactions": async (req: Request) => {
+            const signature = req.headers.get('x-signature-ed25519');
+            const timestamp = req.headers.get('X-Signature-Timestamp');
+            if (!signature || !timestamp) {
+                return new Response('Missing signature headers', { status: 401 });
             }
-        });
+            const rawBody = await req.text()
+            const data = new TextEncoder().encode(timestamp + rawBody);
+            const isValid = await crypto.subtle.verify('Ed25519', publicKey, Buffer.from(signature, 'hex'), data);
+            if (!isValid) return new Response('Unauthorized', { status: 401 });
+            const body = JSON.parse(rawBody);
+            switch (body.type) {
+                case 1:
+                    return Response.json({ type: 1 }); // PING
+                case InteractionType.APPLICATION_COMMAND:
+                    return await handleCommands(body);
+                case InteractionType.MESSAGE_COMPONENT:
+                    return await handleComponents(body);
+                case InteractionType.MODAL_SUBMIT:
+                    return await handleModals(body);
+                default:
+                    return new Response('Unknown interaction type', { status: 400 });
+            }
+        }
+    }
+})
 
-
-}
-const app = new Elysia()
-    .use(cors())
-    .use(staticPlugin({ assets: 'public', prefix: '/public' }))
-    .post('/interactions', async ({ request }) => { return await handleDiscordInteraction(request); })
-    .get('/api/auth/discord/redirect*', async ({ request }) => { return await authenticate(request); })
-    .get('/public/twitchlinked.html', async ({ request }) => { return await authenticate(request) })
-    .listen(3000)
