@@ -202,13 +202,13 @@ async function handleCommands(body: BaseInteraction<AppCommandInteraction>) {
     }
     else if (name == 'rank') {
         const targetUserId = options ? options[0].value as string : member.user.id;
-        const { baseMultiplier, exponent, flatOffset, roundToNearest } = await guildconfigs.findOne({ guildId: guild_id }, { projection: { baseMultiplier: 1, exponent: 1, flatOffset: 1, roundToNearest: 1 } }) as Document;
         const { level, xp, coins, totalmessages, avatar, nick } = await usersCollection.findOne({ userId: targetUserId, guildId: guild_id }, { projection: { xp: 1, level: 1, coins: 1, totalmessages: 1, joinedTime: 1, avatar: 1, nick: 1 } }) as Document
+        const { exponent, baseMultiplier, flatOffset, roundToNearest } = await guildconfigs.findOne({ guildId: guild_id }, { projection: { exponent: 1, baseMultiplier: 1, flatOffset: 1, roundToNearest: 1 } }) as WithId<Document>;
         const rank = await usersCollection.countDocuments({ guildId: guild_id, $or: [{ level: { $gt: level } }, { level: level, xp: { $gt: xp } }] });
         const avatarResponse = await fetch(avatar ? `https://cdn.discordapp.com/avatars/${targetUserId}/${avatar}.png?size=128` : `https://cdn.discordapp.com/embed/avatars/${(BigInt(targetUserId) >> 22n) % 6n}.png`);
         const avatarBuffer = Buffer.from(await avatarResponse.arrayBuffer());
         const processedAvatar = await sharp(avatarBuffer).resize(100, 100).composite([{ input: Buffer.from(`<svg><circle cx="50" cy="50" r="50" fill="white" /></svg>`), blend: 'dest-in' }]).png().toBuffer();
-        const xpPercent = xp / (Math.round(((level - 1) ** exponent * baseMultiplier + flatOffset) / roundToNearest) * 20);
+        const xpPercent = xp / (Math.round(((level) ** exponent * baseMultiplier + flatOffset) / roundToNearest));
         const svgLayer = Buffer.from(`
             <svg width="500" height="150" xmlns="http://www.w3.org/2000/svg">
             <style>
@@ -224,7 +224,7 @@ async function handleCommands(body: BaseInteraction<AppCommandInteraction>) {
             <text x="300" y="35" class="label" text-anchor="middle">Level ${level}</text>
             <text x="440" y="35" class="label" text-anchor="end">Rank #${rank + 1}</text>
             ${Math.max(350 * xpPercent, 25) > 0 ? `<rect x="130" y="85" width="${Math.max(350 * xpPercent, 25)}" height="20" rx="10" fill="#3ba55d" />` : ''}
-            <text x="480" y="75" class="stats" text-anchor="end">${formatXP(xp)} / ${formatXP(Math.round(((level - 1) ** exponent * baseMultiplier + flatOffset) / roundToNearest) * 20)} xp</text> 
+            <text x="480" y="75" class="stats" text-anchor="end">${formatXP(xp)} / ${formatXP((Math.round(((level) ** exponent * baseMultiplier + flatOffset) / roundToNearest)))} xp</text> 
             <text x="150" y="130" class="profile">Coins: ${coins} | Messages: ${totalmessages}</text>
         </svg>
     `);
@@ -502,16 +502,21 @@ async function handleCommands(body: BaseInteraction<AppCommandInteraction>) {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: new URLSearchParams({ "client_id": `${process.env.TWITCH_ID}`, "client_secret": `${process.env.TWITCH_SECRET}`, "grant_type": 'client_credentials' })
         });
-        if (!response.ok) return Response.json({ type: 4, data: { embeds: [{ description: `twitch api did not respond in time, try again later.` }] } })
         const data: any = await response.json();
-        const twitchResponse: Response = await fetch(`https://api.twitch.tv/helix/users?login=${options[0].value}`, { headers: { 'Client-ID': process.env.TWITCH_ID!, 'Authorization': `Bearer ${data.access_token}` } })
+        const twitchResponse: Response = await fetch(`https://api.twitch.tv/helix/users?login=${options[0].value}`, {
+            headers: { 'Client-ID': process.env.TWITCH_ID, 'Authorization': `Bearer ${data.access_token}` }
+        })
         const twitch: any = await twitchResponse.json();
-        if (!twitch.data && twitch.data.length > 0)
-            return Response.json({ type: 4, data: { embeds: [{ description: ` ${twitch.data[0].display_name} not found.` }] } })
-        await usersCollection.findOneAndUpdate({ userId: member.user.id, guildId: guild_id }, { $set: { twitchId: twitch.data[0].id } })
-        return Response.json({ type: 4, data: { embeds: [{ description: `<@${member.user.id}>, your rank is now linked with twitch channel ${twitch.data[0].display_name}` }] } })
+        const found = twitch.data && twitch.data.length > 0;
+        if (!found) {
+            return new Response(JSON.stringify({ success: false, error: "Twitch channel not found" }), {
+                status: 404,
+                headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+            });
+        }
+        await usersCollection.findOneAndUpdate({ userId: member.user.id, guildId: '1231453115937587270' }, { $set: { twitchId: twitch.data[0].id } })
+        return Response.json({ type: 4, data: { embeds: [{ description: `Rank now linked with ${twitch.data[0].display_name} channel. ` }] } })
     }
-    return new Response('Command not recognized', { status: 400 });
 }
 async function handleModals(body: BaseInteraction<ModalComponentInteraction>) {
     const { guild_id, member: Rawuser, data: { custom_id, components, resolved } } = body;
@@ -908,30 +913,21 @@ async function handleComponents(body: BaseInteraction<MessageComponentInteractio
 }
 Bun.serve({
     port: 3000, routes: {
-        "/interactions": async (req: Request) => {
+        '/interactions': async (req) => {
             const signature = req.headers.get('x-signature-ed25519');
             const timestamp = req.headers.get('X-Signature-Timestamp');
-            if (!signature || !timestamp) {
-                return new Response('Missing signature headers', { status: 401 });
-            }
             const rawBody = await req.text()
             const data = new TextEncoder().encode(timestamp + rawBody);
-            const isValid = await crypto.subtle.verify('Ed25519', publicKey, Buffer.from(signature, 'hex'), data);
+            const isValid = await crypto.subtle.verify('Ed25519', publicKey, Buffer.from(signature!, 'hex'), data);
             if (!isValid) return new Response('Unauthorized', { status: 401 });
             const body = JSON.parse(rawBody);
             switch (body.type) {
-                case 1:
-                    return Response.json({ type: 1 }); // PING
-                case InteractionType.APPLICATION_COMMAND:
-                    return await handleCommands(body);
-                case InteractionType.MESSAGE_COMPONENT:
-                    return await handleComponents(body);
-                case InteractionType.MODAL_SUBMIT:
-                    return await handleModals(body);
-                default:
-                    return new Response('Unknown interaction type', { status: 400 });
+                case 1: return Response.json({ type: 1 }); // PING
+                case InteractionType.APPLICATION_COMMAND: return await handleCommands(body);
+                case InteractionType.MESSAGE_COMPONENT: return await handleComponents(body);
+                case InteractionType.MODAL_SUBMIT: return await handleModals(body);
             }
         }
     }
-})
 
+})
