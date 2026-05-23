@@ -92,9 +92,22 @@ function getComparableEmbed(embedData: EmbedObject) {
         footer: embedData.footer ? { text: normalizeText(embedData.footer.text) } : null
     });
 }
+async function inactiveusers(guildId: string) {
+    const list = await usersCollection.find({ level: 1, totalmessages: 0, guildId: guildId }, { projection: { userId: 1, _id: 0 } }).toArray()
+    const userIds = list.map(doc => doc.userId);
+    for (const userId of userIds) {
+        const member = await get(`/guilds/${guildId}/members/${userId}`) as memberObject
+        if (member && member.roles.length == 0) {
+            await pull(`/guilds/${guildId}/members/${userId}`)
+            await usersCollection.findOneAndDelete({ guildId: guildId, userId: userId })
+            console.log(`${userId} user removed from ${guildId}`)
+        }
+        await Bun.sleep(5000)
+    }
+}
 client.on("READY", async (ready: Ready) => {
     await put(`applications/1420927654701301951/commands`, commands, null, null);
-    await put(`applications/1420927654701301951/role-connections/metadata`, [{ type: 7, key: "twitch_linked", name: "Twitch Linked", description: "Twitch channel is linked" }], null, null)
+    await put(`applications/1420927654701301951/role-connections/metadata`, [], null, null)
     await usersCollection.updateMany(
         { "punishments": { $elemMatch: { "active": 1, "timestamp": { $lt: Date.now() - 24 * 60 * 60 * 1000 } } } },
         { $set: { "punishments.$[elem].active": 0 } },
@@ -102,8 +115,11 @@ client.on("READY", async (ready: Ready) => {
     );
     setInterval(() => client.updateStatus(), 15000)
     appendFile('bot_error.log', 'Febot is awake! \n');
+    Bun.cron("0 0 1 * *", async () => { await inactiveusers('1231453115937587270') })
     const guildIds = ready.guilds.map((guild: guildObject) => (guild.id))
     for (const guildId of guildIds) {
+        if (guildId === "1231453115937587270")
+            await inactiveusers(guildId)
         const guildinvites = await get(`guilds/${guildId}/invites`) as Invite[];
         const invites = guildinvites.map((invite: Invite) => { return { code: invite.code, uses: invite.uses } })
         await guildconfigs.findOneAndUpdate({ guildId: guildId }, { $set: { Invites: invites } }, { upsert: true })
@@ -176,7 +192,7 @@ client.on("GUILD_MEMBER_ADD", async (member: memberObject) => {
         }]
     }) as messageObject;
     if (Date.now() - Number(createdTimestamp) < 172800000) {
-        await pull(`guilds/members/${user.id}`,)
+        await pull(`guilds/${guild_id}/members/${user.id}`)
         await post(`channels/${modChannels.mutelogChannel}/messages`,
             {
                 embeds: [{
@@ -245,6 +261,7 @@ client.on("GUILD_BAN_ADD", async (ban: { guild_id: string, user: userObject }) =
     const { Ban } = await guildconfigs.findOne({ guildId: guild_id }, { projection: { ban: 1 } }) as Document
     if (Ban !== '') { await guildconfigs.updateOne({ guildId: guild_id }, { $set: { ban: '' } }); return; }
     else {
+        massban += 1;
         const { modChannels } = await guildconfigs.findOne({ guildId: guild_id }, { projection: { modChannels: 1 } }) as Document
         const auditLog = await get(`guilds/${guild_id}/audit-logs?limit=1&user_id=${user.id}&action_type=22`) as AuditLogObject;
         const executorId = auditLog.audit_log_entries[0]?.user_id ?? null;
@@ -259,7 +276,8 @@ client.on("GUILD_BAN_ADD", async (ban: { guild_id: string, user: userObject }) =
             timestamp: new Date().toISOString(),
             footer: { text: 'User DMed ✅' }
         }
-        Bun.sleep(massban * 1000)
+        await Bun.sleep(massban * 1000)
+
         try {
             const dmchannel = await post(`users/@me/channels`, { recipient_id: user.id }) as channelObject;
             await post(`channels/${dmchannel.id}/messages`, {
@@ -307,8 +325,8 @@ client.on("MESSAGE_REACTION_ADD", async (reaction: reactionObject) => {
     if (!Data || !Data.some((info: guildEmbedIds) => info.messageId === message_id)) return;
     const roleID = reactions[emoji.id || emoji.name];
     if (!roleID) return;
-    const blacklist = await usersCollection.findOne({ userId: user_id, guildId: guild_id }, { projection: { blacklist: 1 } }) as WithId<Document>
-    if (blacklist.length > 0 && blacklist.find((r: string) => r === roleID)) return;
+    const { blacklist } = await usersCollection.findOne({ userId: user_id, guildId: guild_id }, { projection: { blacklist: 1 } }) as WithId<Document> || {}
+    if (blacklist.length > 0 && blacklist.includes(roleID)) return;
     if (Array.isArray((roleID)))
         await Promise.all(roleID.map(role => put(`guilds/${guild_id}/members/${user_id}/roles/${role}`, null, null, null)));
     else
@@ -320,8 +338,6 @@ client.on("MESSAGE_REACTION_REMOVE", async (reaction: reactionObject) => {
     if (!Data || !Data.some((info: guildEmbedIds) => info.messageId === message_id)) return;
     const roleID = reactions[emoji.id || emoji.name];
     if (!roleID) return;
-    const blacklist = await usersCollection.findOne({ userId: user_id, guildId: guild_id }, { projection: { blacklist: 1 } }) as Document
-    if (blacklist.length > 0 && blacklist.find((r: string) => r === roleID)) return;
     if (Array.isArray(roleID))
         await Promise.all(roleID.map(role => pull(`guilds/${guild_id}/members/${user_id}/roles/${role}`)));
     else
@@ -404,16 +420,16 @@ client.on("MESSAGE_CREATE", async (message: messageObject) => {
         }
     }], { upsert: true, returnDocument: 'after', projection: { xp: 1, level: 1, avatar: 1, total: 1, mediaCount: 1, timestamps: 1, duplicateCounts: 1, lastmessage: 1 } }) as WithId<Document>
     const isNewUser = Date.now() - Date.parse(member.joined_at) < 2 * 24 * 60 * 60 * 1000 && level < 3
-    if (xp >= xpconfigs[guild_id].xp(level ? level : 1)) {
+    if (xp >= (Math.round(((level) ** exponent * baseMultiplier + flatOffset) / roundToNearest))) {
         const rank = await usersCollection.countDocuments({ guildId: guild_id, $or: [{ level: { $gt: level ? level + 1 : 2 } }, { level: level ? level + 1 : 2, xp: { $gt: xp } }] });
         await post(`channels/${channel_id}/messages`, {
             embeds: [{
-                author: { name: `${author.username} you reached level ${level ? level + 1 : 2}!`, icon_url: `https://cdn.discordapp.com/avatars/${author.id}/${author.avatar}.png` },
+                author: { name: `${author.username} you reached level ${parseInt(level) + 1}!`, icon_url: `https://cdn.discordapp.com/avatars/${author.id}/${author.avatar}.png` },
                 color: 0x00AE86,
-                footer: { text: `You are now #${rank} in the server!` }
+                footer: { text: `You are now #${rank + 1} in the server!` }
             }]
         })
-        if (level + 1 > 2 && !member.roles.includes("1334238580914131026") && guild_id == "1231453115937587270")
+        if (parseInt(level) + 1 > 2 && !member.roles.includes("1334238580914131026") && guild_id == "1231453115937587270")
             await put(`guilds/${guild_id}/members/${author.id}/roles/1334238580914131026`, null, null, null)
         await usersCollection.findOneAndUpdate({ userId: author.id, guildId: guild_id }, level ? { $inc: { level: 1 }, $set: { xp: 0 } } : { $set: { level: 1, xp: 0 } });
     }

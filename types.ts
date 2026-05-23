@@ -103,9 +103,7 @@ export interface Punishment {
     guildId: string,
     refrence: string | null
 }
-export interface guildEmbedIds {
-    name: string, messageId: string
-}
+export interface guildEmbedIds { name: string, messageId: string }
 export interface Button {
     type: ComponentType.BUTTON;
     custom_id?: string;
@@ -115,10 +113,7 @@ export interface Button {
     url?: string;
     disabled?: boolean;
 }
-export interface ActionRow {
-    type: ComponentType,
-    components: Array<Button>
-}
+export interface ActionRow { type: ComponentType, components: Array<Button> }
 export interface channelObject {
     id: string,
     type: number,
@@ -438,12 +433,7 @@ export interface options {
     contexts?: Array<number>,
     choices?: Array<{ name: string, value: string }>
 }
-export interface optionData {
-    name: string,
-    type: number,
-    value: number | string,
-    options: optionData[]
-}
+export interface optionData { name: string, type: number, value: number | string, options: optionData[] }
 export interface BaseInteraction<T> {
     id: string;
     type: InteractionType;
@@ -522,15 +512,7 @@ export interface MessageComponentInteraction {
         }>
     }
 }
-export interface labelComponent {
-    label: {
-        type: ComponentType.LABEL,
-        id?: number,
-        label: string,
-        description?: string,
-    },
-    component: any
-}
+export interface labelComponent { label: { type: ComponentType.LABEL, id?: number, label: string, description?: string, }, component: any }
 export interface AttachmentObject {
     filename: string,
     title?: string,
@@ -545,7 +527,6 @@ export interface AttachmentObject {
     duration_secs?: number,
     waveform?: string,
     flags?: number
-
 }
 export interface ModalComponentInteraction {
     type: InteractionType.MODAL_SUBMIT
@@ -588,18 +569,6 @@ export interface AuditLogEntryObject {
     }
     reason?: string
 }
-export interface AuditLogObject {
-    audit_log_entries: Array<AuditLogEntryObject>
-}
-export interface Ready {
-    v: 10,
-    user: userObject,
-    guilds: Array<guildObject>,
-    session_id: string,
-    resume_gateway_url: string,
-}
-export interface Err {
-    code: number,
-    message: string,
-    errors: unknown
-}
+export interface AuditLogObject { audit_log_entries: Array<AuditLogEntryObject> }
+export interface Ready { v: 10, user: userObject, guilds: Array<guildObject>, session_id: string, resume_gateway_url: string, }
+export interface Err { code: number, message: string, errors: unknown }
