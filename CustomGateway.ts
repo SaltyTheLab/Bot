@@ -1,99 +1,85 @@
 import EventEmitter from 'events'
-import { appendFile } from 'fs/promises';
-const now = Date.now()
-interface DataObject {
-    heartbeat_interval?: number,
-    session_id?: string,
-    resume_gateway_url?: string,
-    token?: string,
-    intents?: number,
-    properties?: { os: string, browser: string, device: string },
-    seq?: number,
-    since?: number,
-    activities?: [{ name: string, type: number, created_at: number, timestamps: { start: number } }],
-    status?: string,
-    afk?: boolean
-}
-function getUptime() {
-    const uptimeMs = Date.now() - now;
-    return `${Math.floor(uptimeMs / (1000 * 60 * 60 * 24))}d ${Math.floor((uptimeMs / (1000 * 60 * 60)) % 24)}h ${Math.floor((uptimeMs / (1000 * 60)) % 60)}m ${Math.floor((uptimeMs / 1000) % 60)}s`;
-}
+import { GatewayReceivePayload, GatewayOpcodes, ActivityType, PresenceUpdateStatus, GatewayIdentifyData, GatewayResumeData, GatewayActivity, GatewayPresenceUpdateData } from 'discord-api-types/v10';
 class MyGateway extends EventEmitter {
     private ws!: WebSocket;
     private seq: number = 0;
-    private sessId: string | undefined = '';
-    private resumeUrl: string = '';
-    private interval: Timer | null = null;
-    private ack: boolean = true;
-    constructor() {
-        super();
-        this.connect();
-    }
+    public sessId: string | undefined = '';
+    public resumeUrl: string = '';
+    private interval: Timer | undefined = undefined;
+    private statusInterval: Timer | undefined = undefined;
+    private ack: boolean = false;
+    private readonly startedAt: number = Date.now();
+    constructor() { super(); this.connect(); }
     private connect() {
-        if (this.ws) {
-            this.ws.onopen = this.ws.onclose = this.ws.onmessage = this.ws.onerror = null;
-            try { this.ws.close(); } catch { /* empty */ }
-        }
-        this.ws = new WebSocket(this.sessId !== '' ? this.resumeUrl : 'wss://gateway.discord.gg/?v=10&encoding=json');
-        this.ws.onopen = () => { };
-        this.ws.onmessage = (event) => {
-            const data: { op: number, s: number, t: string, d: DataObject } = JSON.parse(event.data.toString());
-            this.packet(data);
-        };
+        if (this.ws) { this.ws.onopen = this.ws.onclose = this.ws.onmessage = this.ws.onerror = null; this.ws.close(); }
+        this.ws = new WebSocket(this.sessId ? `${this.resumeUrl}/?v=10&encoding=json` : 'wss://gateway.discord.gg/?v=10&encoding=json');
+        this.ws.onmessage = ({ data }) => { this.packet(JSON.parse(data.toString()) as GatewayReceivePayload); };
         this.ws.onclose = (event) => this.reconnect(event.code);
-        this.ws.onerror = (err: Event) => appendFile('bot_error.log', `[WS Error]: ${JSON.stringify(err)}\n`);
+        this.ws.onerror = (err: Event) => console.error(`[WS Error]: ${JSON.stringify(err)}\n`);
     }
-    private packet(pkg: { op: number, s: number, t: string, d: DataObject }) {
+    private packet(pkg: GatewayReceivePayload) {
         const { op, d, s, t } = pkg;
         if (s !== null) this.seq = s;
         switch (op) {
-            case 10: // HELLO
+            case GatewayOpcodes.Hello: // HELLO
                 this.heartbeat(d.heartbeat_interval);
                 this.identify();
                 break;
-            case 11: this.ack = true; // HEARTBEAT ACK
+            case GatewayOpcodes.HeartbeatAck: this.ack = true; // HEARTBEAT ACK
                 break;
-            case 1: this.sendHb(); // HEARTBEAT REQUESTED
+            case GatewayOpcodes.Heartbeat: this.op(GatewayOpcodes.Heartbeat, this.seq); // HEARTBEAT REQUESTED
                 break;
-            case 7: // RECONNECT
-            case 9: // INVALID SESSION
+            case GatewayOpcodes.Reconnect: // RECONNECT
+            case GatewayOpcodes.InvalidSession: // INVALID SESSION
                 if (!d) { this.sessId = ''; this.seq = 0; }
                 this.ws.close(4000);
                 break;
-            case 0: // DISPATCH
-                if (t === 'READY') {
-                    this.sessId = d.session_id;
-                    this.resumeUrl = d.resume_gateway_url || this.resumeUrl;
-                    this.updateStatus();
-                }
+            case GatewayOpcodes.Dispatch: // DISPATCH
                 this.emit(t, d);
                 break;
         }
     }
-    private op(op: number, d: DataObject) { if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ op, d })); }
-    private sendHb() { this.op(1, { seq: this.seq }); }
+    public startStatusLoop() {
+        if (this.statusInterval) clearInterval(this.statusInterval);
+        this.updateStatus();
+        this.statusInterval = setInterval(() => this.updateStatus(), 5000);
+    }
+    private op(op: GatewayOpcodes, d: GatewayIdentifyData | number | GatewayResumeData | GatewayActivity | GatewayPresenceUpdateData) { if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ op, d })); }
     private heartbeat(ms: number | undefined) {
         if (this.interval) clearInterval(this.interval);
         this.ack = true;
-        this.interval = setInterval(() => { if (!this.ack) { appendFile('bot_error.log', '[Gateway] Heartbeat ACK missed. Zombied connection. \n'); return this.ws.close(4000); } this.ack = false; this.sendHb(); }, ms);
+        this.interval = setInterval(() => {
+            if (!this.ack) {
+                console.log('[Gateway] Heartbeat ACK missed. Zombied connection. \n');
+                return this.ws.close(4000);
+            }
+            this.ack = false; this.op(GatewayOpcodes.Heartbeat, this.seq);;
+        }, ms);
     }
     private identify() {
-        if (this.sessId && this.seq !== null) this.op(6, { token: process.env.TOKEN, session_id: this.sessId, seq: this.seq });
-        else this.op(2, { token: process.env.TOKEN, intents: 2 | 4 | 64 | 128 | 512 | 1024 | 32768, properties: { os: 'windows', browser: 'bun', device: 'bot' } });
+        this.sessId ? this.op(GatewayOpcodes.Resume, { token: Bun.env.TOKEN!, session_id: this.sessId, seq: this.seq })
+            : this.op(GatewayOpcodes.Identify, {
+                token: Bun.env.TOKEN!, intents: 34494, properties: { os: 'windows', browser: 'bun', device: 'bot' }, activities: [{
+                    name: `for 0d 0h 0m 0s`, type: ActivityType.Watching,
+                }]
+            });
     }
     private reconnect(code: number) {
-        if (this.interval) clearInterval(this.interval);
-        const sessionInvalidCodes = [4007, 4009];
-        if (sessionInvalidCodes.includes(code)) { this.sessId = ''; this.seq = 0; }
-        const fatal = [4004, 4010, 4011, 4012, 4013, 4014];
-        if (fatal.includes(code)) { appendFile('bot_error.log', `[Gateway] Fatal Error (${code}).\n`); process.exit(1); }
+        clearInterval(this.interval);
+        if (this.statusInterval) clearInterval(this.statusInterval);
+        if ([4007, 4009].includes(code)) { this.sessId = ''; this.seq = 0; }
+        if ([4004, 4010, 4011, 4012, 4013, 4014].includes(code)) return console.error(`Fatal Error (${code}).`), process.exit(1);
         setTimeout(() => this.connect(), 5000);
     }
     public updateStatus() {
-        this.op(3, {
-            since: Date.now(),
-            activities: [{ name: getUptime(), type: 3, created_at: Date.now(), timestamps: { start: Date.now() } }],
-            status: 'online',
+        const uptimeMs = Date.now() - this.startedAt;
+        this.op(GatewayOpcodes.PresenceUpdate, {
+            since: null,
+            activities: [{
+                name: `for ${Math.floor(uptimeMs / (86400000))}d ${Math.floor((uptimeMs / (3600000)) % 24)}h ${Math.floor((uptimeMs / (60000)) % 60)}m ${Math.floor((uptimeMs / 1000) % 60)}s`,
+                type: ActivityType.Watching,
+            }],
+            status: PresenceUpdateStatus.Online,
             afk: false
         })
     }
