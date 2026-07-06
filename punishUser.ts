@@ -21,6 +21,28 @@ const statusMap: Record<string, { cmd: string, log: string, dm: string, color: n
   Mute: { cmd: 'was issued a mute', log: 'muted a member', dm: `you were given a`, color: 0xff4444 },
   Warn: { cmd: 'was issued a warning', log: 'warned a member', dm: `you were given a warning`, color: 0xffcc00 }
 };
+/**
+ * Executes a punishment workflow for a specific user in a guild. 
+ * Combines localized warning-weight scaling, automated fallback duration escalations, 
+ * database logging, automated DM alerts with appeal routing, API execution, and audit-log generation.
+ *
+ * @param {PunishUserOptions} options - Configuration parameters for the punishment execution.
+ * @param {string} options.guildId - The ID of the Discord guild where the incident occurred.
+ * @param {string} options.target - The Discord user ID of the offender.
+ * @param {APIUser} options.moderatorUser - The Discord API user object representing the issuing moderator.
+ * @param {string} options.reason - The descriptive reason for applying the punishment.
+ * @param {string} options.channelId - The ID of the channel where the context/action originated.
+ * @param {number} options.currentWarnWeight - The warning point value assigned to this specific infraction.
+ * @param {boolean} options.isAutomated - Flag indicating if the system's automod or a human triggered the command.
+ * @param {APIInteraction} [options.interaction] - Optional object if executed via a slash command interaction context.
+ * @param {boolean} [options.banflag] - Set to true to explicitly escalate the punishment directly to a Server Ban.
+ * @param {boolean} [options.kick] - Set to true to explicitly escalate the punishment directly to a Server Kick.
+ *
+ * @returns {Promise<any | Response | void>} Returns the initial response message if a slash command interaction was used, otherwise completes execution asynchronously.
+ * * @example
+ * // Triggering an automated warning infraction that scales via predefined guild configurations:
+ * await punishUser({ guildId: "123", target: "456", moderatorUser: modObj, reason: "Spam", ... });
+ */
 export default async function punishUser({ guildId, target, moderatorUser, reason, channelId, currentWarnWeight, isAutomated, interaction, banflag, kick }: PunishUserOptions) {
   const user = await response({ method: "GET", endpoint: `users/${target}` }) as APIUser;
   const { Stages, name, icon, modChannels } = await guildconfigs.findOne({ guildId: guildId }, { projection: { Stages: 1, name: 1, icon: 1, modChannels: 1 } }) as Document
@@ -33,7 +55,7 @@ export default async function punishUser({ guildId, target, moderatorUser, reaso
     : `https://cdn.discordapp.com/embed/avatars/${user.discriminator === "0" ? Number(BigInt(target) >> 22n) % 6 : Number(user.discriminator) % 5}.png`;
 
   let warnType = banflag ? 'Ban' : kick ? 'Kick' : 'Warn';
-  let durationMs = 0, durationStr = '';
+  let durationMs = 0, durationStr = null;
   const stage = Stages[Math.min(totalWarns - 1, Stages.length - 1)];
   if ((interaction && interaction.data.options[0].name === 'Mute') || (warnType === 'Warn' && stage.minutes > 0)) {
     const unitMap: Record<string, number> = { min: 60000, hour: 3600000, day: 86400000 };
@@ -71,7 +93,7 @@ export default async function punishUser({ guildId, target, moderatorUser, reaso
       { name: 'History:', value: caseHistory.join(' | ') || "none", inline: true },
       { name: 'Reason:', value: `\`${reason}\``, inline: false },
       ...(['Ban', 'Kick'].includes(warnType) ? [] : [
-        { name: 'Punishment:', value: `\`${currentWarnWeight} warn\`${durationStr ? `, \`${durationStr}\`` : ''}`, inline: false },
+        { name: 'Punishment:', value: durationStr && interaction ? `\`${durationStr}\`` : `\`${currentWarnWeight} warn\`${durationStr ? `, \`${durationStr}\`` : ''}`, inline: false },
         { name: 'Warns at log time:', value: `\`${activeWarns}\``, inline: false },
         { name: 'Next Punishment:', value: `\`${stage.label}\``, inline: false }
       ])
@@ -79,13 +101,13 @@ export default async function punishUser({ guildId, target, moderatorUser, reaso
     timestamp: new Date().toISOString(),
     footer: { text: 'User DMed ✅' }
   };
-  const dmchannel = await response({ method: "POST", endpoint: `users/@me/channels`, body: { recipient_id: target } }) as APIChannel;
-  if (!dmchannel)
-    logEmbed.footer!.text = 'User DMed 🚫';
-  else
-    await response({
+  const dmchannel = await response({ method: "POST", endpoint: `users/@me/channels`, body: { recipient_id: target } }) as APIChannel | false;
+  let dmFailed = !dmchannel;
+  if (dmchannel) {
+    const dmResult = await response({
       method: "POST",
-      endpoint: `channels/${dmchannel.id}/messages`, body: {
+      endpoint: `channels/${dmchannel.id}/messages`,
+      body: {
         embeds: [{
           color: statusMap[warnType]!.color, author: { name: nick, icon_url: useravatar } as APIEmbedAuthor,
           thumbnail: { url: `https://cdn.discordapp.com/icons/${guildId}/${icon}.png` } as APIEmbedImage,
@@ -93,7 +115,7 @@ export default async function punishUser({ guildId, target, moderatorUser, reaso
           fields: [
             { name: 'Reason:', value: `\`${reason}\``, inline: false },
             ...(['Ban', 'Kick'].includes(warnType) ? [] : [
-              { name: 'Punishment:', value: `\`${currentWarnWeight} warn\`${durationStr ? `, \`${durationStr}\`` : ''}`, inline: false },
+              { name: 'Punishment:', value: durationStr && interaction ? `\`${durationStr}\`` : `\`${currentWarnWeight} warn\`${durationStr ? `, \`${durationStr}\`` : ''}`, inline: false },
               { name: 'Active Warnings:', value: `\`${totalWarns}\``, inline: false },
               { name: 'Warn expires:', value: `<t:${Math.floor((Date.now() + 86400000) / 1000)}:F>` }
             ])
@@ -103,6 +125,9 @@ export default async function punishUser({ guildId, target, moderatorUser, reaso
         components: warnType === 'Ban' ? [{ type: ComponentType.ActionRow, components: [{ type: ComponentType.Button, style: ButtonStyle.Link, label: "Appeal", url: 'https://discord.gg/qMjjyXyYbr' }] }] : undefined,
       } as APIMessage
     });
+    dmFailed = dmResult === false;
+  }
+  logEmbed.footer!.text = dmFailed ? 'User DMed 🚫' : 'User DMed ✅';
   switch (warnType) {
     case 'Ban':
       await guildconfigs.updateOne({ guildId }, { $set: { ban: target } });
