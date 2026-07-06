@@ -1,4 +1,4 @@
-import { guildconfigs, usersCollection, logos } from "./Database";
+import { guildconfigs, usersCollection, logos, ws } from "./Database";
 import { response } from "./rest"
 import { type Document, type WithId, ObjectId } from "mongodb";
 import { InteractionType, ComponentType, type APIApplicationCommandInteraction, type APIEmbed, type APIInteraction, type APIMessageComponent, type APIMessage } from 'discord-api-types/v10'
@@ -6,7 +6,6 @@ import punishUser from "./punishUser";
 import sharp from 'sharp'
 import { InteractionResponseType, MessageFlags, type APIGuild, type APIGuildMember, type APIMessageComponentInteraction, type APIModalSubmitInteraction, type APIUser, type APIApplicationCommandInteractionDataSubcommandOption, type APIActionRowComponent, type APIComponentInMessageActionRow, type APIButtonComponent, type APIChannel, ButtonStyle } from "discord-api-types/payloads";
 import { ed25519 } from '@noble/curves/ed25519.js'
-sharp.cache(true);
 const cooldowns = new Map()
 setInterval(() => {
     for (const [userId, expiresAt] of cooldowns.entries()) {
@@ -76,7 +75,7 @@ async function buildLogEmbed(targetUser: string, log: WithId<Document>, idx: num
 async function handleCommands(body: APIApplicationCommandInteraction) {
     const { token, id, guild_id, member, channel, application_id, data } = body as any;
     const { modChannels, jrrole, staffroles } = await guildconfigs.findOne({ guildId: guild_id }, { projection: { modChannels: 1, publicChannel: 1, staffroles: 1 } }) as Document;
-    const res: { type: InteractionResponseType.ChannelMessageWithSource | InteractionResponseType.Modal | InteractionResponseType.DeferredChannelMessageWithSource, data: any } = { type: InteractionResponseType.ChannelMessageWithSource, data: {} }
+    const res: { type: InteractionResponseType.ChannelMessageWithSource | InteractionResponseType.Modal | InteractionResponseType.DeferredChannelMessageWithSource, data: APIMessage | {} } = { type: InteractionResponseType.ChannelMessageWithSource, data: {} }
     switch (data.name) {
         case 'appeal': {
             const userdata = await usersCollection.find({ userId: member?.user.id }).toArray();
@@ -190,9 +189,9 @@ async function handleCommands(body: APIApplicationCommandInteraction) {
             const avBuf = Buffer.from(await avRes.arrayBuffer());
             const croppedAvatar = await sharp(avBuf).resize(100, 100).composite([{ input: Buffer.from('<svg><circle cx="50" cy="50" r="50" /></svg>'), blend: 'dest-in' }]).png().toBuffer()
             const reqXp = Math.round(((level < 100 ? level : 100) ** exponent * baseMultiplier + flatOffset) / roundToNearest);
-            const rankCardBuffer = await sharp(Buffer.from(`<svg width="500" height="150" xmlns="http://www.w3.org/2000/svg"> <rect width="500" height="150" rx="16" fill="#2c2f33"/><circle cx="70" cy="75" r="52" stroke="#3ba55d" stroke-width="3" fill="none" /> <text x="130" y="60" fill="white" font-size="20" font-family="Arial" font-weight="bold">${nick.slice(0, 15) + (nick.length > 15 ? "..." : "")}</text><text x="300" y="35" fill="white" font-size="16" font-family="Arial" font-weight="bold" text-anchor="middle">Level ${level}</text><text x="440" y="35" fill="white" font-size="16" font-family="Arial" font-weight="bold" text-anchor="end">Rank #${rank + 1}</text><rect x="130" y="85" width="350" height="20" rx="10" fill="#484b4e"/><rect x="130" y="85" width="${Math.min(Math.max(350 * (xp / reqXp), 25), 350)}" height="20" rx="10" fill="#3ba55d"/><text x="480" y="75" fill="#ccc" font-size="16" font-family="Arial" text-anchor="end">${xp} / ${reqXp} xp</text><text x="150" y="130" fill="#ccc" font-size="18" font-family="Arial">Coins: ${coins} | Messages: ${totalmessages}</text></svg>`)).composite([{ input: croppedAvatar, top: 25, left: 20 }]).png().toBuffer();
+            const rankCardBuffer = await sharp(Buffer.from(`<svg width="500" height="150" xmlns="http://www.w3.org/2000/svg"> <rect width="500" height="150" rx="16" fill="#2c2f33"/><circle cx="70" cy="75" r="52" stroke="#3ba55d" stroke-width="3" fill="none" /> <text x="130" y="60" fill="white" font-size="20" font-family="Arial" font-weight="bold">${nick.slice(0, 15) + (nick.length > 15 ? "..." : "")}</text><text x="300" y="35" fill="white" font-size="16" font-family="Arial" font-weight="bold" text-anchor="middle">Level ${level}</text><text x="440" y="35" fill="white" font-size="16" font-family="Arial" font-weight="bold" text-anchor="end">Rank #${rank + 1}</text><rect x="130" y="85" width="350" height="20" rx="10" fill="#484b4e"/><rect x="130" y="85" width="${Math.min(Math.max(350 * (xp / reqXp), 25), 350)}" height="20" rx="10" fill="#3ba55d"/><text x="480" y="75" fill="#ccc" font-size="16" font-family="Arial" text-anchor="end">${xp} / ${reqXp} xp</text><text x="150" y="130" fill="#ccc" font-size="18" font-family="Arial">Coins: ${coins} | Messages: ${totalmessages}</text></svg>`)).composite([{ input: croppedAvatar, top: 25, left: 20 }]).toBuffer();
             const form = new FormData();
-            form.append('files[0]', new Blob([rankCardBuffer], { type: "image/png" }), 'rankcard.png');
+            form.append('files[0]', new Blob([rankCardBuffer as any], { type: "image/png" }), 'rankcard.png');
             form.append('payload_json', JSON.stringify({ type: InteractionResponseType.ChannelMessageWithSource }));
             return new Response(form)
         }
@@ -352,16 +351,18 @@ async function handleCommands(body: APIApplicationCommandInteraction) {
             const target = subcommand.options![0]!.value as string;
             const targetmember = await response({ method: "GET", endpoint: `guilds/${guild_id}/members/${target}` }) as APIGuildMember;
             if (target === member?.user.id) return Response.json({ type: 4, data: { embeds: [{ description: 'You cannot moderate yourself.' }], flags: 64 } });
-            if (targetmember && targetmember.roles.some((r: string) => staffroles.includes(r))) {
-                await response({ method: "POST", endpoint: `channels/${modChannels.adminChannel}/messages`, body: { embeds: [{ description: `${member?.user} tried to moderate <@${target}>.` }] } });
-                res.data = { embeds: [{ description: 'You cannot moderate other staff members.' }], flags: MessageFlags.Ephemeral }
-                break;
-            }
-            if (targetmember && member?.roles.includes(jrrole) && ['ban', 'unwarn', 'unmute'].includes(subcommand.name)) {
+            if (member?.roles.includes(jrrole) && ['ban', 'unwarn', 'unmute'].includes(subcommand.name)) {
                 await response({ method: "POST", endpoint: `channels/${modChannels.adminChannel}/messages`, body: { embeds: [{ description: `Jr. mod ${member?.user} tried to use a mod only command.` }] } });
                 res.data = { embeds: [{ description: 'Jr mods do not have access to this command.' }], flags: MessageFlags.Ephemeral }
                 break;
             }
+
+            if (targetmember && targetmember.roles.some((r: string) => staffroles.includes(r))) {
+                await response({ method: "POST", endpoint: `channels/${modChannels.adminChannel}/messages`, body: { embeds: [{ description: `<@${member?.user.id}> tried to moderate <@${target}>.` }] } });
+                res.data = { embeds: [{ description: 'You cannot moderate other staff members.' }], flags: MessageFlags.Ephemeral }
+                break;
+            }
+
             switch (subcommand.name) {
                 case 'mute': {
                     if (targetmember && (subcommand.options![2]!.value as any) <= 0) {
@@ -394,18 +395,20 @@ async function handleCommands(body: APIApplicationCommandInteraction) {
             return await punishUser({ guildId: guild_id, target: target, moderatorUser: member.user, reason: String(data.options[0].options[1].value), channelId: channel.id, currentWarnWeight: 1, interaction: body, banflag: subcommand.name === 'ban', kick: subcommand.name === 'kick' })
         }
         case 'link': {
-            const tokenRes = await fetch('https://id.twitch.tv/oauth2/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ "client_id": `${Bun.env.TWITCH_ID}`, "client_secret": `${Bun.env.TWITCH_SECRET}`, "grant_type": 'client_credentials' }) });
-            const tToken = await tokenRes.json() as any;
-            const twRes = await fetch(`https://api.twitch.tv/helix/users?login=${data.options[0].value}`, { headers: { 'Client-ID': Bun.env.TWITCH_ID!, 'Authorization': `Bearer ${tToken.access_token}` } });
-            const twitch = await twRes.json() as any;
-            if (!twitch.data?.length) {
-                res.data = { embeds: [{ description: `Twitch channel not found. ` }] }
-                break;
-            }
-            await usersCollection.findOneAndUpdate({ userId: member?.user.id, guildId: '1231453115937587270' }, { $set: { twitchId: twitch.data[0].id } });
-            res.data = { embeds: [{ description: `Rank now linked with ${twitch.data[0].display_name} channel. ` }] }
+            const code = Math.random().toString(36).slice(2, 8).toUpperCase();
+            await usersCollection.updateOne(
+                { userId: member?.user.id, guildId: '1231453115937587270' },
+                { $set: { twitchLinkCode: code, twitchLinkExpires: Date.now() + 10 * 60000 } }
+            );
+            res.data = { embeds: [{ description: `Type \`!verify ${code}\` in Twitch chat within 5 minutes.` }], flags: 64 };
             break;
         }
+        case 'restart':
+            await ws.updateOne({}, { $set: { sessId: null, resumeurl: null } })
+            const botPid = parseInt(await Bun.file("./pid.txt").text())
+            res.data = { embeds: [{ description: "🔄 **Restarting bot..**", color: 0x5865F2 }] };
+            Bun.spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", "C:\\Users\\micha\\Desktop\\Bot\\restart.ps1", "-BotPid", `${botPid}`, "-intpid", `${process.pid}`], { stderr: "pipe", stdout: 'pipe', stdin: 'pipe' })
+            break;
     }
     return Response.json(res)
 }
@@ -484,7 +487,7 @@ async function handleModals(body: APIModalSubmitInteraction) {
         components.forEach((row: any) => {
             const { component } = row
             if (!row.component) return; // Guard clause safety check
-            if (component.type = ComponentType.StringSelect)
+            if (component.type == ComponentType.StringSelect)
                 updates['application.Agerange'] = component.values?.[0];
             if (component.type == ComponentType.TextInput)
                 switch (component.custom_id) {
@@ -531,7 +534,7 @@ async function handleComponents(body: APIMessageComponentInteraction) {
             return Response.json(res)
         }
         if (action === 'reject') await usersCollection.deleteOne({ userId: userId, guildId: guild_id });
-        else { await response({ method: "DELETE", endpoint: `guilds/${guild_id}/bans/${member.user.id}` }); await usersCollection.updateOne({ userId: userId, guildId: guild_id }, { appeals: {} }); }
+        else { await response({ method: "DELETE", endpoint: `guilds/${guild_id}/bans/${userId}` }); await usersCollection.updateOne({ userId: userId, guildId: guild_id }, { $set: { appeals: {} } }); }
         const dm = await response({ method: "POST", endpoint: `users/@me/channels`, body: { recipient_id: userId } }) as any;
         await response({ method: "POST", endpoint: `channels/${dm.id}/messages`, body: { embeds: [{ color: action == 'reject' ? 0x890000 : 0x008900, description: action == 'reject' ? `<@${userId}> your ban appeal has been denied.` : `<@${userId}> your ban appeal has been accepted! click below to rejoin the server!\n\n invite: ${appealInvite}` }] } });
         res.type = InteractionResponseType.UpdateMessage
@@ -684,7 +687,7 @@ async function handleComponents(body: APIMessageComponentInteraction) {
     }
     else if (custom_id.startsWith('verify')) {
         const { joinedTime } = await usersCollection.findOne({ guildId: guild_id, userId: member?.user.id }, { projection: { joinedTime: 1 } }) as Document
-        if (Date.now() - joinedTime < (Math.random() + 2.5 * 1000)) {
+        if (Date.now() - joinedTime < ((Math.random() + 2.5) * 1000)) {
             const channel = await response({ method: "POST", endpoint: `users/@me/channels`, body: { recipients: member?.user.id } as APIChannel })
             await response({
                 method: "POST",
@@ -697,7 +700,6 @@ async function handleComponents(body: APIMessageComponentInteraction) {
             })
             return Response.json({ type: InteractionResponseType.ChannelMessageWithSource, data: { content: `Woah <@${member?.user.id}>, no human can click a button that fast.`, flags: MessageFlags.Ephemeral } as APIMessage })
         }
-
         const av = member?.user.avatar ? `https://cdn.discordapp.com/avatars/${member!.user.id}/${member!.user.avatar}.png` : `https://cdn.discordapp.com/embed/avatars/${parseInt(member!.user.id) % 5}.png`;
         await response({ method: "PUT", endpoint: `guilds/${guild_id}/members/${member!.user.id}/roles/1463354464747524136` });
         await response({ method: "POST", endpoint: `channels/${publicChannels.generalChannel}/messages`, body: { embeds: [{ description: `Everyone, Welcome <@${member?.user.id}> to the server !\n\n`, thumbnail: { url: av }, fields: [{ name: 'Discord Join Date:', value: `<t:${Number(((BigInt(member!.user.id) >> 22n) + 1420070400000n) / 1000n)}>`, inline: true }] }] } as APIMessage });
