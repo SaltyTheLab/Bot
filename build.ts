@@ -1,1 +1,1 @@
-Bun.build({ entrypoints: ['root.ts', 'interactions.ts'], packages: 'external', outdir: './dist', target: 'bun', minify: true, tsconfig: './tsconfig.json', throw: true, env: "inline", sourcemap: "linked" });
+Bun.build({ entrypoints: ['./root.ts', './interactions.ts'], packages: 'external', outdir: './dist', target: 'bun', minify: true, tsconfig: './tsconfig.json', throw: true, env: "inline", sourcemap: "linked", splitting: true });

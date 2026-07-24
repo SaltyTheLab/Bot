@@ -140,3 +140,8 @@ vite.config.ts.timestamp-*
 
 # enviroment 
 .vscode/settings.json
+
+#logging 
+.log
+pid.txt
+interpid.txt
