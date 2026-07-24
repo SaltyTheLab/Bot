@@ -1,11 +1,13 @@
-import { guildconfigs, usersCollection, logos, ws } from "./Database";
+import { guildconfigs, usersCollection, logos } from "./Database";
 import { response } from "./rest"
 import { type Document, type WithId, ObjectId } from "mongodb";
-import { InteractionType, ComponentType, type APIApplicationCommandInteraction, type APIEmbed, type APIInteraction, type APIMessageComponent, type APIMessage } from 'discord-api-types/v10'
 import punishUser from "./punishUser";
 import sharp from 'sharp'
-import { InteractionResponseType, MessageFlags, type APIGuild, type APIGuildMember, type APIMessageComponentInteraction, type APIModalSubmitInteraction, type APIUser, type APIApplicationCommandInteractionDataSubcommandOption, type APIActionRowComponent, type APIComponentInMessageActionRow, type APIButtonComponent, type APIChannel, ButtonStyle } from "discord-api-types/payloads";
 import { ed25519 } from '@noble/curves/ed25519.js'
+import { StatusCodes } from "http-status-codes";
+import { appendFile } from "node:fs/promises";
+import { type APIChatInputApplicationCommandInteraction, type APIMessageComponentInteraction, InteractionType, ComponentType, type APIEmbed, type APIInteraction, type APIMessageComponent, type APIMessage, InteractionResponseType, MessageFlags, type APIGuild, type APIGuildMember, type APIModalSubmitInteraction, type APIUser, type APIApplicationCommandInteractionDataSubcommandOption, type APIActionRowComponent, type APIComponentInMessageActionRow, type APIButtonComponent, type APIChannel, ButtonStyle } from "discord.js";
+await Bun.write("./interpid.txt", String(process.pid))
 const cooldowns = new Map()
 setInterval(() => {
     for (const [userId, expiresAt] of cooldowns.entries()) {
@@ -72,9 +74,9 @@ async function buildLogEmbed(targetUser: string, log: WithId<Document>, idx: num
         footer: { text: `Staff: ${moderator.username} | log ${idx + 1} of ${totalLogs} | ${formattedDate} `, icon_url: `https://cdn.discordapp.com/avatars/${log.moderatorId}/${moderator.avatar}.png` }
     } as APIEmbed
 };
-async function handleCommands(body: APIApplicationCommandInteraction) {
+async function handleCommands(body: APIChatInputApplicationCommandInteraction) {
     const { token, id, guild_id, member, channel, application_id, data } = body as any;
-    const { modChannels, jrrole, staffroles } = await guildconfigs.findOne({ guildId: guild_id }, { projection: { modChannels: 1, publicChannel: 1, staffroles: 1 } }) as Document;
+    const { modChannels, staffroles } = await guildconfigs.findOne({ guildId: guild_id }, { projection: { modChannels: 1, publicChannel: 1, staffroles: 1 } }) as Document;
     const res: { type: InteractionResponseType.ChannelMessageWithSource | InteractionResponseType.Modal | InteractionResponseType.DeferredChannelMessageWithSource, data: APIMessage | {} } = { type: InteractionResponseType.ChannelMessageWithSource, data: {} }
     switch (data.name) {
         case 'appeal': {
@@ -90,7 +92,6 @@ async function handleCommands(body: APIApplicationCommandInteraction) {
             };
             const opts = Array.from(seenGuilds).map(([id, gName]) => ({ label: gName, value: id }));
             if (!opts.length) {
-
                 res.data = { content: "I couldn't find any entries", flags: 64 }
                 return Response.json(res)
             }
@@ -185,7 +186,7 @@ async function handleCommands(body: APIApplicationCommandInteraction) {
             const { level, xp, coins, avatar, totalmessages, nick } = await usersCollection.findOne({ userId: targetUserId, guildId: guild_id }, { projection: { level: 1, xp: 1, coins: 1, avatar: 1, totalmessages: 1, nick: 1 } }) as Document;
             const { exponent, baseMultiplier, roundToNearest, flatOffset } = await guildconfigs.findOne({ guildId: guild_id }, { projection: { exponent: 1, baseMultiplier: 1, roundToNearest: 1, flatOffset: 1 } }) as any;
             const rank = await usersCollection.countDocuments({ guildId: guild_id, $or: [{ level: { $gt: level } }, { level: level, xp: { $gt: xp } }] });
-            const avRes = await fetch(avatar ? `https://cdn.discordapp.com/avatars/${targetUserId}/${avatar}.png?size=64` : `https://cdn.discordapp.com/embed/avatars/${(BigInt(targetUserId) >> 22n) % 6n}.png`);
+            const avRes = await response({ method: "GET", endpoint: avatar ?? `https://cdn.discordapp.com/embed/avatars/${(BigInt(targetUserId) >> 22n) % 6n}.png` });
             const avBuf = Buffer.from(await avRes.arrayBuffer());
             const croppedAvatar = await sharp(avBuf).resize(100, 100).composite([{ input: Buffer.from('<svg><circle cx="50" cy="50" r="50" /></svg>'), blend: 'dest-in' }]).png().toBuffer()
             const reqXp = Math.round(((level < 100 ? level : 100) ** exponent * baseMultiplier + flatOffset) / roundToNearest);
@@ -228,7 +229,6 @@ async function handleCommands(body: APIApplicationCommandInteraction) {
         case 'apply': {
             const { application } = await usersCollection.findOne({ userId: member?.user.id, guildId: guild_id }, { projection: { application: 1 } }) as any;
             if (application?.Activity) {
-
                 res.data = { content: 'Already Completed. Click the button below to continue.', components: [{ type: 1, components: [{ type: 2, custom_id: 'next_modal_two', label: 'skip Part 1', style: 1 }] }], flags: 64 }
                 break;
             }
@@ -249,7 +249,6 @@ async function handleCommands(body: APIApplicationCommandInteraction) {
         case 'leaderboard': {
             const board = await usersCollection.find({ guildId: guild_id }).limit(10).sort({ level: -1, xp: -1 }).toArray();
             const guild = await response({ method: "GET", endpoint: `guilds/${guild_id}` }) as APIGuild;
-
             res.data = {
                 embeds: [{
                     title: `Most active in ${guild.name}`, thumbnail: { url: `https://cdn.discordapp.com/icons/${guild_id}/${guild.icon}.png` }, color: 0x0c23a3,
@@ -350,45 +349,51 @@ async function handleCommands(body: APIApplicationCommandInteraction) {
             const subcommand: APIApplicationCommandInteractionDataSubcommandOption = data.options[0];
             const target = subcommand.options![0]!.value as string;
             const targetmember = await response({ method: "GET", endpoint: `guilds/${guild_id}/members/${target}` }) as APIGuildMember;
-            if (target === member?.user.id) return Response.json({ type: 4, data: { embeds: [{ description: 'You cannot moderate yourself.' }], flags: 64 } });
-            if (member?.roles.includes(jrrole) && ['ban', 'unwarn', 'unmute'].includes(subcommand.name)) {
+            if (target === member?.user.id) {
+                res.data = { embeds: [{ description: 'You cannot moderate yourself.' }], flags: MessageFlags.Ephemeral }
+                break;
+            }
+            else if (member?.roles.includes(staffroles[2]) && ['ban', 'unwarn', 'unmute'].includes(subcommand.name)) {
                 await response({ method: "POST", endpoint: `channels/${modChannels.adminChannel}/messages`, body: { embeds: [{ description: `Jr. mod ${member?.user} tried to use a mod only command.` }] } });
                 res.data = { embeds: [{ description: 'Jr mods do not have access to this command.' }], flags: MessageFlags.Ephemeral }
                 break;
             }
 
-            if (targetmember && targetmember.roles.some((r: string) => staffroles.includes(r))) {
+            else if (targetmember && targetmember.roles.some((r: string) => staffroles.includes(r))) {
                 await response({ method: "POST", endpoint: `channels/${modChannels.adminChannel}/messages`, body: { embeds: [{ description: `<@${member?.user.id}> tried to moderate <@${target}>.` }] } });
                 res.data = { embeds: [{ description: 'You cannot moderate other staff members.' }], flags: MessageFlags.Ephemeral }
                 break;
             }
-
-            switch (subcommand.name) {
-                case 'mute': {
-                    if (targetmember && (subcommand.options![2]!.value as any) <= 0) {
-                        res.data = { embeds: [{ description: '❌ Invalid duration' }] };
-                        break;
-                    }
-                    if (targetmember && targetmember.communication_disabled_until) {
-                        res.data = { embeds: [{ description: '⚠️ User is already muted.' }] }
-                        break;
-                    }
+            else if (targetmember && targetmember.user.bot) {
+                res.data = { embeds: [{ description: `You cannot moderate bots.` }], flags: 64 };
+                break;
+            }
+            if (subcommand.name === 'mute') {
+                if (targetmember && (subcommand.options![2]!.value as any) <= 0) {
+                    res.data = { embeds: [{ description: '❌ Invalid duration' }] };
+                    break;
+                } else if (targetmember && targetmember.communication_disabled_until) {
+                    res.data = { embeds: [{ description: '⚠️ User is already muted.' }] }
                     break;
                 }
-                case 'unwarn': {
-                    const { punishments } = await usersCollection.findOne({ userId: target, guildId: guild_id }, { projection: { punishments: 1 } }) as any;
-                    const lastWarn = punishments?.filter((w: any) => w.type === 'Warn').pop();
-                    if (!lastWarn) { res.data = { embeds: [{ description: `no warns found for <@${target}>` }] }; break; }
+            } else if (subcommand.name === 'unwarn') {
+                const { punishments } = await usersCollection.findOne({ userId: target, guildId: guild_id }, { projection: { punishments: 1 } }) as any;
+                const lastWarn = punishments?.filter((w: any) => w.type === 'Warn').pop();
+                if (!lastWarn) {
+                    res.data = { embeds: [{ description: `no warns found for <@${target}>` }] };
+                    break;
+                } else {
                     await usersCollection.findOneAndUpdate({ userId: target, guildId: guild_id }, { $pull: { punishments: { _id: lastWarn._id } as any } });
                     res.data = { embeds: [{ color: 0x00a900, description: `recent warn removed from <@${target}>` }] }
                     break;
                 }
-                case 'unmute': {
-                    if (targetmember && targetmember.communication_disabled_until) {
-                        await response({ method: "PATCH", endpoint: `guilds/${guild_id}/members/${target}`, body: { communicationDisabledUntilTimestamp: null } });
-                        res.data = { embeds: [{ color: 0x00a900, description: `<@${target}> was unmuted.` }] }
-                    } else if (targetmember && targetmember.user.bot)
-                        res.data = { embeds: [{ description: `You cannot moderate bots.` }], flags: 64 };
+            } else if (subcommand.name === 'unmute') {
+                if (targetmember && targetmember.communication_disabled_until) {
+                    await response({ method: "PATCH", endpoint: `guilds/${guild_id}/members/${target}`, body: { communication_disabled_until: null } as APIGuildMember });
+                    res.data = { embeds: [{ color: 0x00a900, description: `<@${target}> was unmuted.` }] }
+                    break;
+                } else {
+                    res.data = { embeds: [{ description: `<@${target}> is not muted.` }], flags: 64 };
                     break;
                 }
             }
@@ -400,11 +405,10 @@ async function handleCommands(body: APIApplicationCommandInteraction) {
                 { userId: member?.user.id, guildId: '1231453115937587270' },
                 { $set: { twitchLinkCode: code, twitchLinkExpires: Date.now() + 10 * 60000 } }
             );
-            res.data = { embeds: [{ description: `Type \`!verify ${code}\` in Twitch chat within 5 minutes.` }], flags: 64 };
+            res.data = { embeds: [{ description: `Type \`!verify ${code}\` in Twitch chat within 10 minutes.` }], flags: 64 };
             break;
         }
         case 'restart':
-            await ws.updateOne({}, { $set: { sessId: null, resumeurl: null } })
             const botPid = parseInt(await Bun.file("./pid.txt").text())
             res.data = { embeds: [{ description: "🔄 **Restarting bot..**", color: 0x5865F2 }] };
             Bun.spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", "C:\\Users\\micha\\Desktop\\Bot\\restart.ps1", "-BotPid", `${botPid}`, "-intpid", `${process.pid}`], { stderr: "pipe", stdout: 'pipe', stdin: 'pipe' })
@@ -513,11 +517,11 @@ async function handleModals(body: APIModalSubmitInteraction) {
 async function handleComponents(body: APIMessageComponentInteraction) {
     const res: { type: InteractionResponseType, data: any } = { type: InteractionResponseType.Pong, data: {} }
     const { token, guild_id, member, data: { custom_id }, channel, application_id, message } = body
-    const { modChannels, appealInvite, jrrole, staffroles, publicChannels } = await guildconfigs.findOne({ guildId: guild_id }, { projection: { modChannels: 1, jrrole: 1, staffroles: 1, appealInvite: 1, publicChannels: 1 } }) as Document
+    const { modChannels, appealInvite, staffroles, generalchannels } = await guildconfigs.findOne({ guildId: guild_id }, { projection: { modChannels: 1, staffroles: 1, appealInvite: 1, generalchannels: 1 } }) as Document
     const isAdmin = (BigInt(member!.permissions || 0n) & 8n) !== 0n;
     if (custom_id.startsWith('ban_')) {
         const [, targetId, inviteCode] = custom_id.split('_');
-        if (member?.roles.includes(jrrole)) return Response.json({ type: 4, data: { content: 'jrs cannot use this button.', flags: 64 } });
+        if (member?.roles.includes(staffroles[2])) return Response.json({ type: 4, data: { content: 'jrs cannot use this button.', flags: 64 } });
         await punishUser({ guildId: guild_id!, target: targetId!, moderatorUser: member!.user, reason: "troll", channelId: channel.id, interaction: body, currentWarnWeight: 1, banflag: true })
         if (inviteCode !== 'none') await response({ method: "DELETE", endpoint: `invites/${inviteCode}` });
         await response({ method: "PATCH", endpoint: `channels/${channel.id}/messages/${message.id}`, body: { components: [{ type: 1, components: [{ type: 2, custom_id: 'expired', label: inviteCode !== 'none' ? '🔨 Banned & Invite Deleted!' : '🔨 Banned!', style: 4, disabled: true }] }] } });
@@ -656,7 +660,7 @@ async function handleComponents(body: APIMessageComponentInteraction) {
         });
         if (guess === logo) await usersCollection.findOneAndUpdate({ userId: member?.user.id, guildId: guild_id }, { $inc: { coins: 20 } });
         res.type = InteractionResponseType.UpdateMessage
-        res.data = { components: [{ type: 1, components: updated }] }
+        res.data = { components: [{ type: ComponentType.ActionRow, components: updated }] }
     }
     else if (custom_id.startsWith('tictactoe')) {
         const [, boardStr, player1, player2, currentplayer, index] = custom_id.split('-');
@@ -686,8 +690,8 @@ async function handleComponents(body: APIMessageComponentInteraction) {
         res.data = { embeds: [{ title: won ? "You Won! 🎉" : "You Lost! 💀", color: won ? 0xc79c0f : 0x870000, description: `The number was **${secret}**.\n(Guess was ${choice} than ${start})` }], components: [] }
     }
     else if (custom_id.startsWith('verify')) {
-        const { joinedTime } = await usersCollection.findOne({ guildId: guild_id, userId: member?.user.id }, { projection: { joinedTime: 1 } }) as Document
-        if (Date.now() - joinedTime < ((Math.random() + 2.5) * 1000)) {
+        const joinedTime = await usersCollection.findOne({ guildId: guild_id, userId: member?.user.id }, { projection: { joinedTime: 1 } }) as Document
+        if (Date.now() - joinedTime.joinedTime < ((Math.random() + 5) * 1000)) {
             const channel = await response({ method: "POST", endpoint: `users/@me/channels`, body: { recipients: member?.user.id } as APIChannel })
             await response({
                 method: "POST",
@@ -698,27 +702,299 @@ async function handleComponents(body: APIMessageComponentInteraction) {
                     }]
                 } as APIMessage
             })
-            return Response.json({ type: InteractionResponseType.ChannelMessageWithSource, data: { content: `Woah <@${member?.user.id}>, no human can click a button that fast.`, flags: MessageFlags.Ephemeral } as APIMessage })
+            await response({ method: "DELETE", endpoint: `guilds/${guild_id}/members/${member?.user.id}` })
+            return;
         }
         const av = member?.user.avatar ? `https://cdn.discordapp.com/avatars/${member!.user.id}/${member!.user.avatar}.png` : `https://cdn.discordapp.com/embed/avatars/${parseInt(member!.user.id) % 5}.png`;
         await response({ method: "PUT", endpoint: `guilds/${guild_id}/members/${member!.user.id}/roles/1463354464747524136` });
-        await response({ method: "POST", endpoint: `channels/${publicChannels.generalChannel}/messages`, body: { embeds: [{ description: `Everyone, Welcome <@${member?.user.id}> to the server !\n\n`, thumbnail: { url: av }, fields: [{ name: 'Discord Join Date:', value: `<t:${Number(((BigInt(member!.user.id) >> 22n) + 1420070400000n) / 1000n)}>`, inline: true }] }] } as APIMessage });
+        await response({ method: "POST", endpoint: `channels/${generalchannels[0]}/messages`, body: { embeds: [{ description: `Everyone, Welcome <@${member?.user.id}> to the server !\n\n`, thumbnail: { url: av }, fields: [{ name: 'Discord Join Date:', value: `<t:${Number(((BigInt(member!.user.id) >> 22n) + 1420070400000n) / 1000n)}>`, inline: true }] }] } as APIMessage });
         res.type = InteractionResponseType.ChannelMessageWithSource
         res.data = { content: `Welcome to the cave <@${member?.user.id}>!!`, flags: 64 }
     }
     return Response.json(res)
 }
+const corsHeaders = {
+    "Access-Control-Allow-Origin": Bun.env.CONFIGURATOR_ORIGIN!,
+    "Access-Control-Allow-Methods": "GET, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Credentials": "true",
+};
+
+// --- Sessions & OAuth state (in-memory; fine for a low-traffic admin tool) ---
+const sessions = new Map<string, { userId: string; expires: number }>();
+const oauthStates = new Map<string, number>();
+setInterval(() => {
+    const now = Date.now();
+    for (const [id, s] of sessions) if (s.expires < now) sessions.delete(id);
+    for (const [state, expires] of oauthStates) if (expires < now) oauthStates.delete(state);
+}, 60_000);
+
+function randomToken() {
+    return crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
+}
+function parseCookies(req: Request): Record<string, string> {
+    const header = req.headers.get("cookie") || "";
+    const out: Record<string, string> = {};
+    for (const pair of header.split(";")) {
+        const idx = pair.indexOf("=");
+        if (idx === -1) continue;
+        out[pair.slice(0, idx).trim()] = decodeURIComponent(pair.slice(idx + 1).trim());
+    }
+    return out;
+}
+function getSession(req: Request) {
+    const sid = parseCookies(req)["session"];
+    if (!sid) return null;
+    const session = sessions.get(sid);
+    if (!session || session.expires < Date.now()) { sessions.delete(sid); return null; }
+    return session;
+}
+function roleFromStaffroles(userId: string, memberRoles: string[] | null, staffroles?: string[], ownerId?: string): "admin" | "mod" | null {
+    if (ownerId && userId === ownerId) return "admin"; // guild owner always has admin access, even before staffroles are configured
+    if (!memberRoles || !staffroles || staffroles.length < 2) return null;
+    const [adminRoleId, modRoleId] = staffroles;
+    if (memberRoles.includes(adminRoleId!)) return "admin";
+    if (memberRoles.includes(modRoleId!)) return "mod";
+    return null;
+}
+async function fetchMemberRoles(userId: string, guildId: string): Promise<string[] | null> {
+    try {
+        const member = await response({ method: "GET", endpoint: `guilds/${guildId}/members/${userId}` }) as APIGuildMember;
+        return member.roles;
+    } catch {
+        return null; // not a member of that guild (or guild/user not found)
+    }
+}
+const CONFIGURATOR_MANAGED_KEYS = ["modChannels", "publicChannels", "generalchannels", "reactions", "automodsettings", "responses", "staffroles", "reasonsandweights", "Stages", "messageConfigs"] as const;
+
 Bun.serve({
     port: 3000,
     websocket: { open() { }, message() { }, close() { } },
     routes: {
+        "/": () => new Response(Bun.file("./public/index.html")),
+        "/guildconfig.js": () => new Response(Bun.file("./public/guildconfig.js"), { headers: { "Content-Type": "application/javascript" } }),
+        "/favicon.ico": () => new Response(null, { status: 204 }),
+        "/output.css": () => new Response(Bun.file("./public/output.css"), { headers: { "Content-Type": "text/css" } }),
+        "/api/auth/discord/login": () => {
+            const state = randomToken();
+            oauthStates.set(state, Date.now() + 5 * 60 * 1000);
+            const params = new URLSearchParams({
+                client_id: Bun.env.CLIENT_ID!,
+                redirect_uri: Bun.env.DISCORD_REDIRECT_URI!,
+                response_type: "code",
+                scope: "identify",
+                state,
+            });
+            return new Response(null, { status: StatusCodes.MOVED_TEMPORARILY, headers: { Location: `https://discord.com/oauth2/authorize?${params}` } });
+        },
+        "/api/auth/discord/redirect": async (req) => {
+            const url = new URL(req.url);
+            const code = url.searchParams.get("code");
+            const state = url.searchParams.get("state");
+            if (!code || !state || !oauthStates.has(state)) return new Response("Invalid or expired OAuth state", { status: StatusCodes.BAD_REQUEST });
+            oauthStates.delete(state);
+            const tokenRes = await fetch("https://discord.com/api/oauth2/token", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: new URLSearchParams({
+                    client_id: Bun.env.CLIENT_ID!,
+                    client_secret: Bun.env.DISCORD_SECRET!,
+                    grant_type: "authorization_code",
+                    code,
+                    redirect_uri: Bun.env.DISCORD_REDIRECT_URI!,
+                }),
+            });
+            if (!tokenRes.ok) return new Response("OAuth token exchange failed", { status: 502 });
+            const { access_token } = await tokenRes.json() as { access_token: string };
+
+            const userRes = await fetch("https://discord.com/api/users/@me", { headers: { Authorization: `Bearer ${access_token}` } });
+            if (!userRes.ok) return new Response("Failed to fetch Discord user", { status: StatusCodes.BAD_GATEWAY });
+            const discordUser = await userRes.json() as { id: string; username: string };
+
+            const sessionId = randomToken();
+            sessions.set(sessionId, { userId: discordUser.id, expires: Date.now() + 24 * 60 * 60 * 1000 });
+            return new Response(null, {
+                status: 302,
+                headers: {
+                    Location: "/",
+                    "Set-Cookie": `session=${sessionId}; HttpOnly; Path=/; Max-Age=86400; SameSite=Lax`,
+                },
+            });
+        },
+        "/api/discord/users/:userId": {
+            OPTIONS: () => new Response(null, { headers: corsHeaders }),
+            GET: async (req) => {
+                const session = getSession(req);
+                if (!session) return Response.json({ error: "Not logged in" }, { status: StatusCodes.UNAUTHORIZED, headers: corsHeaders });
+                const { userId } = req.params;
+                try {
+                    const user = await response({ method: "GET", endpoint: `users/${userId}` }) as APIUser;
+                    return Response.json(
+                        { id: user.id, username: user.username, globalName: user.global_name ?? null, avatar: user.avatar },
+                        { headers: { ...corsHeaders, "Cache-Control": "private, max-age=3600" } }
+                    );
+                } catch {
+                    return Response.json({ error: "Could not resolve user" }, { status: StatusCodes.NOT_FOUND, headers: corsHeaders });
+                }
+            }
+        },
+        "/api/auth/discord/bot-redirect": async (req) => {
+            const url = new URL(req.url)
+            const guildId = url.searchParams.get('guild_id')
+            const guild = await response({ method: "GET", endpoint: `guilds/${guildId}` }) as APIGuild;
+            await guildconfigs.updateOne(
+                { guildId: guild.id },
+                {
+                    $setOnInsert: {
+                        guildId: guild.id,
+                        name: guild.name,
+                        icon: guild.icon,
+                        modChannels: {
+                            mutelogChannel: "", deletedlogChannel: "", welcomeChannel: "", updatedlogChannel: "",
+                            namelogChannel: "", banlogChannel: "", appealChannel: "", applicationChannel: "",
+                            adminChannel: "", applyChannel: "", voicelogChannel: ""
+                        },
+                        publicChannels: {},
+                        generalchannels: [],
+                        ownerId: guild.owner_id,
+                        reactions: {},
+                        automodsettings: { Duplicatespamthreshold: 3, mediathreshold: 1, messagethreshold: 10, spamthreshold: 4, capsthreshold: 0.7 },
+                        responses: {},
+                        staffroles: [],
+                        Invites: [],
+                        Data: [],
+                        count: 0,
+                        lastuser: "",
+                        appealInvite: "https://discord.gg/xpYnPrSXDG",
+                        messageConfigs: {},
+                        baseMultiplier: 0,
+                        exponent: 0,
+                        flatOffset: 0,
+                        roundToNearest: 0,
+                        reasonsandweights: {},
+                        Stages: [],
+                        Ban: ""
+                    }
+                },
+                { upsert: true }
+            );
+            appendFile("./log.log", `Created default config for new guild ${guild.id}`);
+            return new Response(null, { status: StatusCodes.MOVED_TEMPORARILY, headers: { Location: "/" }, });
+        },
+        "/api/guilds/:guildId/automod-rules": {
+            GET: async (req) => {
+                const session = getSession(req);
+                if (!session) return Response.json({ error: "Not logged in" }, { status: 401, headers: corsHeaders });
+                const { guildId } = req.params;
+
+                const doc = await guildconfigs.findOne({ guildId }, { projection: { staffroles: 1, ownerId: 1 } });
+                if (!doc) return Response.json({ error: "Not found" }, { status: StatusCodes.NOT_FOUND, headers: corsHeaders });
+                const memberRoles = await fetchMemberRoles(session.userId, guildId);
+                const role = roleFromStaffroles(session.userId, memberRoles, doc.staffroles as string[] | undefined, doc.ownerId as string | undefined);
+                if (!role) return Response.json({ error: "Forbidden" }, { status: StatusCodes.FORBIDDEN, headers: corsHeaders });
+
+                const rules = await response({ method: "GET", endpoint: `guilds/${guildId}/auto-moderation/rules` });
+                if (rules === false) {
+                    return Response.json({ error: "Failed to fetch AutoMod rules from Discord (check bot permissions/log.log)" }, { status: StatusCodes.BAD_GATEWAY, headers: corsHeaders });
+                }
+                return Response.json(
+                    (rules as { id: string; name: string }[]).map(r => ({ id: r.id, name: r.name })),
+                    { headers: corsHeaders }
+                );
+            }
+        },
+        "/api/auth/me": {
+            GET: (req) => {
+                const session = getSession(req);
+                if (!session) return Response.json({ loggedIn: false }, { headers: corsHeaders });
+                return Response.json({ loggedIn: true, userId: session.userId }, { headers: corsHeaders });
+            }
+        },
+        "/api/auth/logout": {
+            POST: (req) => {
+                const sid = parseCookies(req)["session"];
+                if (sid) sessions.delete(sid);
+                return new Response(null, { status: StatusCodes.NO_CONTENT, headers: { ...corsHeaders, "Set-Cookie": "session=; Path=/; Max-Age=0" } });
+            }
+        },
+        "/api/guilds": {
+            OPTIONS: () => new Response(null, { headers: corsHeaders }),
+            GET: async (req) => {
+                const session = getSession(req);
+                if (!session) return Response.json({ error: "Not logged in" }, { status: StatusCodes.UNAUTHORIZED, headers: corsHeaders });
+                const docs = await guildconfigs.find({}, { projection: { guildId: 1, name: 1, staffroles: 1, _id: 0, ownerId: 1 } }).toArray();
+                const authorized: { guildId: string; name: string | null; role: "admin" | "mod" }[] = [];
+                for (const doc of docs) {
+                    const memberRoles = await fetchMemberRoles(session.userId, doc.guildId as string);
+                    if (!memberRoles) continue;
+                    const role = roleFromStaffroles(session.userId, memberRoles, doc.staffroles as string[] | undefined, doc.ownerId as string | undefined);
+                    if (role) authorized.push({ guildId: doc.guildId as string, name: (doc.name as string) ?? null, role });
+                }
+                return Response.json(authorized, { headers: corsHeaders });
+            }
+        },
+        "/api/guilds/:guildId": {
+            OPTIONS: () => new Response(null, { headers: corsHeaders }),
+            GET: async (req) => {
+                const session = getSession(req);
+                if (!session) return Response.json({ error: "Not logged in" }, { status: StatusCodes.UNAUTHORIZED, headers: corsHeaders });
+                const { guildId } = req.params;
+                const doc = await guildconfigs.findOne({ guildId });
+                if (!doc) return Response.json({ error: "Not found" }, { status: StatusCodes.NOT_FOUND, headers: corsHeaders });
+                const memberRoles = await fetchMemberRoles(session.userId, guildId);
+                const role = roleFromStaffroles(session.userId, memberRoles, doc.staffroles as string[] | undefined, doc.ownerId as string | undefined);
+                if (!role) return Response.json({ error: "Forbidden" }, { status: StatusCodes.FORBIDDEN, headers: corsHeaders });
+                return Response.json({ ...doc, _viewerRole: role }, { headers: corsHeaders });
+            },
+            PUT: async (req) => {
+                const session = getSession(req);
+                if (!session) return Response.json({ error: "Not logged in" }, { status: StatusCodes.UNAUTHORIZED, headers: corsHeaders });
+                const { guildId } = req.params;
+                const existing = await guildconfigs.findOne({ guildId: guildId }, { projection: { staffroles: 1, ownerId: 1 } });
+                if (!existing) {
+                    await guildconfigs.insertOne({ guildId: guildId, staffroles: [] })
+                    return Response.json(
+                        { error: "This guild has no config yet. It must be initialized (with staffroles set) before it can be edited here." },
+                        { status: 404, headers: corsHeaders }
+                    );
+                }
+                const memberRoles = await fetchMemberRoles(session.userId, guildId);
+                const role = roleFromStaffroles(session.userId, memberRoles, existing.staffroles as string[] | undefined, existing.ownerId as string | undefined);
+                if (role !== "admin") return Response.json({ error: "Forbidden — admin role required to save" }, { status: StatusCodes.FORBIDDEN, headers: corsHeaders });
+
+                let body: Record<string, unknown>;
+                try { body = await req.json(); }
+                catch { return Response.json({ error: "Invalid JSON body" }, { status: StatusCodes.BAD_REQUEST, headers: corsHeaders }); }
+                const setDoc: Record<string, unknown> = {};
+                for (const key of CONFIGURATOR_MANAGED_KEYS) {
+                    if (key in body) setDoc[key] = body[key];
+                }
+                if (Object.keys(setDoc).length === 0) {
+                    return Response.json({ error: "No recognized fields in body" }, { status: StatusCodes.BAD_REQUEST, headers: corsHeaders });
+                }
+                await guildconfigs.updateOne({ guildId }, { $set: setDoc }, { upsert: false });
+                return Response.json({ ok: true }, { headers: corsHeaders });
+            },
+            DELETE: async (req) => {
+                const session = getSession(req);
+                if (!session) return Response.json({ error: "Not logged in" }, { status: StatusCodes.UNAUTHORIZED, headers: corsHeaders });
+                const { guildId } = req.params;
+                const existing = await guildconfigs.findOne({ guildId }, { projection: { staffroles: 1, ownerId: 1 } });
+                if (!existing) return Response.json({ error: "Not found" }, { status: StatusCodes.NOT_FOUND, headers: corsHeaders });
+                const memberRoles = await fetchMemberRoles(session.userId, guildId);
+                const role = roleFromStaffroles(session.userId, memberRoles, existing.staffroles as string[] | undefined, existing.ownerId as string | undefined);
+                if (role !== "admin") return Response.json({ error: "Forbidden — admin role required to delete" }, { status: StatusCodes.FORBIDDEN, headers: corsHeaders });
+                await guildconfigs.deleteOne({ guildId });
+                return Response.json({ ok: true }, { headers: corsHeaders });
+            }
+        },
         "/interactions": async (req) => {
             const rawBody = await req.text();
             const data = new TextEncoder().encode(req.headers.get('X-Signature-Timestamp') + rawBody);
             const signature = new Uint8Array(Buffer.from(req.headers.get('x-signature-ed25519')!, 'hex'))
             const publickey = new Uint8Array(Buffer.from(`${Bun.env.DISCORD_PKEY}`, 'hex'))
             if (!ed25519.verify(signature, data, publickey))
-                return new Response('Unauthorized', { status: 401 });
+                return new Response('Unauthorized', { status: StatusCodes.UNAUTHORIZED });
             const body: APIInteraction = JSON.parse(rawBody);
             if (body.type == InteractionType.Ping)
                 return Response.json({ type: InteractionResponseType.Pong });
@@ -737,9 +1013,9 @@ Bun.serve({
                 }
             }
             switch (body.type) {
-                case InteractionType.ApplicationCommand: return await handleCommands(body);
-                case InteractionType.MessageComponent: return await handleComponents(body);
-                case InteractionType.ModalSubmit: return await handleModals(body);
+                case InteractionType.ApplicationCommand: return await handleCommands(body as APIChatInputApplicationCommandInteraction);
+                case InteractionType.MessageComponent: return await handleComponents(body as APIMessageComponentInteraction);
+                case InteractionType.ModalSubmit: return await handleModals(body as APIModalSubmitInteraction);
             }
         }
     }

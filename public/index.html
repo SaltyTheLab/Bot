@@ -5,158 +5,128 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Bot Configurator</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="./output.css" rel="stylesheet">
   <script type="module" src="./guildconfig.js" defer></script>
   <script type="module" defer>
-    const tabs = document.querySelectorAll('.tab-btn');
-    const tabContents = document.querySelectorAll('.tab-content');
-
+                  const tabs = document.querySelectorAll('.tab-btn:not(.subtab-btn)');
+                  const tabContents = document.querySelectorAll('.tab-content');
     tabs.forEach(tab => {
       tab.addEventListener('click', () => {
-        tabs.forEach(item => {
-          item.classList.remove('border-blue-400', 'text-blue-400');
-          item.classList.add('border-transparent', 'text-gray-300');
-        });
-        tabContents.forEach(content => {
-          content.classList.add('hidden');
-        });
+        tabs.forEach(item => item.classList.remove('tab-btn-active'));
+        tabContents.forEach(content => content.classList.add('hidden'));
         const targetId = tab.getAttribute('data-target');
         document.getElementById(targetId).classList.remove('hidden');
-        tab.classList.add('border-blue-400', 'text-blue-400');
-        tab.classList.remove('border-transparent', 'text-gray-300');
+        tab.classList.add('tab-btn-active');
       });
     });
     document.getElementById('modChannelsTab').click();
   </script>
+  <script type="module" defer>
+    const subtabs = document.querySelectorAll('.subtab-btn');
+    const subtabContents = document.querySelectorAll('.subtab-content');
+    subtabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        subtabs.forEach(item => item.classList.remove('tab-btn-active'));
+        subtabContents.forEach(content => content.classList.add('hidden'));
+        const targetId = tab.getAttribute('data-subtarget');
+        document.getElementById(targetId).classList.remove('hidden');
+        tab.classList.add('tab-btn-active');
+      });
+    });
+  </script>
 </head>
 
-<body class="bg-gray-900 text-gray-100 min-h-3/4 flex  p-4">
-  <div class=" flex gap-4 w-half">
-    <div class="w-full bg-gray-800 rounded-x1 shadow-lg p-6 space-y-6">
-      <h1 class="text-3xl font-bold text-blue-400"> Bot Configuration</h1>
-      <h2 class=" text-3l font-semibold text-red-400 justify-center"> Make sure
-        to save your work and download the generated json config!!</h2>
-
+<body class="bg-gray-900 text-gray-100 p-4 bg-gray-800 rounded-xl shadow-lg p-6 space-y-6">
+  <h1 class="text-3xl font-bold text-blue-400 justify-center"> Bot Configuration</h1>
+  <h2 class="text-3xl font-semibold text-red-400 justify-center">All edits are only kept locally until you hit save.
+  </h2>
       <!-- Guild Selection -->
-      <div class="bg-gray-700 p-4 rounded-x1 shadow-inner">
-        <label for="guildSelect" class="block text-gray-300 font-semibold mb-2"> Select
-          Guild:</label>
-        <select id="guildSelect" class="w-full bg-gray-900 text-gray-200 border border-gray-600
-          rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer">
-          <option value="">-- Add New Guild --</option>
+      <div class="panel flex justify-between">
+        <select id="guildSelect" class="field-full focus:ring-blue-500 focus:border-blue-500 cursor-pointer">
+          <option value="">-- Select a Guild --</option>
         </select>
+        <span id="orText" class="text-gray-300 font-semibold py-2 2em">- or -</span>
+        <button id="addToServerBtn" class="auth-btn bg-indigo-500 hover:bg-indigo-600">Add to Server</button>
       </div>
-
-      <!-- Guild ID Input -->
-      <div class="bg-gray-700 p-4 rounded-x1 shadow-inner">
-        <label for="guildIdInput" class="block text-gray-300 font-semibold mb-2"> Guild ID:</label>
-        <input type="text" id="guildIdInput" placeholder="Enter Guild ID" class="2-full bg-gray-900
-        text-gray-200 border border-gray-600 rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500">
+        <!-- Auth -->
+        <div class="panel flex items-center justify-between">
+          <span id="authStatus" class="text-gray-300">Checking login status...</span>
+          <div>
+            <button id="loginBtn" class="auth-btn hidden bg-indigo-500 hover:bg-indigo-600">Login with
+              Discord</button>
+            <button id="logoutBtn" class=" auth-btn hidden bg-gray-500 hover:bg-gray-600">Logout</button>
+          </div>
       </div>
 
       <!-- Action Buttons-->
       <div class="flex justify-between items-center mt-6">
-        <button id="uploadConfigBtn" class="w-full md:w-auto px-6 py-3 bg-indigo-500 text-white
-        font-bold rounded-lg hover:bg-indigo-600 transition-colors transform
-        hover:scale-105">Upload Config File</button>
-        <input type="file" id="fileInput" class="hidden">
-        <button id="saveConfigBtn" class="px-6 py-3 bg-green-500 text-white
-        font-bold rounded-lg hover:bg-green-600 transition-colors transform
-        hover:scale-105"> Save Configuration</button>
-        <button id="deleteConfigBtn" class="px-6 py-3 bg-red-500 text-white
-        font-bold rounded-lg hover:bg-red-600 transition-colors transform
-        hover:scale-105">Delete Guild</button>
-        <button id="downloadConfigBtn" class="w-full md:w-auto px-6 py-3 bg-blue-500 text-white 
-        font-bold rounded-lg hover:bg-blue-600 transition-colors transform
-        hover:scale-105">Download Config File</button>
+        <button id="saveConfigBtn" class="action-btn bg-green-500 hover:bg-green-600">Save</button>
+        <button id="deleteConfigBtn" class="action-btn bg-red-500 hover:bg-red-600">Delete Guild</button>
+        <button id="downloadConfigBtn" class="action-btn bg-blue-500  hover:bg-blue-600">Export Backup(JSON)</button>
       </div>
-
       <!--Config tabs-->
       <div id="channelsContainer" class="space-y-6">
         <div class="flex border-b border-gray-600">
-          <button id="modChannelsTab"
-            class="tab-btn px-4 py-2 text-gray-300 font-semibold border-b-2 border-transparent hover:border-blue-400"
-            data-target="modChannelsContent">
-            Log Channels
-          </button>
-          <button id="autoModTab" class="tab-btn px-4 py-2 text-blue-400 font-semibold border-b-2 border-blue-400"
-            data-target="autoModContent">
-            AutoMod Settings
-          </button>
-          <button id="publicChannelsTab"
-            class="tab-btn px-4 py-2 text-gray-300 font-semibold border-b-2 border-transparent hover:border-blue-400"
-            data-target="publicChannelsContent">
-            Public Channels
-          </button>
-          <button id="mediaTab" class="tab-btn px-4 py-2 text-gray-300 font-semibold border-b-2
-          border-transparent hover:border-blue-400" data-target="mediaContent">
-            Media Exclusions
-          </button>
-          <button id="reactionsTab"
-            class="tab-btn px-4 py-2 text-gray-300 font-semibold border-b-2 border-transparent hover:border-blue-400"
-            data-target="reactionsContent">
-            Reactions
-          </button>
-          <button id="StaffRoles"
-            class="tab-btn px-4 py-2 text-gray-300 font-semibold border-b-2 border-transparent hover:border-blue-400"
-            data-target="StaffRolesContent">
-            Staff Roles
-          </button>
-          <button id="stringReactionsTab"
-            class="tab-btn px-4 py-2 text-gray-300 font-semibold border-b-2 border-transparent hover:border-blue-400"
-            data-target="stringReactionsContent">
-            String Reactions
-          </button>
+          <button id="modChannelsTab" class="tab-btn" data-target="modChannelsContent">Log Channels</button>
+          <button id="autoModTab" class="tab-btn" data-target="autoModContent">AutoMod Settings</button>
+          <button id="publicChannelsTab" class="tab-btn" data-target="publicChannelsContent">Public Channels</button>
+          <button id="GeneralTab" class="tab-btn" data-target="GeneralContent">General Channels</button>
+          <button id="reactionsTab" class="tab-btn" data-target="reactionsContent">Reactions</button>
+          <button id="StaffRoles" class="tab-btn " data-target="StaffRolesContent">Staff Roles</button>
+          <button id="stringReactionsTab" class="tab-btn" data-target="stringReactionsContent">String Reactions</button>
+          <button id="EmbedContentTab" class="tab-btn" data-target="embedContent">Embeds</button>
         </div>
         <div id="tabContentContainer" class="space-y-6">
           <div id="modChannelsContent" class="tab-content bg-gray-700 p-4 rounded-xl space-y-4 shadow-inner hidden">
             <div id="modChannelsSection"></div>
-          </div>
+        </div>
           <div id="publicChannelsContent" class="tab-content bg-gray-700 p-4 rounded-xl space-y-4 shadow-inner hidden">
             <div id="publicChannelsSection"></div>
-            <button id="addPublicChannelBtn"
-              class="mt-4 px-4 py-2 bg-blue-500 text-white font-semibold rounded-lg hover:bg-blue-600 transition-colors">
-              Add Public Channel
-            </button>
-          </div>
-          <div id="mediaContent" class="tab-content bg-gray-700 p-4 rounded-xl space-y-4 shadow-inner hidden">
-            <div id="mediaexclusionsSection"></div>
-            <button id="addMediaBtn" class="mt-4 px-4 py-2 bg-blue-500 text-white
-          font-semibold rounded-lg hover: bg-blue-600 transition-colors">Add
-              Media Exclusion
-            </button>
+            <button id="addPublicChannelBtn" class="add-btn"> Add Public Channel </button>
+            </div>
+          <div id="GeneralContent" class="tab-content bg-gray-700 p-4 rounded-xl space-y-4 shadow-inner hidden">
+            <span class="text-blue-400">First entry will be your channel for announcing users who join.</span>
+            <div id="GeneralChannelsSection"></div>
+            <button id="addMediaBtn" class="add-btn">Add General Channel</button>
           </div>
           <div id="reactionsContent" class="tab-content bg-gray-700 p-4 rounded-xl space-y-4 shadow-inner hidden">
             <div id="reactionSection"></div>
-            <button id="addReactionBtn"
-              class="mt-4 px-4 py-2 bg-blue-500 text-white font-semibold rounded-lg hover:bg-blue-600 transition-colors">
-              Add Reaction
-            </button>
-          </div>
+            <button id="addReactionBtn" class="add-btn"> Add Reaction</button>
+            </div>
           <div id="stringReactionsContent" class="tab-content bg-gray-700 p-4 rounded-xl space-y-4 shadow-inner hidden">
             <div id="stringSection"></div>
-            <button id="addStringBtn"
-              class="mt-4 px-4 py-2 bg-blue-500 text-white font-semibold rounded-lg hover:bg-blue-600 transition-colors">
-              Add String Reaction
-            </button>
-          </div>
-          <div id="autoModContent" class="tab-content bg-gray-700 p-4 rounded-xl space-y-4 shadow-inner">
+            <button id="addStringBtn" class="add-btn">Add String Reaction</button>
+            </div>
+            <div id="embedContent" class="tab-content bg-gray-700 p-4 rounded-xl space-y-4 shadow-inner hidden">
+              <div id="embedContentSection"></div>
+            </div>
+            <div id="StaffRolesContent" class="tab-content bg-gray-700 p-4 rounded-xl space-y-4 shadow-inner hidden">
+              <div class="flex flex-col gap-4">
+                <span class="field-label text-red-400">Admin Role ID</span>
+                <input type="text" id="adminRoleInput" placeholder="Admin Role ID" class="field">
+                <span class="field-label text-red-400">Mod Role ID</span>
+                <input type="text" id="modRoleInput" placeholder="Mod Role ID" class="field">
+                <span class="field-label">Jr Role ID</span>
+                <input type="text" id="jrRoleInput" placeholder="Jr Role ID" class="field">
+              </div>
+            </div>
+            <div id="autoModContent" class="tab-content bg-gray-700 p-4 rounded-xl space-y-4 shadow-inner hidden">
+              <div class="flex border-b border-gray-600">
+                <button id="automodSettingsSubtab" class="subtab-btn tab-btn tab-btn-active"
+                  data-subtarget="automodSettingsSubcontent">General Settings</button>
+                <button id="automodWeightsSubtab" class="subtab-btn tab-btn" data-subtarget="automodWeightsSubcontent">Reasons &amp;
+                  Weights</button>
+              </div>
+          <div id="automodSettingsSubcontent" class="subtab-content space-y-4">
             <div id="AutomodSection"></div>
           </div>
-        </div>
-        <!-- Message Error Display-->
-        <div id="messageBox" class="text-center p-3 rounded-lg hidden"></div>
-      </div>
-    </div>
-
-    <div class='w-full bg-gray-900 text-gray-200 rounded-lgp-2'>
-      <!-- JSON preview-->
-      <h1 class="font-bold text-3xl p-6 rounded-xl font-bold text-blue-300">JSON File Content Preview</h1>
-      <div class="bg-black rounded-xl p-6">
-        <pre id="jsonPreview" class="text-sm text-gray-400"></pre>
-      </div>
-    </div>
+  <div id="automodWeightsSubcontent" class="subtab-content space-y-4 hidden">
+    <div id="reasonsWeightsSection" class="space-y-2"></div>
+    <button id="addReasonWeightBtn" class="add-btn">Add Rule Weight</button>
   </div>
+  </div>
+<!-- Message Error Display-->
+<div id="messageBox" class="text-center p-3 rounded-lg hidden"></div>
 
 </body>
 
