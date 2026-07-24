@@ -2,7 +2,7 @@
     "compilerOptions": {
         "target": "es2025",
         "module": "es2022",
-        "moduleDetection": "force",
+        "moduleDetection": "auto",
         "allowJs": true,
         // Bundler mode
         "moduleResolution": "bundler",

@@ -1,4 +1,4 @@
-import { put } from './rest'
+import { response } from './rest'
 import { ApplicationCommandOptionType, ApplicationCommandType, InteractionContextType, PermissionFlagsBits, type RESTPostAPIChatInputApplicationCommandsJSONBody } from 'discord-api-types/v10';
 const commands: RESTPostAPIChatInputApplicationCommandsJSONBody[] = [
     {
@@ -219,9 +219,20 @@ const commands: RESTPostAPIChatInputApplicationCommandsJSONBody[] = [
         description: 'Refreshes the Posted embeds',
         default_member_permissions: String(PermissionFlagsBits.Administrator),
         contexts: [InteractionContextType.Guild]
+    },
+    {
+        name: 'restart',
+        description: 'Restart the bot',
+        default_member_permissions: String(PermissionFlagsBits.Administrator),
+        contexts: [InteractionContextType.Guild]
+    },
+    {
+        name: 'link',
+        description: 'Link your twitch',
+        contexts: [InteractionContextType.Guild]
     }
 ];
 async function updatecommands() {
-    console.log(await put(`applications/1420927654701301951/commands`, commands));
+    console.log(await response({ method: 'PUT', endpoint: `applications/1420927654701301951/commands`, body: commands }));
 }
 updatecommands()

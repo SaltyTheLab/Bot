@@ -4,4 +4,5 @@ await client.connect().catch(error => { console.error("Failed to connect to Mong
 const usersCollection = client.db("Database").collection('users');
 const guildconfigs = client.db("Database").collection("guildconfigs")
 const logos = client.db("Database").collection("logos")
-export { usersCollection, guildconfigs, logos }
+const ws = client.db("Database").collection("websocket")
+export { usersCollection, guildconfigs, logos, ws }
