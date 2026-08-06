@@ -97,8 +97,8 @@ async function refreshAuthStatus() {
     const response = await fetch(`/api/auth/me`, { credentials: 'include' });
     const res = await response.json();
     currentUser = res.loggedIn ? { userId: res.userId, username: null } : null;
-    const userRes = await fetch(`/api/discord/users/${res.userId}`,{method: "GET", credentials: 'include'})
-    const user = await userRes.json()
+    const userRes = res.userId ? await fetch(`/api/discord/users/${res.userId}`, { method: "GET", credentials: 'include' }) : null
+    const user = userRes ? await userRes.json() : null
     if (currentUser) currentUser.username = user.username
     renderAuthUI();
     return currentUser;
