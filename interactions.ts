@@ -275,7 +275,7 @@ async function handleCommands(body: APIChatInputApplicationCommandGuildInteracti
         }
         return cached;
     };
-    const key = options?.[0] && options?.[0].type == ApplicationCommandOptionType.Subcommand ? `${name}.${options?.[0].name}` : name;
+    const key = options?.[0] && options?.[0].type == ApplicationCommandOptionType.Subcommand && name !== 'member' ? `${name}.${options?.[0].name}` : name;
     const handler = commands.get(key);
     if (!handler) return Response.json({ type: 4, data: { content: `Unhandled command: ${key}`, flags: 64 } });
     if (member?.user.id) {
@@ -285,8 +285,7 @@ async function handleCommands(body: APIChatInputApplicationCommandGuildInteracti
         if (blocked) return blocked;
     }
     const res: { type: InteractionResponseType; data: any } = { type: InteractionResponseType.ChannelMessageWithSource, data: {} };
-    const earlyResponse = await handler({ body, res, guildConfig });
-    return earlyResponse ?? Response.json(res);
+    return await handler({ body, res, guildConfig }) ?? Response.json(res);
 }
 async function handleModals(body: APIModalSubmitInteraction) {
     const { guild_id, member, data: { custom_id, components, resolved } } = body;
@@ -925,57 +924,10 @@ commands.set('applications.close', async ({ body, res }) => {
     await usersCollection.updateMany({ guildId: guild_id }, { $set: { application: {} } });
     res.data = { content: 'Apps have now been closed!' };
 });
-commands.set('member.mute', async (ctx) => {
+commands.set('member', async (ctx) => {
     const guarded = await memberGuards(ctx);
     if (guarded) return;
     return runPunishment(ctx);
-});
-commands.set('member.ban', async (ctx) => {
-    const guarded = await memberGuards(ctx);
-    if (guarded) return;
-    return runPunishment(ctx);
-});
-commands.set('member.kick', async (ctx) => {
-    const guarded = await memberGuards(ctx);
-    if (guarded) return;
-    return runPunishment(ctx);
-});
-commands.set('member.warn', async (ctx) => {
-    const guarded = await memberGuards(ctx);
-    if (guarded) return;
-    return runPunishment(ctx);
-});
-commands.set('member.unwarn', async (ctx) => {
-    const guarded = await memberGuards(ctx);
-    if (guarded) return;
-    const { body, res } = ctx;
-    const { guild_id } = body;
-    const subcommand = body.data.options![0] as APIApplicationCommandSubcommandOption;
-    const target = subcommand.options![0]!.value as string;
-    const { punishments } = await usersCollection.findOne({ userId: target, guildId: guild_id }, { projection: { punishments: 1 } }) as any;
-    const lastWarn = punishments?.filter((w: any) => w.type === 'Warn').pop();
-    if (!lastWarn) {
-        res.data = { embeds: [{ description: `no warns found for <@${target}>` }] };
-        return;
-    }
-    await usersCollection.findOneAndUpdate({ userId: target, guildId: guild_id }, { $pull: { punishments: { _id: lastWarn._id } as any } });
-    res.data = { embeds: [{ color: 0x00a900, description: `recent warn removed from <@${target}>` }] };
-});
-commands.set('member.unmute', async (ctx) => {
-    const guarded = await memberGuards(ctx);
-    if (guarded) return;
-    const { body, res } = ctx;
-    const { guild_id, data: { resolved } } = body;
-    const subcommand = body.data.options![0] as APIApplicationCommandSubcommandOption;
-    const target = subcommand.options![0]!.value as string;
-    const targetmember = resolved?.members![0]
-    if (targetmember && targetmember!.communication_disabled_until) {
-        await response({ method: "PATCH", endpoint: `guilds/${guild_id}/members/${target}`, body: { communication_disabled_until: null } as APIGuildMember });
-        res.data = { embeds: [{ color: 0x00a900, description: `<@${target}> was unmuted.` }] };
-
-    } else
-        res.data = { embeds: [{ description: `<@${target}> is not muted.` }], flags: 64 };
-    return;
 });
 commands.set('appeal', async ({ body, res, guildConfig }) => {
     const { member, guild_id } = body;
