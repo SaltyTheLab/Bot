@@ -24,7 +24,7 @@
     "tailwindcss": "^4.3.3"
   },
   "scripts": {
-    "dev:css": "bunx @tailwindcss/cli -i ./input.css -o ./dist/output.css --watch=always",
+    "dev:css": "bunx @tailwindcss/cli -i ./input.css -o ./dist/output.css --watch=always --minify",
     "twitch": "bun run twitch/twitch.ts",
     "get-token": "bun run twitch/gettoken.ts"
   }

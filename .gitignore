@@ -142,6 +142,5 @@ vite.config.ts.timestamp-*
 .vscode/settings.json
 
 #logging 
-.log
 pid.txt
 interpid.txt
