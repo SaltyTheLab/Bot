@@ -1,21 +1,47 @@
 import { guildconfigs, usersCollection, logos } from "./Database";
 import { response } from "./rest"
 import { type Document, type WithId, ObjectId } from "mongodb";
-import punishUser from "./punishUser";
 import sharp from 'sharp'
 import { ed25519 } from '@noble/curves/ed25519.js'
 import { StatusCodes } from "http-status-codes";
 import { appendFile } from "node:fs/promises";
-import { type APIChatInputApplicationCommandInteraction, type APIMessageComponentInteraction, InteractionType, ComponentType, type APIEmbed, type APIInteraction, type APIMessageComponent, type APIMessage, InteractionResponseType, MessageFlags, type APIGuild, type APIGuildMember, type APIModalSubmitInteraction, type APIUser, type APIApplicationCommandInteractionDataSubcommandOption, type APIActionRowComponent, type APIComponentInMessageActionRow, type APIButtonComponent, type APIChannel, ButtonStyle } from "discord.js";
+import { type APIMessageComponentInteraction, InteractionType, ComponentType, type APIEmbed, type APIInteraction, type APIMessageComponent, type APIMessage, InteractionResponseType, MessageFlags, type APIGuild, type APIGuildMember, type APIModalSubmitInteraction, type APIUser, type APIActionRowComponent, type APIComponentInMessageActionRow, type APIButtonComponent, type APIChannel, ButtonStyle, type APIChatInputApplicationCommandGuildInteraction, ChannelType, type APIRole, type APIAutoModerationRule, type APIApplicationCommandSubcommandOption, type APIApplicationCommandBasicOption, DiscordAPIError, Collection, ApplicationCommandOptionType, type APIInteractionDataResolvedGuildMember } from "discord.js";
+type CommandContext = {
+    body: APIChatInputApplicationCommandGuildInteraction;
+    res: { type: InteractionResponseType; data: any };
+    guildConfig: () => Promise<Document>; // lazy — only fetched if a handler actually calls it
+};
+type CommandHandler = ((ctx: CommandContext) => Promise<Response | void>) & { cooldownMs?: number };
 await Bun.write("./interpid.txt", String(process.pid))
-const cooldowns = new Map()
-setInterval(() => {
-    for (const [userId, expiresAt] of cooldowns.entries()) {
-        if (Date.now() > expiresAt) cooldowns.delete(userId);
-        else
-            break;
+const DEFAULT_COOLDOWN_MS = 3000;
+const activeCooldowns = new Collection<string, number>(); // userId -> expiry timestamp
+const commands = new Collection<string, CommandHandler>()
+const corsHeaders = {
+    "Access-Control-Allow-Origin": Bun.env.CONFIGURATOR_ORIGIN!, "Access-Control-Allow-Methods": "GET, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type", "Access-Control-Allow-Credentials": "true",
+};
+const sessions = new Map<string, { userId: string; expires: number }>();
+const oauthStates = new Map<string, number>();
+const CONFIGURATOR_MANAGED_KEYS = ["modChannels", "publicChannels", "generalchannels", "reactions", "automodsettings", "responses", "staffroles", "Stages", "messageConfigs"] as const;
+const statusMap: Record<string, { cmd: string, log: string, dm: string, color: number }> = {
+    Ban: { cmd: 'was banned', log: 'banned a member', dm: `you were banned from`, color: 0xd10000 },
+    Kick: { cmd: 'was kicked', log: 'kicked a member', dm: `you were kicked from`, color: 0x838383 },
+    Mute: { cmd: 'was issued a mute', log: 'muted a member', dm: `you were given a`, color: 0xff4444 },
+    Warn: { cmd: 'was issued a warning', log: 'warned a member', dm: `you were given a warning`, color: 0xffcc00 }
+};
+const unitMap: Record<string, number> = { min: 60000, hour: 3600000, day: 86400000 };
+function checkCooldown(userId: string, isStaff: boolean, cooldownMs: number): Response | null {
+    if (isStaff || cooldownMs <= 0) return null;
+    const expiry = activeCooldowns.get(userId);
+    if (expiry && expiry > Date.now()) {
+        return Response.json({
+            type: InteractionResponseType.ChannelMessageWithSource,
+            data: { embeds: [{ description: `<@${userId}>, you are using commands too fast!` }], flags: MessageFlags.Ephemeral }
+        });
     }
-}, 2000);
+    activeCooldowns.set(userId, Date.now() + cooldownMs);
+    return null;
+}
 function getComparableEmbed(embedData: APIEmbed) {
     if (!embedData) return null; const normalizeText = (text: string | null) => text ? text.replace(/\r\n/g, '\n').trim() : null;
     return JSON.stringify({
@@ -53,7 +79,35 @@ function generateButtons(gameBoard: string[], player1: string, player2: string, 
     }
     return rows;
 }
-async function buildLogEmbed(targetUser: string, log: WithId<Document>, idx: number, totalLogs: number, avatar: string) {
+function randomToken() {
+    return crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
+}
+function parseCookies(req: Request): Record<string, string> {
+    const header = req.headers.get("cookie") || "";
+    const out: Record<string, string> = {};
+    for (const pair of header.split(";")) {
+        const idx = pair.indexOf("=");
+        if (idx === -1) continue;
+        out[pair.slice(0, idx).trim()] = decodeURIComponent(pair.slice(idx + 1).trim());
+    }
+    return out;
+}
+function getSession(req: Request) {
+    const sid = parseCookies(req)["session"];
+    if (!sid) return null;
+    const session = sessions.get(sid);
+    if (!session || session.expires < Date.now()) { sessions.delete(sid); return null; }
+    return session;
+}
+function roleFromStaffroles(userId: string, memberRoles: string[] | null, staffroles?: string[], ownerId?: string): "owner" | "admin" | "mod" | null {
+    if (ownerId && userId === ownerId) return "owner"; // guild owner always has admin access, even before staffroles are configured
+    if (!memberRoles || !staffroles || staffroles.length < 2) return null;
+    const [adminRoleId, modRoleId] = staffroles;
+    if (memberRoles.includes(adminRoleId!)) return "admin";
+    if (memberRoles.includes(modRoleId!)) return "mod";
+    return null;
+}
+async function buildLogEmbed(targetUser: APIUser, log: WithId<Document>, idx: number, totalLogs: number) {
     const LOG_COLORS: Record<string, number> = { Warn: 0xffcc00, Mute: 0xff4444, Ban: 0xd10000, Kick: 0x838383 };
     const moderator = await response({ method: "GET", endpoint: `users/${log.moderatorId}` }) as APIUser;
     const formattedDate = new Date(log.timestamp).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Chicago' });
@@ -61,7 +115,7 @@ async function buildLogEmbed(targetUser: string, log: WithId<Document>, idx: num
     const hours = Math.floor(mins / 60);
     return {
         color: LOG_COLORS[log.type],
-        thumbnail: { url: `https://cdn.discordapp.com/avatars/${targetUser}/${avatar}.png` },
+        thumbnail: { url: `https://cdn.discordapp.com/avatars/${targetUser.id}/${targetUser.avatar}.png` },
         fields: [
             { name: '**Member:**', value: `<@${log.userId}>`, inline: true },
             { name: '**type:**', value: `\`${log.type}\``, inline: true },
@@ -74,347 +128,165 @@ async function buildLogEmbed(targetUser: string, log: WithId<Document>, idx: num
         footer: { text: `Staff: ${moderator.username} | log ${idx + 1} of ${totalLogs} | ${formattedDate} `, icon_url: `https://cdn.discordapp.com/avatars/${log.moderatorId}/${moderator.avatar}.png` }
     } as APIEmbed
 };
-async function handleCommands(body: APIChatInputApplicationCommandInteraction) {
-    const { token, id, guild_id, member, channel, application_id, data } = body as any;
-    const { modChannels, staffroles } = await guildconfigs.findOne({ guildId: guild_id }, { projection: { modChannels: 1, publicChannel: 1, staffroles: 1 } }) as Document;
-    const res: { type: InteractionResponseType.ChannelMessageWithSource | InteractionResponseType.Modal | InteractionResponseType.DeferredChannelMessageWithSource, data: APIMessage | {} } = { type: InteractionResponseType.ChannelMessageWithSource, data: {} }
-    switch (data.name) {
-        case 'appeal': {
-            const userdata = await usersCollection.find({ userId: member?.user.id }).toArray();
-            const seenGuilds = new Map<string, string>();
-            for (const data of userdata) {
-                for (const p of data.punishments || []) {
-                    if (p.type === "Ban" && !seenGuilds.has(p.guildId)) {
-                        const g = await response({ method: "GET", endpoint: `guilds/${p.guildId}` }) as any;
-                        seenGuilds.set(p.guildId, g.name);
-                    }
-                }
-            };
-            const opts = Array.from(seenGuilds).map(([id, gName]) => ({ label: gName, value: id }));
-            if (!opts.length) {
-                res.data = { content: "I couldn't find any entries", flags: 64 }
-                return Response.json(res)
-            }
-            res.type = InteractionResponseType.Modal
-            res.data = {
-                custom_id: 'appealModal', title: 'Ban Appeal Submission',
-                components: [
-                    { type: ComponentType.Label, label: "Guild", component: { type: ComponentType.StringSelect, custom_id: 'guildId', max_values: 1, options: opts, required: true } },
-                    { type: ComponentType.Label, label: "Why were you banned?", component: { type: 4, custom_id: 'reason', style: 1, required: true } },
-                    { type: ComponentType.Label, label: "Why should we accept your appeal?", component: { type: 4, custom_id: 'justification', style: 2, required: true } },
-                    { type: ComponentType.Label, label: 'Anything else we need to know?', component: { type: 4, custom_id: 'extra', style: 2, required: false } },
-                    { type: ComponentType.Label, label: 'Ban appeal evidence can go here.', component: { type: 19, custom_id: 'evidence', required: false, min_values: 1, max_values: 5 } }
-                ]
-            }
-            break;
-        }
-        case 'games': {
-            const subcommand: APIApplicationCommandInteractionDataSubcommandOption = data.options[0];
-            switch (subcommand.name) {
-                case 'bet': {
-                    const coincount = subcommand.options![0]!.value as number;
-                    const { coins } = await usersCollection.findOne({ userId: member?.user.id, guildId: guild_id }, { projection: { coins: 1 } }) as any;
-                    if (coincount > coins) return Response.json({ type: 4, data: { content: `You cannot bet more than you have!`, flags: 64 } });
-                    const win = Math.random() >= 0.5;
-                    await usersCollection.findOneAndUpdate({ userId: member?.user.id, guildId: guild_id }, { $inc: { coins: win ? Math.ceil(coincount * 1.5) : -coincount } });
+async function buildBlacklistEmbed(targetUser: any, guild_id: string): Promise<{ embed: APIEmbed; blacklist: string[] }> {
+    const { blacklist } = await usersCollection.findOne({ userId: targetUser.id, guildId: guild_id }, { projection: { blacklist: 1 } }) as any;
+    const embed: APIEmbed = { description: `<@${targetUser.id}>'s blacklist\n\nblacklist: ${blacklist?.length ? blacklist.map((r: string) => `<@&${r}>`).join(', ') : 'empty'}` };
+    return { embed, blacklist };
+}
+async function memberGuards(ctx: CommandContext): Promise<boolean | null> {
+    const { body, res, guildConfig } = ctx;
+    const { member } = body;
+    const subcommand = body.data.options![0] as APIApplicationCommandSubcommandOption;
+    const target = subcommand.options![0]!.value as string;
+    const targetmember: APIInteractionDataResolvedGuildMember | undefined = body.data.resolved!.members![target];
+    const targetuser = body.data.resolved?.users![target];
+    const { modChannels, staffroles } = await guildConfig();
 
-                    res.data = {
-                        embeds: [{
-                            color: win ? 0x007a00 : 0x7a0000,
-                            author: { name: `${member?.user.username || member?.user.username} you bet ${coincount} and ${win ? 'won' : 'lost'}!`, icon_url: member?.user.avatar ? `https://cdn.discordapp.com/avatars/${member?.user.id}/${member?.user.avatar}.png` : "" }
-                        }]
-                    }
-                    break;
-                }
-                case 'tictactoe': {
-                    const player2 = subcommand.options![0]!.value as string;
-                    if (member?.user.id === player2) return Response.json({ type: 4, data: { content: "You can't play against yourself.", flags: 64 } });
-                    const current = Math.random() < 0.5 ? member!.user.id : player2;
-
-                    res.data = {
-                        content: `<@${player2}>, <@${member?.user.id}> wants to play tictactoe`,
-                        embeds: [{ color: 0x0000ff, title: 'TicTacToe', description: `It's <@${current}>'s turn to move.` }],
-                        components: generateButtons(Array(9).fill(' '), member!.user.id, player2, current!)
-                    }
-                    break;
-                }
-                case 'rps': {
-                    const move = subcommand.options![0]!.value as string;
-                    const oppChoices = ['rock', 'paper', 'scissors'];
-                    const opp: string = oppChoices[Math.floor(Math.random() * 3)]!;
-                    const beats: Record<string, string> = { rock: 'scissors', paper: 'rock', scissors: 'paper' };
-                    const result = opp === move.toLowerCase() ? "It's a tie!" : beats[opp] === move.toLowerCase() ? 'you win!!!' : 'Febot Wins!!!';
-                    if (result === 'you win!!!') await usersCollection.findOneAndUpdate({ userId: member?.user.id, guildId: guild_id }, { $inc: { coins: 20 } });
-
-                    res.data = { embeds: [{ title: result, description: `You chose **${move}**.\nOpponent chose **${opp}**.`, color: 0xffa500 }] }
-                    break;
-                }
-                case 'logos': {
-                    const { logolist } = await logos.findOne({}) as any;
-                    const logo = logolist[Math.floor(Math.random() * logolist.length)];
-                    const distractors = shuffle(logolist.filter((l: any) => l.brand !== logo.brand)).slice(0, 3).map((l: any) => l.brand);
-                    const comps = shuffle([logo.brand, ...distractors]).map((opt: string) => ({ type: 2, custom_id: `logos-${opt}-${logo.brand}`, label: opt, style: 1 }));
-                    const form = new FormData();
-                    form.append('files[0]', new Blob([await Bun.file(logo.image).arrayBuffer()]), 'logo.png');
-                    form.append('payload_json', JSON.stringify({
-                        type: 4, data: {
-                            embeds: [{ author: { name: `Guess this logo ${member?.user.username}`, icon_url: `https://cdn.discordapp.com/avatars/${member?.user.id}/${member?.user.avatar}.png` }, color: Math.floor(Math.random() * 16777215), image: { url: `attachment://logo.png` } }],
-                            components: [{ type: 1, components: comps }]
-                        }
-                    }));
-                    return new Response(form);
-                }
-                case 'highlow': {
-                    const start = Math.ceil(Math.random() * 100);
-                    let secret = Math.ceil(Math.random() * 100);
-                    while (secret === start) secret = Math.ceil(Math.random() * 100);
-                    res.data = {
-                        embeds: [{ color: 0x333300, title: "Higher or Lower", description: `I am thinking of a number. Do you think my number is higher or lower than the number below? `, fields: [{ name: 'Current Number:', value: `${start}` }] }],
-                        components: [{
-                            type: 1, components: [
-                                { type: 2, label: "Higher", style: 1, custom_id: `highlow-higher-${start}-${secret}` },
-                                { type: 2, label: "Lower", style: 4, custom_id: `highlow-lower-${start}-${secret}` }
-                            ]
-                        }]
-                    }
-                }
-            }
+    if (targetuser!.id === member?.user.id) {
+        res.data = { embeds: [{ description: 'You cannot moderate yourself.' }], flags: MessageFlags.Ephemeral };
+        return true;
+    }
+    if (member?.roles.includes(staffroles[2]) && ['ban', 'unwarn', 'unmute'].includes(subcommand.name)) {
+        await response({ method: "POST", endpoint: `channels/${modChannels.adminChannel}/messages`, body: { embeds: [{ description: `Jr. mod ${member?.user} tried to use a mod only command.` }] } });
+        res.data = { embeds: [{ description: 'Jr mods do not have access to this command.' }], flags: MessageFlags.Ephemeral };
+        return true;
+    }
+    if (targetmember && targetmember.roles.some((r: string) => staffroles.includes(r))) {
+        await response({ method: "POST", endpoint: `channels/${modChannels.adminChannel}/messages`, body: { embeds: [{ description: `<@${member?.user.id}> tried to moderate <@${target}>.` }] } });
+        res.data = { embeds: [{ description: 'You cannot moderate other staff members.' }], flags: MessageFlags.Ephemeral };
+        return true;
+    }
+    if (targetuser && targetuser.bot) {
+        res.data = { embeds: [{ description: `You cannot moderate bots.` }], flags: 64 };
+        return true;
+    }
+    if (targetmember && targetmember?.communication_disabled_until) {
+        ctx.res.data = { embeds: [{ description: '⚠️ User is already muted.' }] };
+        return true;
+    }
+    if (subcommand.name == 'mute' && subcommand.options![2]!.value <= 0) {
+        ctx.res.data = { embeds: [{ description: '❌ Invalid duration' }] };
+        return true;
+    }
+    return false;
+}
+async function runPunishment(ctx: CommandContext): Promise<Response> {
+    const { body, res } = ctx;
+    const { guild_id, channel, member, data: { resolved, options } } = body;
+    const subcommand = options![0] as APIApplicationCommandSubcommandOption;
+    const target = resolved?.users![0]
+    const reason = String(subcommand.options![1]!.value)
+    res.type = InteractionResponseType.DeferredChannelMessageWithSource;
+    const { Stages, guildname, icon, modChannels } = await guildconfigs.findOne({ guildId: guild_id }, { projection: { Stages: 1, guildname: 1, icon: 1, modChannels: 1 } }) as Document
+    const { punishments } = await usersCollection.findOne({ userId: target!.id, guildId: guild_id }, { projection: { punishments: 1 } }) as any;
+    const activeWarns = punishments.length > 0 ? punishments.filter((p: any) => p.active === 1).reduce((acc: number, cur: any) => acc + (cur.weight || 1), 0) : 0;
+    const totalWarns = activeWarns + 1;
+    const warnType = subcommand.name === 'ban' ? 'Ban' : subcommand.name === 'kick' ? 'Kick' : subcommand.name === 'mute' ? 'Mute' : 'Warn';
+    let durationMs: number = 0, durationStr: string | null = null
+    if (warnType === 'Mute') {
+        durationMs = subcommand!.options![2]!.value * unitMap[subcommand!.options![3]!.value]!
+        durationStr = `${subcommand!.options![2]!.value} ${subcommand!.options![3]!.value}`;
+    }
+    const finalMessage: any = await response({
+        method: "POST", endpoint: `/webhooks/${body?.application_id}/${body?.token}`, body: {
+            embeds: [{
+                color: statusMap[warnType]!.color,
+                author: { name: `${target!.username} ${warnType === 'Mute' ? `was issued a ${durationStr}` : statusMap[warnType]!.cmd}`, icon_url: `https://cdn.discordapp.com/avatars/${target!.id}/${target!.avatar}.webp` }
+            }]
+        }
+    })
+    const object = new ObjectId();
+    const newPunishment = { _id: object, userId: target, moderatorId: member.user.id, reason: reason, duration: durationMs, timestamp: Date.now(), active: 1, weight: 1, type: warnType, guildId: guild_id, channel: channel.id, refrence: `https://discord.com/channels/${guild_id}/${channel.id}/${finalMessage.id}`, warns: totalWarns - 1 };
+    await usersCollection.updateOne({ userId: target, guildId: guild_id }, { $push: { punishments: newPunishment as any } });
+    const caseHistory = [...punishments, newPunishment].filter((r: any) => warnType === 'Ban' ? r.type === "Ban" : r.type !== 'Kick').slice(0, 10).map((p: any, idx: number) => p.refrence ? `[Case ${idx + 1}](${p.refrence})` : null).filter(Boolean);
+    const logEmbed: APIEmbed = {
+        color: statusMap[warnType]!.color,
+        author: { name: `${member.user.username} ${statusMap[warnType]!.log}`, icon_url: `https://cdn.discordapp.com/avatars/${member.user.id}/${member.user.avatar}` },
+        thumbnail: { url: `https://cdn.discordapp.com/avatars/${target!.id}/${target!.avatar}.webp` },
+        fields: [
+            { name: 'user.id:', value: `<@${target!.id}>`, inline: true },
+            { name: 'Channel:', value: `<#${channel.id}>`, inline: true },
+            { name: 'History:', value: caseHistory.join(' | ') || "none", inline: true },
+            { name: 'Reason:', value: `\`${reason}\``, inline: false },
+            ...(['Ban', 'Kick'].includes(warnType) ? [] : [
+                { name: 'Punishment:', value: durationStr && body ? `\`${durationStr}\`` : `\`1 warn\`${durationStr ? `, \`${durationStr}\`` : ''}`, inline: false },
+                { name: 'Warns at log time:', value: `\`${activeWarns}\``, inline: false },
+                { name: 'Next Punishment:', value: `\`${Stages[Math.min(totalWarns - 1, Stages.length - 1)].label}\``, inline: false }
+            ])
+        ],
+        timestamp: new Date().toISOString(),
+        footer: { text: 'User DMed ✅' }
+    };
+    const dmchannel = await response({ method: 'POST', endpoint: `/users/@me/channels`, body: { recipient_id: target!.id } })
+    const dmResult = await response({
+        method: 'POST', endpoint: `/channels/${dmchannel.id}/messages`, body: {
+            embeds: [{
+                color: statusMap[warnType]!.color, author: { name: target!.username, icon_url: `https://cdn.discordapp.com/avatars/${target!.id}/${target!.avatar}.webp` },
+                thumbnail: { url: `${icon}` },
+                description: `<@${target!.id}>,${statusMap[warnType]!.dm} ${warnType === 'Ban' ? ` [${guildname}](https://discord.com/channels/${guild_id}). To appeal this decision, please join our dedicated appeal server using the button below.` : warnType === 'Mute' ? `\`${durationStr}\` in ${guildname}` : `in ${guildname}`}`,
+                fields: [
+                    { name: 'Reason:', value: `\`${reason}\``, inline: false },
+                    ...(['Ban', 'Kick'].includes(warnType) ? [] : [
+                        { name: 'Punishment:', value: durationStr && body ? `\`${durationStr}\`` : `\`1 warn\`${durationStr ? `, \`${durationStr}\`` : ''}`, inline: false },
+                        { name: 'Active Warnings:', value: `\`${totalWarns}\``, inline: false },
+                        { name: 'Warn expires:', value: `<t:${Math.floor((Date.now() + 86400000) / 1000)}:F>` }
+                    ])
+                ],
+                timestamp: new Date().toISOString()
+            }],
+            components: warnType === 'Ban' ? [{ type: ComponentType.ActionRow, components: [{ type: ComponentType.Button, style: ButtonStyle.Link, label: "Appeal", url: 'https://discord.gg/qMjjyXyYbr' }] }] : undefined
+        }
+    })
+    if (!dmResult) logEmbed.footer!.text === 'User DMed 🚫';
+    switch (warnType) {
+        case 'Ban':
+            await guildconfigs.updateOne({ guildId: guild_id }, { $set: { ban: target!.id } });
+            await response({ method: "PUT", endpoint: `/guilds/${guild_id}/bans/${target!.id}`, body: { delete_message_seconds: 604800 }, reason: `Ban Command: ${reason}` })
             break;
-        }
-        case 'rank': {
-            const targetUserId = data.options ? data.options[0].value : member!.user.id
-            const { level, xp, coins, avatar, totalmessages, nick } = await usersCollection.findOne({ userId: targetUserId, guildId: guild_id }, { projection: { level: 1, xp: 1, coins: 1, avatar: 1, totalmessages: 1, nick: 1 } }) as Document;
-            const { exponent, baseMultiplier, roundToNearest, flatOffset } = await guildconfigs.findOne({ guildId: guild_id }, { projection: { exponent: 1, baseMultiplier: 1, roundToNearest: 1, flatOffset: 1 } }) as any;
-            const rank = await usersCollection.countDocuments({ guildId: guild_id, $or: [{ level: { $gt: level } }, { level: level, xp: { $gt: xp } }] });
-            const avRes = await response({ method: "GET", endpoint: avatar ?? `https://cdn.discordapp.com/embed/avatars/${(BigInt(targetUserId) >> 22n) % 6n}.png` });
-            const avBuf = Buffer.from(await avRes.arrayBuffer());
-            const croppedAvatar = await sharp(avBuf).resize(100, 100).composite([{ input: Buffer.from('<svg><circle cx="50" cy="50" r="50" /></svg>'), blend: 'dest-in' }]).png().toBuffer()
-            const reqXp = Math.round(((level < 100 ? level : 100) ** exponent * baseMultiplier + flatOffset) / roundToNearest);
-            const rankCardBuffer = await sharp(Buffer.from(`<svg width="500" height="150" xmlns="http://www.w3.org/2000/svg"> <rect width="500" height="150" rx="16" fill="#2c2f33"/><circle cx="70" cy="75" r="52" stroke="#3ba55d" stroke-width="3" fill="none" /> <text x="130" y="60" fill="white" font-size="20" font-family="Arial" font-weight="bold">${nick.slice(0, 15) + (nick.length > 15 ? "..." : "")}</text><text x="300" y="35" fill="white" font-size="16" font-family="Arial" font-weight="bold" text-anchor="middle">Level ${level}</text><text x="440" y="35" fill="white" font-size="16" font-family="Arial" font-weight="bold" text-anchor="end">Rank #${rank + 1}</text><rect x="130" y="85" width="350" height="20" rx="10" fill="#484b4e"/><rect x="130" y="85" width="${Math.min(Math.max(350 * (xp / reqXp), 25), 350)}" height="20" rx="10" fill="#3ba55d"/><text x="480" y="75" fill="#ccc" font-size="16" font-family="Arial" text-anchor="end">${xp} / ${reqXp} xp</text><text x="150" y="130" fill="#ccc" font-size="18" font-family="Arial">Coins: ${coins} | Messages: ${totalmessages}</text></svg>`)).composite([{ input: croppedAvatar, top: 25, left: 20 }]).toBuffer();
-            const form = new FormData();
-            form.append('files[0]', new Blob([rankCardBuffer as any], { type: "image/png" }), 'rankcard.png');
-            form.append('payload_json', JSON.stringify({ type: InteractionResponseType.ChannelMessageWithSource }));
-            return new Response(form)
-        }
-        case 'blacklist': {
-            const subcommand: APIApplicationCommandInteractionDataSubcommandOption = data.options[0];
-            const targetUser = subcommand.options![0]!.value as string;
-            const sub = subcommand.name;
-            const { blacklist } = await usersCollection.findOne({ userId: targetUser, guildId: guild_id }, { projection: { blacklist: 1 } }) as any;
-            const embed: APIEmbed = { description: `<@${targetUser}>'s blacklist\n\nblacklist: ${blacklist?.length ? blacklist.map((r: string) => `<@&${r}>`).join(', ') : 'empty'}` };
-            if (sub === 'add' || sub === 'remove') {
-                const role = subcommand.options ? subcommand.options[1]!.value as string : null;
-                if (sub === 'add') {
-                    if (!blacklist.includes(role)) {
-                        await usersCollection.updateOne({ userId: targetUser, guildId: guild_id }, { $push: { blacklist: role } as any });
-                        await response({ method: "DELETE", endpoint: `guilds/${guild_id}/members/${targetUser}/roles/${role}` });
-                        embed.description = `<@&${role}> was blacklisted from <@${targetUser}>`;
-                    } else embed.description = `<@&${role}> is already blacklisted from <@${targetUser}>`;
-                }
-                else {
-                    await usersCollection.updateOne({ userId: targetUser, guildId: guild_id }, { $pull: { blacklist: role } as any });
-                    embed.description = `<@&${role}> was removed from <@${targetUser}>'s blacklist`;
-                }
-            }
-
-            res.data = { embeds: [embed] }
+        case 'Mute':
+            await response({ method: "PATCH", endpoint: `/guilds/${guild_id}/members/${target!.id}`, body: { communication_disabled_until: new Date(Date.now() + Math.min(durationMs, 2419200000)).toISOString() }, reason: reason })
             break;
-        }
-        case 'dnd': {
-            const sides = parseInt(data.options[0].name.slice(1));
-            const rolled = Math.floor(Math.random() * sides) + 1;
-            res.data = { content: `you rolled a ${rolled}` }
-            break;
-        }
-        case 'apply': {
-            const { application } = await usersCollection.findOne({ userId: member?.user.id, guildId: guild_id }, { projection: { application: 1 } }) as any;
-            if (application?.Activity) {
-                res.data = { content: 'Already Completed. Click the button below to continue.', components: [{ type: 1, components: [{ type: 2, custom_id: 'next_modal_two', label: 'skip Part 1', style: 1 }] }], flags: 64 }
-                break;
-            }
-            res.type = InteractionResponseType.Modal
-            res.data = {
-                title: 'Experience and Activity (1/3)',
-                custom_id: 'server',
-                components: [
-                    { type: ComponentType.Label, label: `What age range are you in?`, component: { type: 3, custom_id: 'age', options: [{ label: '12 or under', value: '12 or under' }, { label: '13 to 15', value: '13-15' }, { label: '16 to 17', value: '16-17' }, { label: '18 or over', value: '18 or over' }], max_values: 1, required: true } },
-                    { type: ComponentType.Label, label: 'Any prior mod experience?', component: { type: 4, custom_id: 'experience', required: true, style: 2, max_length: 300 } },
-                    { type: ComponentType.Label, label: 'Have you been warned/muted?', component: { type: 4, custom_id: 'punishments', required: true, style: 1, max_length: 100 } },
-                    { type: ComponentType.Label, label: 'Timezone?', component: { type: 4, custom_id: 'timezone', required: true, style: 1, placeholder: 'put current time if unsure', max_length: 8 } },
-                    { type: ComponentType.Label, label: `How active are you in the server?`, component: { type: 4, custom_id: 'activity', style: 1, required: true, max_length: 150 } }
-                ]
-            }
-            break;
-        }
-        case 'leaderboard': {
-            const board = await usersCollection.find({ guildId: guild_id }).limit(10).sort({ level: -1, xp: -1 }).toArray();
-            const guild = await response({ method: "GET", endpoint: `guilds/${guild_id}` }) as APIGuild;
-            res.data = {
-                embeds: [{
-                    title: `Most active in ${guild.name}`, thumbnail: { url: `https://cdn.discordapp.com/icons/${guild_id}/${guild.icon}.png` }, color: 0x0c23a3,
-                    description: `**__LeaderBoard:__**\n${board.map((u: any, idx) => `Rank \`${idx + 1}\`: <@${u.userId}> - level \`${u.level}\` with \`${u.xp}\` xp`).join('\n')}`,
-                    timestamp: new Date().toISOString()
-                }]
-            }
-            break;
-        }
-        case 'modlogs': {
-            const targetUser = data.options[0].value as string;
-            const isAdmin = (BigInt(member!.permissions) & 8n) !== 0n;
-            const { punishments, avatar } = await usersCollection.findOne({ userId: targetUser, guildId: guild_id }, { projection: { punishments: 1, avatar: 1 } }) as any;
-            if (!punishments?.length) {
-                res.data = { embeds: [{ color: 0xf58931, description: `❌ No modlogs found for <@${targetUser}>.` }] }
-                break;
-            }
-            const btn = (disabled: boolean) => [
-                { type: 2, custom_id: `modlog-prev-${targetUser}-0-${member?.user.id}`, label: '⬅️ Back', style: 2, disabled: true },
-                { type: 2, custom_id: `modlog-next-${targetUser}-0-${member?.user.id}`, label: 'Next ➡️', style: 2, disabled: punishments.length <= 1 || disabled },
-                ...(isAdmin ? [{ type: 2, custom_id: `modlog-del-${targetUser}-0-${member?.user.id}-${punishments[0]._id}`, label: 'Delete', style: 4, disabled }] : [])
-            ];
-            setTimeout(() => { response({ method: "PATCH", endpoint: `webhooks/${id}/${token}/messages/@original`, body: { components: [{ type: 1, components: btn(true) }] } }).catch(() => null); }, 600000);
-
-            res.data = {
-                embeds: [await buildLogEmbed(targetUser, punishments[0], 0, punishments.length, avatar)],
-                components: [{ type: 1, components: btn(false) }]
-            }
-            break;
-        }
-        case 'note': {
-            const targetUser = data.options[0].options[0].value as string;
-            const u = await response({ method: "GET", endpoint: `users/${targetUser}` }) as APIUser;
-            const sub = data.options[0].name;
-            const embed: APIEmbed = { color: 0x00a900, description: `❌ No notes found for <@${targetUser}>`, thumbnail: { url: `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png` } };
-            if (sub === 'add') {
-                const note = data.options[0].options[1].value as string;
-                await usersCollection.updateOne({ userId: targetUser, guildId: guild_id }, { $push: { notes: { _id: new ObjectId(), moderatorId: member?.user.id, note, timestamp: Date.now() } } as any });
-                embed.description = `📝 note created for <@${targetUser}>\n\n > ${note}`;
-                res.data = { embeds: [embed] }
-                break;
-            } else {
-                const [newData] = await usersCollection.aggregate([{ $match: { userId: targetUser, guildId: guild_id } }, { $unwind: "$notes" }, { $sort: { "notes.timestamp": -1 } }, { $facet: { "notes": [{ $skip: 0 }, { $limit: 1 }], "total": [{ $count: "count" }] } }]).toArray();
-                if (!newData?.total?.length) {
-                    res.data = { embeds: [embed] }
-                    break;
-                }
-                const count = newData.total[0].count;
-                const firstNote = newData.notes[0].notes;
-                const mod = await response({ method: "GET", endpoint: `users/${firstNote.moderatorId}` }) as any;
-                const dateStr = new Date(firstNote.timestamp).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Chicago' });
-                const btn = (disabled: boolean) => [
-                    { type: ComponentType.Button, custom_id: `note-prev-${targetUser}-0-${member?.user.id}`, label: '◀️ prev', style: ButtonStyle.Secondary, disabled: true },
-                    { type: ComponentType.Button, custom_id: `note-next-${targetUser}-0-${member?.user.id}`, label: '▶️ next', style: ButtonStyle.Secondary, disabled: count <= 1 || disabled },
-                    { type: ComponentType.Button, custom_id: `note-del-${targetUser}-0-${member?.user.id}-${firstNote._id}`, label: '🗑️ delete', style: ButtonStyle.Danger, disabled }
-                ];
-                setTimeout(() => { response({ method: "PATCH", endpoint: `webhooks/${application_id}/${token}/messages/@original`, body: { components: [{ type: 1, components: btn(true) }] } }).catch(() => null); }, 600000);
-                res.data = {
-                    embeds: [{ color: 0xdddddd, thumbnail: { url: `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png` }, description: `<@${u.id}> notes | \`${1} of ${count}\`\n > ${firstNote.note}`, footer: { text: `${mod.username} | ${dateStr}`, icon_url: `https://cdn.discordapp.com/avatars/${mod.id}/${mod.avatar}.png` } }],
-                    components: [{ type: 1, components: btn(false) }]
-                }
-                break;
-            }
-        }
-        case 'refresh': {
-            (async () => {
-                const { Data, messageConfigs } = await guildconfigs.findOne({ guildId: guild_id }, { projection: { Data: 1, messageConfigs: 1 } }) as any;
-                if (!messageConfigs) return;
-                let currentData = Data || [];
-                for (const [embedName, config] of Object.entries(messageConfigs)) {
-                    const { channelid, embeds, components, reactions } = config as any;
-                    const existing = currentData.find((m: any) => m.name === embedName);
-                    const msg = existing ? await response({ method: "GET", endpoint: `channels/${channelid}/messages/${existing.messageId}` }).catch(() => null) as any : null;
-                    if (!msg) {
-                        const newMsg = await response({ method: "POST", endpoint: `channels/${channelid}/messages`, body: { embeds, components } }) as any;
-                        currentData = currentData.filter((m: any) => m.name !== embedName);
-                        if (reactions) for (const r of reactions) { await response({ method: "PUT", endpoint: `channels/${channelid}/messages/${newMsg.id}/reactions/${encodeURI(r)}/@me` }); await Bun.sleep(750); }
-                        currentData.push({ name: embedName, messageId: newMsg.id });
-                        await guildconfigs.updateOne({ guildId: guild_id }, { $set: { Data: currentData } });
-                    } else {
-                        const diff = msg.embeds.map((e: any) => getComparableEmbed(e)).join('|||') !== embeds.map((e: any) => getComparableEmbed(e)).join('|||');
-                        if (diff) await response({ method: "PATCH", endpoint: `channels/${channelid}/messages/${existing.messageId}`, body: { embeds } });
-                    }
-                }
-                await response({ method: "PATCH", endpoint: `webhooks/${application_id}/${token}/messages/@original`, body: { embeds: [{ description: 'Embeds updated!' }] } });
-            })();
-            res.type = InteractionResponseType.DeferredChannelMessageWithSource
-            break;
-        }
-        case 'applications': {
-            const isOpening = data.options[0].name === 'open';
-            await response({ method: "PATCH", endpoint: `channels/${channel.id}`, body: { permissionOverwrites: [{ id: guild_id, type: 0, allow: isOpening ? "2147848672" : "0", deny: isOpening ? "0" : "2147848672" }] } });
-            if (!isOpening) await usersCollection.updateMany({ guildId: guild_id }, { $set: { application: {} } });
-            res.data = { content: isOpening ? 'Apps have now been opened!' : 'Apps have now been closed!' }
-            break;
-        }
-        case 'member': {
-            const subcommand: APIApplicationCommandInteractionDataSubcommandOption = data.options[0];
-            const target = subcommand.options![0]!.value as string;
-            const targetmember = await response({ method: "GET", endpoint: `guilds/${guild_id}/members/${target}` }) as APIGuildMember;
-            if (target === member?.user.id) {
-                res.data = { embeds: [{ description: 'You cannot moderate yourself.' }], flags: MessageFlags.Ephemeral }
-                break;
-            }
-            else if (member?.roles.includes(staffroles[2]) && ['ban', 'unwarn', 'unmute'].includes(subcommand.name)) {
-                await response({ method: "POST", endpoint: `channels/${modChannels.adminChannel}/messages`, body: { embeds: [{ description: `Jr. mod ${member?.user} tried to use a mod only command.` }] } });
-                res.data = { embeds: [{ description: 'Jr mods do not have access to this command.' }], flags: MessageFlags.Ephemeral }
-                break;
-            }
-
-            else if (targetmember && targetmember.roles.some((r: string) => staffroles.includes(r))) {
-                await response({ method: "POST", endpoint: `channels/${modChannels.adminChannel}/messages`, body: { embeds: [{ description: `<@${member?.user.id}> tried to moderate <@${target}>.` }] } });
-                res.data = { embeds: [{ description: 'You cannot moderate other staff members.' }], flags: MessageFlags.Ephemeral }
-                break;
-            }
-            else if (targetmember && targetmember.user.bot) {
-                res.data = { embeds: [{ description: `You cannot moderate bots.` }], flags: 64 };
-                break;
-            }
-            if (subcommand.name === 'mute') {
-                if (targetmember && (subcommand.options![2]!.value as any) <= 0) {
-                    res.data = { embeds: [{ description: '❌ Invalid duration' }] };
-                    break;
-                } else if (targetmember && targetmember.communication_disabled_until) {
-                    res.data = { embeds: [{ description: '⚠️ User is already muted.' }] }
-                    break;
-                }
-            } else if (subcommand.name === 'unwarn') {
-                const { punishments } = await usersCollection.findOne({ userId: target, guildId: guild_id }, { projection: { punishments: 1 } }) as any;
-                const lastWarn = punishments?.filter((w: any) => w.type === 'Warn').pop();
-                if (!lastWarn) {
-                    res.data = { embeds: [{ description: `no warns found for <@${target}>` }] };
-                    break;
-                } else {
-                    await usersCollection.findOneAndUpdate({ userId: target, guildId: guild_id }, { $pull: { punishments: { _id: lastWarn._id } as any } });
-                    res.data = { embeds: [{ color: 0x00a900, description: `recent warn removed from <@${target}>` }] }
-                    break;
-                }
-            } else if (subcommand.name === 'unmute') {
-                if (targetmember && targetmember.communication_disabled_until) {
-                    await response({ method: "PATCH", endpoint: `guilds/${guild_id}/members/${target}`, body: { communication_disabled_until: null } as APIGuildMember });
-                    res.data = { embeds: [{ color: 0x00a900, description: `<@${target}> was unmuted.` }] }
-                    break;
-                } else {
-                    res.data = { embeds: [{ description: `<@${target}> is not muted.` }], flags: 64 };
-                    break;
-                }
-            }
-            return await punishUser({ guildId: guild_id, target: target, moderatorUser: member.user, reason: String(data.options[0].options[1].value), channelId: channel.id, currentWarnWeight: 1, interaction: body, banflag: subcommand.name === 'ban', kick: subcommand.name === 'kick' })
-        }
-        case 'link': {
-            const code = Math.random().toString(36).slice(2, 8).toUpperCase();
-            await usersCollection.updateOne(
-                { userId: member?.user.id, guildId: '1231453115937587270' },
-                { $set: { twitchLinkCode: code, twitchLinkExpires: Date.now() + 10 * 60000 } }
-            );
-            res.data = { embeds: [{ description: `Type \`!verify ${code}\` in Twitch chat within 10 minutes.` }], flags: 64 };
-            break;
-        }
-        case 'restart':
-            const botPid = parseInt(await Bun.file("./pid.txt").text())
-            res.data = { embeds: [{ description: "🔄 **Restarting bot..**", color: 0x5865F2 }] };
-            Bun.spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", "C:\\Users\\micha\\Desktop\\Bot\\restart.ps1", "-BotPid", `${botPid}`, "-intpid", `${process.pid}`], { stderr: "pipe", stdout: 'pipe', stdin: 'pipe' })
+        case 'Kick':
+            await response({ method: "DELETE", endpoint: `/guilds/${guild_id}/members/${target!.id}` })
             break;
     }
-    return Response.json(res)
+    await response({
+        method: "POST", endpoint: `/channels/${warnType === 'Ban' ? modChannels.banlogChannel : modChannels.mutelogChannel}/messages`, body: {
+            embeds: [logEmbed]
+        }
+    }
+    )
+    if (['Warn', 'Mute'].includes(warnType)) {
+        setTimeout(async () => {
+            await usersCollection.updateOne({ userId: target!.id, guildId: guild_id }, { $set: { "punishments.$[elem].active": 0 } }, { arrayFilters: [{ "elem._id": object }] });
+        }, 86400000);
+    }
+    return Response.json(res);
+}
+async function handleCommands(body: APIChatInputApplicationCommandGuildInteraction) {
+    const { guild_id, member, data: { name, options } } = body;
+    let cached: Document | null = null;
+    const guildConfig = async () => {
+        if (!cached) {
+            cached = await guildconfigs.findOne(
+                { guildId: guild_id },
+                { projection: { modChannels: 1, publicChannel: 1, staffroles: 1, guildname: 1 } }
+            ) as Document;
+        }
+        return cached;
+    };
+    const key = options?.[0] && options?.[0].type == ApplicationCommandOptionType.Subcommand ? `${name}.${options?.[0].name}` : name;
+    const handler = commands.get(key);
+    if (!handler) return Response.json({ type: 4, data: { content: `Unhandled command: ${key}`, flags: 64 } });
+    if (member?.user.id) {
+        const { staffroles } = await guildConfig();
+        const isStaff = member.roles.some((r: string) => staffroles.includes(r));
+        const blocked = checkCooldown(member.user.id, isStaff, handler.cooldownMs ?? DEFAULT_COOLDOWN_MS);
+        if (blocked) return blocked;
+    }
+    const res: { type: InteractionResponseType; data: any } = { type: InteractionResponseType.ChannelMessageWithSource, data: {} };
+    const earlyResponse = await handler({ body, res, guildConfig });
+    return earlyResponse ?? Response.json(res);
 }
 async function handleModals(body: APIModalSubmitInteraction) {
     const { guild_id, member, data: { custom_id, components, resolved } } = body;
@@ -434,10 +306,36 @@ async function handleModals(body: APIModalSubmitInteraction) {
             footer: { text: `User ID: ${member?.user.id}` }, timestamp: new Date().toISOString(),
             image: attachments[attId] ? { url: attachments[attId].url } : {}
         };
-        const actionRow = [{ type: 1, components: [{ type: 2, custom_id: `unban_approve_${member?.user.id}`, label: 'Approve', style: 3 }, { type: 2, custom_id: `unban_reject_${member?.user.id}`, label: 'Reject', style: 4 }] }];
-        const appealMsg = await response({ method: "POST", endpoint: `channels/${gConf.modChannels.appealChannel}/messages`, body: { content: `<@&${gConf.staffroles[0]}> <@&${gConf.staffroles[1]}>`, embeds: [mainembed], components: actionRow } }) as any;
+        const appealMsg = await response({
+            method: "POST",
+            endpoint: `channels/${gConf.modChannels.appealChannel}/messages`,
+            body: {
+                content: `<@&${gConf.staffroles[0]}> <@&${gConf.staffroles[1]}>`,
+                embeds: [mainembed],
+                components: [
+                    {
+                        type: ComponentType.ActionRow,
+                        components: [
+                            { type: ComponentType.Button, custom_id: `unban_approve_${member?.user.id}`, label: 'Approve', style: ButtonStyle.Success },
+                            { type: ComponentType.Button, custom_id: `unban_reject_${member?.user.id}`, label: 'Reject', style: ButtonStyle.Danger }]
+                    }]
+            }
+        }) as any;
         const extraImgs = Object.values(attachments).map((i: any) => ({ url: `https://discord.com/channels/${gConf.modChannels.appealChannel}/messages/${appealMsg.id}`, image: { url: i.url } }));
-        await response({ method: "PATCH", endpoint: `channels/${gConf.modChannels.appealChannel}/messages/${appealMsg.id}`, body: { embeds: [mainembed, ...extraImgs], components: actionRow } });
+        await response({
+            method: "PATCH",
+            endpoint: `channels/${gConf.modChannels.appealChannel}/messages/${appealMsg.id}`,
+            body: {
+                embeds: [mainembed, ...extraImgs],
+                components: [
+                    {
+                        type: ComponentType.ActionRow,
+                        components: [
+                            { type: ComponentType.Button, custom_id: `unban_approve_${member?.user.id}`, label: 'Approve', style: ButtonStyle.Success },
+                            { type: ComponentType.Button, custom_id: `unban_reject_${member?.user.id}`, label: 'Reject', style: ButtonStyle.Danger }]
+                    }]
+            }
+        });
         await response({ method: "POST", endpoint: `channels/${gConf.modChannels.appealChannel}/messages/${appealMsg.id}/threads`, body: { type: 11, name: `${member?.user.username}` } });
         await usersCollection.updateOne({ userId: member?.user.id, guildId: targetGuild }, { $set: { appeals: { _id: new ObjectId(), reason: reason.component.value, justification: justification.component.value, extra: extra.component.value } } });
         res.data = { content: 'Your appeal has been submitted!', flags: 64 }
@@ -521,16 +419,63 @@ async function handleComponents(body: APIMessageComponentInteraction) {
     const isAdmin = (BigInt(member!.permissions || 0n) & 8n) !== 0n;
     if (custom_id.startsWith('ban_')) {
         const [, targetId, inviteCode] = custom_id.split('_');
-        if (member?.roles.includes(staffroles[2])) return Response.json({ type: 4, data: { content: 'jrs cannot use this button.', flags: 64 } });
-        await punishUser({ guildId: guild_id!, target: targetId!, moderatorUser: member!.user, reason: "troll", channelId: channel.id, interaction: body, currentWarnWeight: 1, banflag: true })
-        if (inviteCode !== 'none') await response({ method: "DELETE", endpoint: `invites/${inviteCode}` });
-        await response({ method: "PATCH", endpoint: `channels/${channel.id}/messages/${message.id}`, body: { components: [{ type: 1, components: [{ type: 2, custom_id: 'expired', label: inviteCode !== 'none' ? '🔨 Banned & Invite Deleted!' : '🔨 Banned!', style: 4, disabled: true }] }] } });
-
-        res.data = { embeds: [{ description: `Banned <@${targetId}>${inviteCode !== 'none' ? ' Associated Invite was deleted' : ''}` }], message_reference: { message_id: message.id } }
+        if (member?.roles.includes(staffroles[2])) return Response.json({ type: InteractionResponseType.ChannelMessageWithSource, data: { content: 'jrs cannot use this button.', flags: MessageFlags.Ephemeral } });
+        const targetUser = await response({ method: "GET", endpoint: `users/${targetId}` }) as APIUser
+        res.type = InteractionResponseType.DeferredChannelMessageWithSource;
+        const { guildname, icon, modChannels } = await guildconfigs.findOne({ guildId: guild_id }, { projection: { Stages: 1, guildname: 1, icon: 1, modChannels: 1 } }) as Document
+        const { punishments } = await usersCollection.findOne({ userId: targetUser!.id, guildId: guild_id }, { projection: { punishments: 1 } }) as any;
+        const finalMessage: any = await response({
+            method: "POST", endpoint: `/webhooks/${body?.application_id}/${body?.token}`, body: {
+                embeds: [{
+                    color: 0xd10000,
+                    author: { name: `${targetUser!.id} was banned`, icon_url: `https://cdn.discordapp.com/avatars/${targetUser!.id}/${targetUser!.avatar}.webp` }
+                }]
+            }
+        })
+        const object = new ObjectId();
+        const newPunishment = { _id: object, userId: targetUser.id, moderatorId: member!.user.id, reason: 'troll', duration: 0, timestamp: Date.now(), active: 1, weight: 1, type: 'Ban', guildId: guild_id, channel: channel.id, refrence: `https://discord.com/channels/${guild_id}/${channel.id}/${finalMessage.id}`, warns: 1 };
+        await usersCollection.updateOne({ userId: targetUser!.id, guildId: guild_id }, { $push: { punishments: newPunishment as any } });
+        const caseHistory = [...punishments, newPunishment].filter((r: any) => r.type === "Ban").slice(0, 10).map((p: any, idx: number) => p.refrence ? `[Case ${idx + 1}](${p.refrence})` : null).filter(Boolean);
+        const logEmbed: APIEmbed = {
+            color: 0xd10000,
+            author: { name: `${member!.user.username} banned a member`, icon_url: `https://cdn.discordapp.com/avatars/${member!.user.id}/${member!.user.avatar}` },
+            thumbnail: { url: `https://cdn.discordapp.com/avatars/${targetUser!.id}/${targetUser!.avatar}.webp` },
+            fields: [
+                { name: 'user.id:', value: `<@${targetUser!.id}>`, inline: true },
+                { name: 'Channel:', value: `<#${channel.id}>`, inline: true },
+                { name: 'History:', value: caseHistory.join(' | ') || "none", inline: true },
+                { name: 'Reason:', value: `\`troll\``, inline: false },
+            ],
+            timestamp: new Date().toISOString(),
+            footer: { text: 'User DMed ✅' }
+        };
+        const dmchannel = await response({ method: 'POST', endpoint: `/users/@me/channels`, body: { recipient_id: targetUser!.id } })
+        const dmResult = await response({
+            method: 'POST', endpoint: `/channels/${dmchannel.id}/messages`, body: {
+                embeds: [{
+                    color: 0xd10000, author: { name: targetUser!.username, icon_url: `https://cdn.discordapp.com/avatars/${targetUser!.id}/${targetUser!.avatar}.webp` },
+                    thumbnail: { url: `${icon}` },
+                    description: `<@${targetUser!.id}>, you were banned from [${guildname}](https://discord.com/channels/${guild_id}). To appeal this decision, please join our dedicated appeal server using the button below.`,
+                    fields: [
+                        { name: 'Reason:', value: `\`troll\``, inline: false },
+                    ],
+                    timestamp: new Date().toISOString()
+                }],
+                components: [{ type: ComponentType.ActionRow, components: [{ type: ComponentType.Button, style: ButtonStyle.Link, label: "Appeal", url: 'https://discord.gg/qMjjyXyYbr' }] }]
+            }
+        })
+        if (!dmResult) logEmbed.footer!.text = 'User DMed 🚫';
+        await guildconfigs.updateOne({ guildId: guild_id }, { $set: { Ban: targetUser!.id } });
+        await response({ method: "PUT", endpoint: `/guilds/${guild_id}/bans/${targetUser!.id}`, body: { delete_message_seconds: 604800 }, reason: `Ban Command: troll` })
+        await response({ method: "POST", endpoint: `/channels/${modChannels.banlogChannel}/messages`, body: { embeds: [logEmbed] } })
+        if (inviteCode !== 'none') await response({ method: "DELETE", endpoint: `/invites/${inviteCode}` });
+        await response({ method: "PATCH", endpoint: `/channels/${channel.id}/messages/${message.id}`, body: { components: [{ type: ComponentType.ActionRow, components: [{ type: ComponentType.Button, custom_id: 'expired', label: inviteCode !== 'none' ? '🔨 Banned & Invite Deleted!' : '🔨 Banned!', style: ButtonStyle.Danger, disabled: true }] }] } as APIMessage });
+        res.data = { embeds: [{ description: `Banned <@${targetId}>${inviteCode !== 'none' ? ' Invite was deleted' : ''}` }], message_reference: { message_id: message.id } }
     }
     else if (custom_id.startsWith('unban_')) {
         const [, action, userId] = custom_id.split('_');
-        const { appeals, avatar } = await usersCollection.findOne({ userId: userId, guildId: guild_id }) as any;
+        const targetUser = await response({ method: "GET", endpoint: `users/${userId}` }) as APIUser
+        const { appeals } = await usersCollection.findOne({ userId: userId, guildId: guild_id }, { projection: { appeals: 1 } }) as any;
         if (!appeals) return Response.json({ content: `I could not find any appeal entries`, flags: 64 });
         if (!member?.roles.includes(staffroles[0])) {
             await response({ method: "POST", endpoint: `channels/${modChannels.adminChannel}/messages`, body: { content: `Letting you know <@${member?.user.id}> tried to jump the gun on an appeal.` } });
@@ -545,7 +490,7 @@ async function handleComponents(body: APIMessageComponentInteraction) {
         res.data = {
             embeds: [{
                 color: action === 'reject' ? 0x890000 : 0x008900, title: `Ban appeal`,
-                author: { name: ((await response({ method: "GET", endpoint: `users/${userId}` })) as any).username, iconURL: `https://cdn.discordapp.com/avatars/${userId}/${avatar}.${avatar?.startsWith('a_') ? 'gif' : 'png'}` },
+                author: { name: ((await response({ method: "GET", endpoint: `users/${userId}` })) as any).username, iconURL: `https://cdn.discordapp.com/avatars/${userId}/${targetUser.avatar}.${targetUser.avatar?.startsWith('a_') ? 'gif' : 'png'}` },
                 fields: [{ name: 'Why did you get banned?', value: appeals.reason }, { name: 'Why accept appeal?', value: appeals.justification }, { name: 'Extra info', value: appeals.extra }, { name: action === 'reject' ? 'Denied by:' : 'Approved by:', value: `<@${member.user.id}> `, inline: true }],
                 image: { url: message.attachments[0]?.proxy_url }, footer: { text: `User ID: ${userId}` }, timestamp: new Date().toISOString()
             }],
@@ -588,14 +533,15 @@ async function handleComponents(body: APIMessageComponentInteraction) {
     else if (custom_id.startsWith('note-') || custom_id.startsWith('modlog-')) {
         const isNote = custom_id.startsWith('note-');
         const [, action, target, index, opener, noteOrLogId] = custom_id.split('-');
+        const targetUser = await response({ method: "GET", endpoint: `users/${target}` }) as APIUser
         if (member!.user.id !== opener) return Response.json({ type: 4, data: { content: 'You did not initiate this command', flags: 64 } });
         let idx = parseInt(index!);
         if (action === 'del') {
             const targetId = ObjectId.createFromHexString(noteOrLogId!);
             if (isNote) {
-                const doc = await usersCollection.findOne({ userId: target, guildId: guild_id, "notes._id": targetId }, { projection: { "notes.$": 1 } }) as any;
+                const doc = await usersCollection.findOne({ userId: targetUser.id, guildId: guild_id, "notes._id": targetId }, { projection: { "notes.$": 1 } }) as any;
                 if (doc?.notes?.[0] && (Date.now() - doc.notes[0].timestamp < 172800000 || isAdmin)) {
-                    await usersCollection.updateOne({ userId: target, guildId: guild_id }, { $pull: { notes: { _id: targetId } } as any });
+                    await usersCollection.updateOne({ userId: targetUser.id, guildId: guild_id }, { $pull: { notes: { _id: targetId } } as any });
                     idx = Math.max(0, idx - 1);
                 } else {
                     res.type = InteractionResponseType.UpdateMessage
@@ -610,7 +556,7 @@ async function handleComponents(body: APIMessageComponentInteraction) {
             idx = Math.max(0, action === 'next' ? idx + 1 : idx - 1);
         if (isNote) {
             // Uniformly matching Newest First sort order matching initial command rendering
-            const [newData] = await usersCollection.aggregate([{ $match: { userId: target, guildId: guild_id } }, { $unwind: "$notes" }, { $sort: { "notes.timestamp": -1 } }, { $facet: { "notes": [{ $skip: idx }, { $limit: 1 }], "total": [{ $count: "count" }] } }]).toArray();
+            const [newData] = await usersCollection.aggregate([{ $match: { userId: targetUser.id, guildId: guild_id } }, { $unwind: "$notes" }, { $sort: { "notes.timestamp": -1 } }, { $facet: { "notes": [{ $skip: idx }, { $limit: 1 }], "total": [{ $count: "count" }] } }]).toArray();
             if (!newData?.total?.length) {
                 res.type = InteractionResponseType.UpdateMessage
                 res.data = { embeds: [{ description: "All notes deleted.", color: 0xdddddd }] }
@@ -619,10 +565,10 @@ async function handleComponents(body: APIMessageComponentInteraction) {
 
             const count = newData.total[0].count;
             const activeNote = newData.notes[0].notes;
-            const [m, u] = await Promise.all([response({ method: "GET", endpoint: `users/${activeNote.moderatorId}` }), response({ method: "GET", endpoint: `users/${target}` })]) as [any, any];
+            const m = await response({ method: "GET", endpoint: `users/${activeNote.moderatorId}` });
             res.type = InteractionResponseType.UpdateMessage
             res.data = {
-                embeds: [{ color: 0xdddddd, thumbnail: { url: `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png` }, description: `<@${u.id}> notes | \`${idx + 1} of ${count}\`\n> ${activeNote.note}`, footer: { text: `${m.username} | ${new Date(activeNote.timestamp).toLocaleString('en-US')}`, icon_url: `https://cdn.discordapp.com/avatars/${m.id}/${m.avatar}.png` } }],
+                embeds: [{ color: 0xdddddd, thumbnail: { url: `https://cdn.discordapp.com/avatars/${targetUser.id}/${targetUser.avatar}.png` }, description: `<@${targetUser.id}> notes | \`${idx + 1} of ${count}\`\n> ${activeNote.note}`, footer: { text: `${m.username} | ${new Date(activeNote.timestamp).toLocaleString('en-US')}`, icon_url: `https://cdn.discordapp.com/avatars/${m.id}/${m.avatar}.png` } }],
                 components: [{
                     type: ComponentType.ActionRow, components: [
                         { type: ComponentType.Button, custom_id: `note-prev-${target}-${idx}-${opener}`, label: '⬅️ Back', style: 2, disabled: idx === 0 },
@@ -632,7 +578,7 @@ async function handleComponents(body: APIMessageComponentInteraction) {
                 }]
             }
         } else {
-            const { punishments, avatar } = await usersCollection.findOne({ userId: target, guildId: guild_id }, { projection: { punishments: 1, avatar: 1 } }) as any;
+            const { punishments } = await usersCollection.findOne({ userId: target, guildId: guild_id }, { projection: { punishments: 1, avatar: 1 } }) as any;
             if (!punishments?.length) {
                 res.type = InteractionResponseType.UpdateMessage
                 res.data = { embeds: [{ description: `All logs deleted.` }], components: [] }
@@ -641,7 +587,7 @@ async function handleComponents(body: APIMessageComponentInteraction) {
             const activeLog = punishments[Math.min(idx, punishments.length - 1)];
             res.type = InteractionResponseType.UpdateMessage
             res.data = {
-                embeds: [await buildLogEmbed(target!, activeLog, idx, punishments.length, avatar)],
+                embeds: [await buildLogEmbed(targetUser!, activeLog, idx, punishments.length)],
                 components: [{
                     type: 1, components: [
                         { type: 2, custom_id: `modlog-prev-${target}-${idx}-${opener}`, label: '⬅️ Back', style: 2, disabled: idx === 0 },
@@ -692,7 +638,7 @@ async function handleComponents(body: APIMessageComponentInteraction) {
     else if (custom_id.startsWith('verify')) {
         const joinedTime = await usersCollection.findOne({ guildId: guild_id, userId: member?.user.id }, { projection: { joinedTime: 1 } }) as Document
         if (Date.now() - joinedTime.joinedTime < ((Math.random() + 5) * 1000)) {
-            const channel = await response({ method: "POST", endpoint: `users/@me/channels`, body: { recipients: member?.user.id } as APIChannel })
+            const channel = await response({ method: "POST", endpoint: `users/@me/channels`, body: { recipient_id: member?.user.id } })
             await response({
                 method: "POST",
                 endpoint: `channels/${channel.id}`, body: {
@@ -705,57 +651,13 @@ async function handleComponents(body: APIMessageComponentInteraction) {
             await response({ method: "DELETE", endpoint: `guilds/${guild_id}/members/${member?.user.id}` })
             return;
         }
-        const av = member?.user.avatar ? `https://cdn.discordapp.com/avatars/${member!.user.id}/${member!.user.avatar}.png` : `https://cdn.discordapp.com/embed/avatars/${parseInt(member!.user.id) % 5}.png`;
+        const av = member?.user.avatar ? `https://cdn.discordapp.com/avatars/${member!.user.id}/${member!.user.avatar}.png` : `https://cdn.discordapp.com/embed/avatars/${(BigInt(member!.user.id) >> 22n) % 6n}.png`;
         await response({ method: "PUT", endpoint: `guilds/${guild_id}/members/${member!.user.id}/roles/1463354464747524136` });
         await response({ method: "POST", endpoint: `channels/${generalchannels[0]}/messages`, body: { embeds: [{ description: `Everyone, Welcome <@${member?.user.id}> to the server !\n\n`, thumbnail: { url: av }, fields: [{ name: 'Discord Join Date:', value: `<t:${Number(((BigInt(member!.user.id) >> 22n) + 1420070400000n) / 1000n)}>`, inline: true }] }] } as APIMessage });
         res.type = InteractionResponseType.ChannelMessageWithSource
         res.data = { content: `Welcome to the cave <@${member?.user.id}>!!`, flags: 64 }
     }
     return Response.json(res)
-}
-const corsHeaders = {
-    "Access-Control-Allow-Origin": Bun.env.CONFIGURATOR_ORIGIN!,
-    "Access-Control-Allow-Methods": "GET, PUT, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Access-Control-Allow-Credentials": "true",
-};
-
-// --- Sessions & OAuth state (in-memory; fine for a low-traffic admin tool) ---
-const sessions = new Map<string, { userId: string; expires: number }>();
-const oauthStates = new Map<string, number>();
-setInterval(() => {
-    const now = Date.now();
-    for (const [id, s] of sessions) if (s.expires < now) sessions.delete(id);
-    for (const [state, expires] of oauthStates) if (expires < now) oauthStates.delete(state);
-}, 60_000);
-
-function randomToken() {
-    return crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
-}
-function parseCookies(req: Request): Record<string, string> {
-    const header = req.headers.get("cookie") || "";
-    const out: Record<string, string> = {};
-    for (const pair of header.split(";")) {
-        const idx = pair.indexOf("=");
-        if (idx === -1) continue;
-        out[pair.slice(0, idx).trim()] = decodeURIComponent(pair.slice(idx + 1).trim());
-    }
-    return out;
-}
-function getSession(req: Request) {
-    const sid = parseCookies(req)["session"];
-    if (!sid) return null;
-    const session = sessions.get(sid);
-    if (!session || session.expires < Date.now()) { sessions.delete(sid); return null; }
-    return session;
-}
-function roleFromStaffroles(userId: string, memberRoles: string[] | null, staffroles?: string[], ownerId?: string): "admin" | "mod" | null {
-    if (ownerId && userId === ownerId) return "admin"; // guild owner always has admin access, even before staffroles are configured
-    if (!memberRoles || !staffroles || staffroles.length < 2) return null;
-    const [adminRoleId, modRoleId] = staffroles;
-    if (memberRoles.includes(adminRoleId!)) return "admin";
-    if (memberRoles.includes(modRoleId!)) return "mod";
-    return null;
 }
 async function fetchMemberRoles(userId: string, guildId: string): Promise<string[] | null> {
     try {
@@ -765,16 +667,413 @@ async function fetchMemberRoles(userId: string, guildId: string): Promise<string
         return null; // not a member of that guild (or guild/user not found)
     }
 }
-const CONFIGURATOR_MANAGED_KEYS = ["modChannels", "publicChannels", "generalchannels", "reactions", "automodsettings", "responses", "staffroles", "reasonsandweights", "Stages", "messageConfigs"] as const;
+commands.set('dnd', async ({ body, res }) => {
+    const sides = parseInt(body.data.options![0]!.name.slice(1));
+    const rolled = Math.floor(Math.random() * sides) + 1;
+    res.data = { content: `you rolled a ${rolled}` };
+})
+commands.set('games.rps', async ({ body, res }) => {
+    const { member, guild_id } = body;
+    const subcommandoptions = (body.data.options![0] as APIApplicationCommandSubcommandOption).options as APIApplicationCommandBasicOption[];
+    const move: string = subcommandoptions[0]!.value;
+    const oppChoices = ['rock', 'paper', 'scissors'];
+    const opp = oppChoices[Math.floor(Math.random() * 3)]!;
+    const beats: Record<string, string> = { rock: 'scissors', paper: 'rock', scissors: 'paper' };
+    const result = opp === move.toLowerCase() ? "It's a tie!" : beats[opp] === move.toLowerCase() ? 'you win!!!' : 'Febot Wins!!!';
+    if (result === 'you win!!!') await usersCollection.findOneAndUpdate({ userId: member?.user.id, guildId: guild_id }, { $inc: { coins: 20 } });
+    res.data = { embeds: [{ title: result, description: `You chose **${move}**.\nOpponent chose **${opp}**.`, color: 0xffa500 }] };
+})
+commands.set('games.logos', async ({ body }) => {
+    const { member } = body;
+    const { logolist } = await logos.findOne({}) as any;
+    const logo = logolist[Math.floor(Math.random() * logolist.length)];
+    const distractors = shuffle(logolist.filter((l: any) => l.brand !== logo.brand)).slice(0, 3).map((l: any) => l.brand);
+    const comps = shuffle([logo.brand, ...distractors]).map((opt: string) => ({ type: 2, custom_id: `logos-${opt}-${logo.brand}`, label: opt, style: 1 }));
+    const form = new FormData();
+    form.append('files[0]', new Blob([await Bun.file(logo.image).arrayBuffer()]), 'logo.png');
+    form.append('payload_json', JSON.stringify({
+        type: 4,
+        data: {
+            embeds: [{ author: { name: `Guess this logo ${member?.user.username}`, icon_url: `https://cdn.discordapp.com/avatars/${member?.user.id}/${member?.user.avatar}.png` }, color: Math.floor(Math.random() * 16777215), image: { url: `attachment://logo.png` } }],
+            components: [{ type: 1, components: comps }]
+        }
+    }));
+    return new Response(form); // early return — dispatcher skips Response.json(res)
+})
+commands.set('games.bet', async ({ body, res }) => {
+    const { member, guild_id } = body;
+    const subcommandoptions = (body.data.options![0] as APIApplicationCommandSubcommandOption).options as APIApplicationCommandBasicOption[];
+    const coincount: number = subcommandoptions[0]!.value;
+    const { coins } = await usersCollection.findOne({ userId: member?.user.id, guildId: guild_id }, { projection: { coins: 1 } }) as any;
+    if (coincount > coins) return Response.json({ type: 4, data: { content: `You cannot bet more than you have!`, flags: 64 } });
+    const win = Math.random() >= 0.5;
+    await usersCollection.findOneAndUpdate({ userId: member?.user.id, guildId: guild_id }, { $inc: { coins: win ? Math.ceil(coincount * 1.5) : -coincount } });
+    res.data = {
+        embeds: [{
+            color: win ? 0x007a00 : 0x7a0000,
+            author: { name: `${member?.user.username} you bet ${coincount} and ${win ? 'won' : 'lost'}!`, icon_url: member?.user.avatar ? `https://cdn.discordapp.com/avatars/${member?.user.id}/${member?.user.avatar}.png` : "" }
+        }]
+    };
+});
+commands.set('appeal', async ({ body, res, guildConfig }) => {
+    const { guildname } = await guildConfig();
+    const userdata = await usersCollection.find({ userId: body.member?.user.id }).toArray();
+    const seenGuilds = new Map<string, string>();
+    for (const data of userdata) {
+        for (const p of data.punishments || []) {
+            if (p.type === "Ban" && !seenGuilds.has(body.guild_id)) {
+                seenGuilds.set(body.guild_id, guildname);
+            }
+        }
+    };
+    const opts = Array.from(seenGuilds).map(([id, gName]) => ({ label: gName, value: id }));
+    if (!opts.length) {
+        res.data = { content: "I couldn't find any entries", flags: 64 }
+        return Response.json(res)
+    }
+    res.type = InteractionResponseType.Modal
+    res.data = {
+        custom_id: 'appealModal', title: 'Ban Appeal Submission',
+        components: [
+            { type: ComponentType.Label, label: "Guild", component: { type: ComponentType.StringSelect, custom_id: 'guildId', max_values: 1, options: opts, required: true } },
+            { type: ComponentType.Label, label: "Why were you banned?", component: { type: 4, custom_id: 'reason', style: 1, required: true } },
+            { type: ComponentType.Label, label: "Why should we accept your appeal?", component: { type: 4, custom_id: 'justification', style: 2, required: true } },
+            { type: ComponentType.Label, label: 'Anything else we need to know?', component: { type: 4, custom_id: 'extra', style: 2, required: false } },
+            { type: ComponentType.Label, label: 'Ban appeal evidence can go here.', component: { type: 19, custom_id: 'evidence', required: false, min_values: 1, max_values: 5 } }
+        ]
+    }
+})
+commands.set('games.tictactoe', async ({ body, res }) => {
+    const { member } = body;
+    const subcommandoptions = (body.data.options![0] as APIApplicationCommandSubcommandOption).options as APIApplicationCommandBasicOption[];
+    const player2: string = subcommandoptions[0]!.value;
+    if (member?.user.id === player2) return Response.json({ type: 4, data: { content: "You can't play against yourself.", flags: 64 } });
+    const current = Math.random() < 0.5 ? member!.user.id : player2;
+    res.data = {
+        content: `<@${player2}>, <@${member?.user.id}> wants to play tictactoe`,
+        embeds: [{ color: 0x0000ff, title: 'TicTacToe', description: `It's <@${current}>'s turn to move.` }],
+        components: generateButtons(Array(9).fill(' '), member!.user.id, player2, current!)
+    };
+});
+commands.set('games.highlow', async ({ res }) => {
+    const start = Math.ceil(Math.random() * 100);
+    let secret = Math.ceil(Math.random() * 100);
+    while (secret === start) secret = Math.ceil(Math.random() * 100);
+    res.data = {
+        embeds: [{ color: 0x333300, title: "Higher or Lower", description: `I am thinking of a number. Do you think my number is higher or lower than the number below? `, fields: [{ name: 'Current Number:', value: `${start}` }] }],
+        components: [{
+            type: 1, components: [
+                { type: 2, label: "Higher", style: 1, custom_id: `highlow-higher-${start}-${secret}` },
+                { type: 2, label: "Lower", style: 4, custom_id: `highlow-lower-${start}-${secret}` }
+            ]
+        }]
+    };
+});
+commands.set('rank', async ({ body }) => {
+    const { options, resolved } = body.data;
+    const { member, guild_id } = body;
+    const targetUser = options ? resolved!.users![options[0]!.value] : member.user;
+    const { level, xp, coins, totalmessages } = await usersCollection.findOne({ userId: targetUser!.id, guildId: guild_id }, { projection: { level: 1, xp: 1, coins: 1, avatar: 1, totalmessages: 1, nick: 1 } }) as Document;
+    const { exponent, baseMultiplier, roundToNearest, flatOffset } = await guildconfigs.findOne({ guildId: guild_id }, { projection: { exponent: 1, baseMultiplier: 1, roundToNearest: 1, flatOffset: 1 } }) as Document;
+    const rank = await usersCollection.countDocuments({ guildId: guild_id, $or: [{ level: { $gt: level } }, { level: level, xp: { $gt: xp } }] });
+    const avRes = await response({ method: "GET", endpoint: targetUser!.avatar ? `https://cdn.discordapp.com/avatars/${targetUser?.id}/${targetUser!.avatar}.webp` : `https://cdn.discordapp.com/embed/avatars/${targetUser!.discriminator !== '0' ? parseInt(targetUser!.discriminator) % 5 : Number((BigInt(targetUser!.id) >> 22n) % 6n)}.png` });
+    const resizedAvatarBuf = await new Bun.Image(await avRes.arrayBuffer()).resize(100, 100).png().toBase64();
+    const reqXp = Math.round(((level < 100 ? level : 100) ** exponent * baseMultiplier + flatOffset) / roundToNearest);
+    const rankCardSvg = `<svg width="500" height="150" xmlns="http://www.w3.org/2000/svg"><defs><clipPath id="avatarClip"><circle cx="70" cy="75" r="50"/></clipPath></defs><rect width="500" height="150" rx="16" fill="#2c2f33"/><circle cx="70" cy="75" r="52" stroke="#3ba55d" stroke-width="3" fill="none" /><image href="data:image/png;base64,${resizedAvatarBuf}" x="20" y="25" width="100" height="100" clip-path="url(#avatarClip)"/><text x="130" y="60" fill="white" font-size="20" font-family="Arial" font-weight="bold">${targetUser?.username.slice(0, 15) + (targetUser?.username.length! > 15 ? "..." : "")}</text><text x="300" y="35" fill="white" font-size="16" font-family="Arial" font-weight="bold" text-anchor="middle">Level ${level}</text><text x="440" y="35" fill="white" font-size="16" font-family="Arial" font-weight="bold" text-anchor="end">Rank #${rank + 1}</text><rect x="130" y="85" width="350" height="20" rx="10" fill="#484b4e"/><rect x="130" y="85" width="${Math.min(Math.max(350 * (xp / reqXp), 25), 350)}" height="20" rx="10" fill="#3ba55d"/><text x="480" y="75" fill="#ccc" font-size="16" font-family="Arial" text-anchor="end">${xp} / ${reqXp} xp</text><text x="150" y="130" fill="#ccc" font-size="18" font-family="Arial">Coins: ${coins} | Messages: ${totalmessages}</text></svg>`;
+    const rankCardBuffer = await sharp(Buffer.from(rankCardSvg)).png().toBuffer();
+    const form = new FormData();
+    form.append('files[0]', new Blob([rankCardBuffer], { type: "image/png" }), 'rankcard.png');
+    form.append('payload_json', JSON.stringify({ type: InteractionResponseType.ChannelMessageWithSource }));
+    return new Response(form);
+});
+commands.set('blacklist.view', async ({ body, res }) => {
+    const { guild_id } = body;
+    const subcommandoptions = (body.data.options![0] as APIApplicationCommandSubcommandOption).options as APIApplicationCommandBasicOption[];
+    const targetUser = body.data.resolved?.users![subcommandoptions[0]!.value as string];
+    const { embed } = await buildBlacklistEmbed(targetUser, guild_id);
+    res.data = { embeds: [embed] };
+});
+commands.set('blacklist.add', async ({ body, res }) => {
+    const { guild_id } = body;
+    const subcommandoptions = (body.data.options![0] as APIApplicationCommandSubcommandOption).options as APIApplicationCommandBasicOption[];
+    const targetUser = body.data.resolved?.users![subcommandoptions[0]!.value as string];
+    const role = subcommandoptions[1]!.value as string;
+    const { embed, blacklist } = await buildBlacklistEmbed(targetUser, guild_id);
+    if (!blacklist.includes(role)) {
+        await usersCollection.updateOne({ userId: targetUser!.id, guildId: guild_id }, { $push: { blacklist: role } as any });
+        await response({ method: "DELETE", endpoint: `guilds/${guild_id}/members/${targetUser!.id}/roles/${role}` });
+        embed.description = `<@&${role}> was blacklisted from <@${targetUser!.id}>`;
+    } else {
+        embed.description = `<@&${role}> is already blacklisted from <@${targetUser!.id}>`;
+    }
+    res.data = { embeds: [embed] };
+});
+commands.set('blacklist.remove', async ({ body, res }) => {
+    const { guild_id } = body;
+    const subcommandoptions = (body.data.options![0] as APIApplicationCommandSubcommandOption).options as APIApplicationCommandBasicOption[];
+    const targetUser = body.data.resolved?.users![subcommandoptions[0]!.value as string];
+    const role = subcommandoptions[1]!.value as string;
+    const { embed } = await buildBlacklistEmbed(targetUser, guild_id);
+    await usersCollection.updateOne({ userId: targetUser!.id, guildId: guild_id }, { $pull: { blacklist: role } as any });
+    embed.description = `<@&${role}> was removed from <@${targetUser!.id}>'s blacklist`;
+    res.data = { embeds: [embed] };
+});
+commands.set('apply', async ({ body, res }) => {
+    const { member, guild_id } = body;
+    const { application } = await usersCollection.findOne({ userId: member?.user.id, guildId: guild_id }, { projection: { application: 1 } }) as any;
+    if (application?.Activity) {
+        res.data = { content: 'Already Completed. Click the button below to continue.', components: [{ type: 1, components: [{ type: 2, custom_id: 'next_modal_two', label: 'skip Part 1', style: 1 }] }], flags: 64 };
+        return;
+    }
+    res.type = InteractionResponseType.Modal;
+    res.data = {
+        title: 'Experience and Activity (1/3)',
+        custom_id: 'server',
+        components: [
+            { type: ComponentType.Label, label: `What age range are you in?`, component: { type: 3, custom_id: 'age', options: [{ label: '12 or under', value: '12 or under' }, { label: '13 to 15', value: '13-15' }, { label: '16 to 17', value: '16-17' }, { label: '18 or over', value: '18 or over' }], max_values: 1, required: true } },
+            { type: ComponentType.Label, label: 'Any prior mod experience?', component: { type: 4, custom_id: 'experience', required: true, style: 2, max_length: 300 } },
+            { type: ComponentType.Label, label: 'Have you been warned/muted?', component: { type: 4, custom_id: 'punishments', required: true, style: 1, max_length: 100 } },
+            { type: ComponentType.Label, label: 'Timezone?', component: { type: 4, custom_id: 'timezone', required: true, style: 1, placeholder: 'put current time if unsure', max_length: 8 } },
+            { type: ComponentType.Label, label: `How active are you in the server?`, component: { type: 4, custom_id: 'activity', style: 1, required: true, max_length: 150 } }
+        ]
+    };
+});
+commands.set('leaderboard', async ({ body, res }) => {
+    const { guild_id } = body;
+    const board = await usersCollection.find({ guildId: guild_id }).limit(10).sort({ level: -1, xp: -1 }).toArray();
+    const guild = await response({ method: "GET", endpoint: `guilds/${guild_id}` }) as APIGuild;
+    res.data = {
+        embeds: [{
+            title: `Most active in ${guild.name}`, thumbnail: { url: `https://cdn.discordapp.com/icons/${guild_id}/${guild.icon}.png` }, color: 0x0c23a3,
+            description: `**__LeaderBoard:__**\n${board.map((u: any, idx) => `Rank \`${idx + 1}\`: <@${u.userId}> - level \`${u.level}\` with \`${u.xp}\` xp`).join('\n')}`,
+            timestamp: new Date().toISOString()
+        }]
+    };
+});
+commands.set('modlogs', async ({ body, res }) => {
+    const { options, resolved } = body.data;
+    const { member, guild_id, id, token } = body;
+    const target = options![0]!.value as string;
+    const targetUser = resolved!.users![target];
+    const isAdmin = (BigInt(member!.permissions) & 8n) !== 0n;
+    const { punishments } = await usersCollection.findOne({ userId: targetUser!.id, guildId: guild_id }, { projection: { punishments: 1, avatar: 1 } }) as any;
+    if (!punishments?.length) {
+        res.data = { embeds: [{ color: 0xf58931, description: `❌ No modlogs found for <@${targetUser!.id}>.` }] };
+        return;
+    }
+    const btn = (disabled: boolean) => [
+        { type: 2, custom_id: `modlog-prev-${targetUser!.id}-0-${member?.user.id}`, label: '⬅️ Back', style: 2, disabled: true },
+        { type: 2, custom_id: `modlog-next-${targetUser!.id}-0-${member?.user.id}`, label: 'Next ➡️', style: 2, disabled: punishments.length <= 1 || disabled },
+        ...(isAdmin ? [{ type: 2, custom_id: `modlog-del-${targetUser!.id}-0-${member?.user.id}-${punishments[0]._id}`, label: 'Delete', style: 4, disabled }] : [])
+    ];
+    setTimeout(() => { response({ method: "PATCH", endpoint: `webhooks/${id}/${token}/messages/@original`, body: { components: [{ type: 1, components: btn(true) }] } }).catch(() => null); }, 600000);
+    res.data = {
+        embeds: [await buildLogEmbed(targetUser!, punishments[0], 0, punishments.length)],
+        components: [{ type: 1, components: btn(false) }]
+    };
+});
+commands.set('note.add', async ({ body, res }) => {
+    const { member, guild_id } = body;
+    const subcommandoptions = (body.data.options![0] as APIApplicationCommandSubcommandOption).options as APIApplicationCommandBasicOption[];
+    const targetUser = subcommandoptions[0]!.value as string;
+    const note = subcommandoptions[1]!.value as string;
+    await usersCollection.updateOne({ userId: targetUser, guildId: guild_id }, { $push: { notes: { _id: new ObjectId(), moderatorId: member?.user.id, note, timestamp: Date.now() } } as any });
+    res.data = { embeds: [{ color: 0x00a900, description: `📝 note created for <@${targetUser}>\n\n > ${note}` }] };
+});
+commands.set('note.show', async ({ body, res }) => {
+    const { member, guild_id, application_id, token } = body;
+    const subcommandoptions = (body.data.options![0] as APIApplicationCommandSubcommandOption).options as APIApplicationCommandBasicOption[];
+    const targetUser = subcommandoptions[0]!.value as string;
+    const u = body.data.resolved?.users![targetUser];
+    const emptyEmbed: APIEmbed = { color: 0x00a900, description: `❌ No notes found for <@${u!.id}>`, thumbnail: { url: `https://cdn.discordapp.com/avatars/${u!.id}/${u!.avatar}.png` } };
 
+    const [newData] = await usersCollection.aggregate([
+        { $match: { userId: u!.id, guildId: guild_id } },
+        { $unwind: "$notes" },
+        { $sort: { "notes.timestamp": -1 } },
+        { $facet: { "notes": [{ $skip: 0 }, { $limit: 1 }], "total": [{ $count: "count" }] } }
+    ]).toArray();
+
+    if (!newData?.total?.length) {
+        res.data = { embeds: [emptyEmbed] };
+        return;
+    }
+
+    const count = newData.total[0].count;
+    const firstNote = newData.notes[0].notes;
+    const mod = await response({ method: "GET", endpoint: `users/${firstNote.moderatorId}` }) as any;
+    const dateStr = new Date(firstNote.timestamp).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Chicago' });
+    const btn = (disabled: boolean) => [
+        { type: ComponentType.Button, custom_id: `note-prev-${u!.id}-0-${member?.user.id}`, label: '◀️ prev', style: ButtonStyle.Secondary, disabled: true },
+        { type: ComponentType.Button, custom_id: `note-next-${u!.id}-0-${member?.user.id}`, label: '▶️ next', style: ButtonStyle.Secondary, disabled: count <= 1 || disabled },
+        { type: ComponentType.Button, custom_id: `note-del-${u!.id}-0-${member?.user.id}-${firstNote._id}`, label: '🗑️ delete', style: ButtonStyle.Danger, disabled }
+    ];
+    setTimeout(() => { response({ method: "PATCH", endpoint: `webhooks/${application_id}/${token}/messages/@original`, body: { components: [{ type: 1, components: btn(true) }] } }).catch(() => null); }, 600000);
+    res.data = {
+        embeds: [{ color: 0xdddddd, thumbnail: { url: `https://cdn.discordapp.com/avatars/${u!.id}/${u!.avatar}.png` }, description: `<@${u!.id}> notes | \`${1} of ${count}\`\n > ${firstNote.note}`, footer: { text: `${mod.username} | ${dateStr}`, icon_url: `https://cdn.discordapp.com/avatars/${mod.id}/${mod.avatar}.png` } }],
+        components: [{ type: 1, components: btn(false) }]
+    };
+});
+commands.set('applications.open', async ({ body, res }) => {
+    const { guild_id, channel } = body;
+    await response({ method: "PATCH", endpoint: `channels/${channel.id}`, body: { permissionOverwrites: [{ id: guild_id, type: 0, allow: "2147848672", deny: "0" }] } });
+    res.data = { content: 'Apps have now been opened!' };
+});
+commands.set('applications.close', async ({ body, res }) => {
+    const { guild_id, channel } = body;
+    await response({ method: "PATCH", endpoint: `channels/${channel.id}`, body: { permissionOverwrites: [{ id: guild_id, type: 0, allow: "0", deny: "2147848672" }] } });
+    await usersCollection.updateMany({ guildId: guild_id }, { $set: { application: {} } });
+    res.data = { content: 'Apps have now been closed!' };
+});
+commands.set('member.mute', async (ctx) => {
+    const guarded = await memberGuards(ctx);
+    if (guarded) return;
+    return runPunishment(ctx);
+});
+commands.set('member.ban', async (ctx) => {
+    const guarded = await memberGuards(ctx);
+    if (guarded) return;
+    return runPunishment(ctx);
+});
+commands.set('member.kick', async (ctx) => {
+    const guarded = await memberGuards(ctx);
+    if (guarded) return;
+    return runPunishment(ctx);
+});
+commands.set('member.warn', async (ctx) => {
+    const guarded = await memberGuards(ctx);
+    if (guarded) return;
+    return runPunishment(ctx);
+});
+commands.set('member.unwarn', async (ctx) => {
+    const guarded = await memberGuards(ctx);
+    if (guarded) return;
+    const { body, res } = ctx;
+    const { guild_id } = body;
+    const subcommand = body.data.options![0] as APIApplicationCommandSubcommandOption;
+    const target = subcommand.options![0]!.value as string;
+    const { punishments } = await usersCollection.findOne({ userId: target, guildId: guild_id }, { projection: { punishments: 1 } }) as any;
+    const lastWarn = punishments?.filter((w: any) => w.type === 'Warn').pop();
+    if (!lastWarn) {
+        res.data = { embeds: [{ description: `no warns found for <@${target}>` }] };
+        return;
+    }
+    await usersCollection.findOneAndUpdate({ userId: target, guildId: guild_id }, { $pull: { punishments: { _id: lastWarn._id } as any } });
+    res.data = { embeds: [{ color: 0x00a900, description: `recent warn removed from <@${target}>` }] };
+});
+commands.set('member.unmute', async (ctx) => {
+    const guarded = await memberGuards(ctx);
+    if (guarded) return;
+    const { body, res } = ctx;
+    const { guild_id, data: { resolved } } = body;
+    const subcommand = body.data.options![0] as APIApplicationCommandSubcommandOption;
+    const target = subcommand.options![0]!.value as string;
+    const targetmember = resolved?.members![0]
+    if (targetmember && targetmember!.communication_disabled_until) {
+        await response({ method: "PATCH", endpoint: `guilds/${guild_id}/members/${target}`, body: { communication_disabled_until: null } as APIGuildMember });
+        res.data = { embeds: [{ color: 0x00a900, description: `<@${target}> was unmuted.` }] };
+
+    } else
+        res.data = { embeds: [{ description: `<@${target}> is not muted.` }], flags: 64 };
+    return;
+});
+commands.set('appeal', async ({ body, res, guildConfig }) => {
+    const { member, guild_id } = body;
+    const { guildname } = await guildConfig();
+    const userdata = await usersCollection.find({ userId: member?.user.id }).toArray();
+    const seenGuilds = new Map<string, string>();
+    for (const data of userdata) {
+        for (const p of data.punishments || []) {
+            if (p.type === "Ban" && !seenGuilds.has(guild_id)) {
+                seenGuilds.set(guild_id, guildname);
+            }
+        }
+    }
+    const opts = Array.from(seenGuilds).map(([id, gName]) => ({ label: gName, value: id }));
+    if (!opts.length) {
+        res.data = { content: "I couldn't find any entries", flags: 64 };
+        return;
+    }
+    res.type = InteractionResponseType.Modal;
+    res.data = {
+        custom_id: 'appealModal', title: 'Ban Appeal Submission',
+        components: [
+            { type: ComponentType.Label, label: "Guild", component: { type: ComponentType.StringSelect, custom_id: 'guildId', max_values: 1, options: opts, required: true } },
+            { type: ComponentType.Label, label: "Why were you banned?", component: { type: 4, custom_id: 'reason', style: 1, required: true } },
+            { type: ComponentType.Label, label: "Why should we accept your appeal?", component: { type: 4, custom_id: 'justification', style: 2, required: true } },
+            { type: ComponentType.Label, label: 'Anything else we need to know?', component: { type: 4, custom_id: 'extra', style: 2, required: false } },
+            { type: ComponentType.Label, label: 'Ban appeal evidence can go here.', component: { type: 19, custom_id: 'evidence', required: false, min_values: 1, max_values: 5 } }
+        ]
+    };
+});
+commands.set('link', async ({ body, res }) => {
+    const { member } = body;
+    const code = Math.random().toString(36).slice(2, 8).toUpperCase();
+    await usersCollection.updateOne(
+        { userId: member?.user.id, guildId: '1231453115937587270' },
+        { $set: { twitchLinkCode: code, twitchLinkExpires: Date.now() + 10 * 60000 } }
+    );
+    res.data = { embeds: [{ description: `Type \`!verify ${code}\` in Twitch chat within 10 minutes.` }], flags: 64 };
+});
+commands.set('refresh', async ({ body, res }) => {
+    const { guild_id, application_id, token } = body;
+    (async () => {
+        const existing = await guildconfigs.findOne({ guildId: guild_id }, { projection: { _id: 0, messageConfigs: 1 } }) as Document;
+        const { messageConfigs } = existing;
+        for (const [embedName, config] of Object.entries(messageConfigs as Document)) {
+            const { channelid, embeds, components, reactions, messageId } = config;
+            try {
+                if (!messageId) throw new Error("no message sent yet");
+                const message = await response({ method: "GET", endpoint: `channels/${channelid}/messages/${messageId}` }) as any;
+                const different = message.embeds.map((embed: APIEmbed) => getComparableEmbed(embed)).join('|||') !== embeds.map((embed: APIEmbed) => getComparableEmbed(embed)).join('|||');
+                if (different) {
+                    await response({ method: "PATCH", endpoint: `channels/${channelid}/messages/${messageId}`, body: { embeds: embeds, ...components } });
+                }
+            } catch {
+                let msg: APIMessage;
+                try {
+                    msg = await response({ method: "POST", endpoint: `channels/${channelid}/messages`, body: { embeds: embeds, components: components } });
+                } catch (err) {
+                    if (err instanceof DiscordAPIError) {
+                        await appendFile("./log.log", `Error sending embed: ${embedName} cause: ${err.message}\n`);
+                        continue;
+                    }
+                    throw err;
+                }
+                if (reactions) {
+                    for (const r of reactions) {
+                        const emoji = typeof r === 'string' ? r : r.emoji;
+                        await response({ method: "PUT", endpoint: `/channels/${channelid}/messages/${msg!.id}/reactions/${emoji}/@me` });
+                        await Bun.sleep(750);
+                    }
+                }
+                await appendFile("./log.log", `📝 Sent '${embedName}'. Message ID: ${msg!.id} \n`);
+                await guildconfigs.updateOne({ guildId: guild_id }, { [`messageConfigs.${embedName}.messageId`]: msg!.id });
+            }
+        }
+        await response({ method: "PATCH", endpoint: `webhooks/${application_id}/${token}/messages/@original`, body: { embeds: [{ description: 'Embeds updated!' }] } });
+    })();
+    res.type = InteractionResponseType.DeferredChannelMessageWithSource;
+});
+commands.set('restart', async ({ res }) => {
+    const botPid = parseInt(await Bun.file("./pid.txt").text());
+    res.data = { embeds: [{ description: "🔄 **Restarting bot..**", color: 0x5865F2 }] };
+    Bun.spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", "C:\\Users\\micha\\Desktop\\Bot\\restart.ps1", "-BotPid", `${botPid}`, "-intpid", `${process.pid}`], { stderr: "pipe", stdout: 'pipe', stdin: 'pipe' });
+});
+
+setInterval(() => {
+    const now = Date.now();
+    for (const [id, s] of sessions) if (s.expires < now) sessions.delete(id);
+    for (const [state, expires] of oauthStates) if (expires < now) oauthStates.delete(state);
+}, 60_000);
 Bun.serve({
     port: 3000,
     websocket: { open() { }, message() { }, close() { } },
     routes: {
-        "/": () => new Response(Bun.file("./public/index.html")),
-        "/guildconfig.js": () => new Response(Bun.file("./public/guildconfig.js"), { headers: { "Content-Type": "application/javascript" } }),
+        "/": () => new Response(Bun.file("./index.html")),
+        "/controller.js": () => new Response(Bun.file("./dist/controller.js"), { headers: { "Content-Type": "application/javascript" } }),
         "/favicon.ico": () => new Response(null, { status: 204 }),
-        "/output.css": () => new Response(Bun.file("./public/output.css"), { headers: { "Content-Type": "text/css" } }),
+        "/output.css": () => new Response(Bun.file("./dist/output.css"), { headers: { "Content-Type": "text/css" } }),
         "/api/auth/discord/login": () => {
             const state = randomToken();
             oauthStates.set(state, Date.now() + 5 * 60 * 1000);
@@ -806,7 +1105,6 @@ Bun.serve({
             });
             if (!tokenRes.ok) return new Response("OAuth token exchange failed", { status: 502 });
             const { access_token } = await tokenRes.json() as { access_token: string };
-
             const userRes = await fetch("https://discord.com/api/users/@me", { headers: { Authorization: `Bearer ${access_token}` } });
             if (!userRes.ok) return new Response("Failed to fetch Discord user", { status: StatusCodes.BAD_GATEWAY });
             const discordUser = await userRes.json() as { id: string; username: string };
@@ -827,10 +1125,11 @@ Bun.serve({
                 const session = getSession(req);
                 if (!session) return Response.json({ error: "Not logged in" }, { status: StatusCodes.UNAUTHORIZED, headers: corsHeaders });
                 const { userId } = req.params;
+                if (!userId) return Response.json({ error: "Invalid User" }, { status: StatusCodes.NOT_FOUND, headers: corsHeaders });
                 try {
                     const user = await response({ method: "GET", endpoint: `users/${userId}` }) as APIUser;
                     return Response.json(
-                        { id: user.id, username: user.username, globalName: user.global_name ?? null, avatar: user.avatar },
+                        { ...user },
                         { headers: { ...corsHeaders, "Cache-Control": "private, max-age=3600" } }
                     );
                 } catch {
@@ -841,67 +1140,48 @@ Bun.serve({
         "/api/auth/discord/bot-redirect": async (req) => {
             const url = new URL(req.url)
             const guildId = url.searchParams.get('guild_id')
+            if (!guildId) return;
             const guild = await response({ method: "GET", endpoint: `guilds/${guildId}` }) as APIGuild;
-            await guildconfigs.updateOne(
-                { guildId: guild.id },
+            await guildconfigs.insertOne(
                 {
-                    $setOnInsert: {
-                        guildId: guild.id,
-                        name: guild.name,
-                        icon: guild.icon,
-                        modChannels: {
-                            mutelogChannel: "", deletedlogChannel: "", welcomeChannel: "", updatedlogChannel: "",
-                            namelogChannel: "", banlogChannel: "", appealChannel: "", applicationChannel: "",
-                            adminChannel: "", applyChannel: "", voicelogChannel: ""
-                        },
-                        publicChannels: {},
-                        generalchannels: [],
-                        ownerId: guild.owner_id,
-                        reactions: {},
-                        automodsettings: { Duplicatespamthreshold: 3, mediathreshold: 1, messagethreshold: 10, spamthreshold: 4, capsthreshold: 0.7 },
-                        responses: {},
-                        staffroles: [],
-                        Invites: [],
-                        Data: [],
-                        count: 0,
-                        lastuser: "",
-                        appealInvite: "https://discord.gg/xpYnPrSXDG",
-                        messageConfigs: {},
-                        baseMultiplier: 0,
-                        exponent: 0,
-                        flatOffset: 0,
-                        roundToNearest: 0,
-                        reasonsandweights: {},
-                        Stages: [],
-                        Ban: ""
-                    }
-                },
-                { upsert: true }
-            );
+                    guildId: guild.id,
+                    guildname: guild.name,
+                    icon: guild.icon,
+                    modChannels: {
+                        mutelogChannel: "", deletedlogChannel: "", welcomeChannel: "", updatedlogChannel: "", namelogChannel: "", banlogChannel: "", appealChannel: "", applicationChannel: "", adminChannel: "", applyChannel: "", voicelogChannel: ""
+                    },
+                    publicChannels: {},
+                    generalchannels: [],
+                    ownerId: guild.owner_id,
+                    reactions: {},
+                    automodsettings: { messagereasonsandweights: {}, automodreasonsandweights: {}, Duplicatespamthreshold: 3, mediathreshold: 1, messagethreshold: 10, spamthreshold: 4, capsthreshold: 0.7 },
+                    responses: {},
+                    staffroles: [],
+                    Invites: [],
+                    Data: [],
+                    count: 0,
+                    lastuser: "",
+                    appealInvite: "https://discord.gg/xpYnPrSXDG",
+                    messageConfigs: {},
+                    baseMultiplier: 0,
+                    exponent: 0,
+                    flatOffset: 0,
+                    roundToNearest: 0,
+                    Stages: [
+                        { "label": "15 min mute", "minutes": 0 },
+                        { "label": "30 min mute", "minutes": 15 },
+                        { "label": "45 min mute", "minutes": 30 },
+                        { "label": "1 hour mute", "minutes": 45 },
+                        { "label": "2 hour mute", "minutes": 60 },
+                        { "label": "4 hour mute", "minutes": 120 },
+                        { "label": "8 hour mute", "minutes": 240 },
+                        { "label": "16 hour mute", "minutes": 960 },
+                        { "label": "16 hour mute", "minutes": 960 }
+                    ],
+                    Ban: ""
+                });
             appendFile("./log.log", `Created default config for new guild ${guild.id}`);
             return new Response(null, { status: StatusCodes.MOVED_TEMPORARILY, headers: { Location: "/" }, });
-        },
-        "/api/guilds/:guildId/automod-rules": {
-            GET: async (req) => {
-                const session = getSession(req);
-                if (!session) return Response.json({ error: "Not logged in" }, { status: 401, headers: corsHeaders });
-                const { guildId } = req.params;
-
-                const doc = await guildconfigs.findOne({ guildId }, { projection: { staffroles: 1, ownerId: 1 } });
-                if (!doc) return Response.json({ error: "Not found" }, { status: StatusCodes.NOT_FOUND, headers: corsHeaders });
-                const memberRoles = await fetchMemberRoles(session.userId, guildId);
-                const role = roleFromStaffroles(session.userId, memberRoles, doc.staffroles as string[] | undefined, doc.ownerId as string | undefined);
-                if (!role) return Response.json({ error: "Forbidden" }, { status: StatusCodes.FORBIDDEN, headers: corsHeaders });
-
-                const rules = await response({ method: "GET", endpoint: `guilds/${guildId}/auto-moderation/rules` });
-                if (rules === false) {
-                    return Response.json({ error: "Failed to fetch AutoMod rules from Discord (check bot permissions/log.log)" }, { status: StatusCodes.BAD_GATEWAY, headers: corsHeaders });
-                }
-                return Response.json(
-                    (rules as { id: string; name: string }[]).map(r => ({ id: r.id, name: r.name })),
-                    { headers: corsHeaders }
-                );
-            }
         },
         "/api/auth/me": {
             GET: (req) => {
@@ -923,13 +1203,14 @@ Bun.serve({
                 const session = getSession(req);
                 if (!session) return Response.json({ error: "Not logged in" }, { status: StatusCodes.UNAUTHORIZED, headers: corsHeaders });
                 const docs = await guildconfigs.find({}, { projection: { guildId: 1, name: 1, staffroles: 1, _id: 0, ownerId: 1 } }).toArray();
-                const authorized: { guildId: string; name: string | null; role: "admin" | "mod" }[] = [];
-                for (const doc of docs) {
+                const results = await Promise.all(docs.map(async (doc) => {
                     const memberRoles = await fetchMemberRoles(session.userId, doc.guildId as string);
-                    if (!memberRoles) continue;
+                    if (!memberRoles) return null;
                     const role = roleFromStaffroles(session.userId, memberRoles, doc.staffroles as string[] | undefined, doc.ownerId as string | undefined);
-                    if (role) authorized.push({ guildId: doc.guildId as string, name: (doc.name as string) ?? null, role });
-                }
+                    if (!role) return null;
+                    return { guildId: doc.guildId as string, name: (doc.name as string) ?? null, role };
+                }));
+                const authorized = results.filter((r): r is NonNullable<typeof r> => r !== null);
                 return Response.json(authorized, { headers: corsHeaders });
             }
         },
@@ -941,10 +1222,24 @@ Bun.serve({
                 const { guildId } = req.params;
                 const doc = await guildconfigs.findOne({ guildId });
                 if (!doc) return Response.json({ error: "Not found" }, { status: StatusCodes.NOT_FOUND, headers: corsHeaders });
-                const memberRoles = await fetchMemberRoles(session.userId, guildId);
+                const [memberRoles, guildRoles, guildChannels, rules] = await Promise.all([
+                    fetchMemberRoles(session.userId, guildId),
+                    response({ method: "GET", endpoint: `guilds/${guildId}/roles` }) as Promise<APIRole[]>,
+                    response({ method: "GET", endpoint: `guilds/${guildId}/channels` }) as Promise<APIChannel[]>,
+                    response({ method: "GET", endpoint: `guilds/${guildId}/auto-moderation/rules` }) as Promise<APIAutoModerationRule[]>,
+                ]);
+                const selectableChannels = guildChannels
+                    .filter((c: APIChannel) => [ChannelType.GuildText, ChannelType.GuildAnnouncement].includes(c.type))
+                    .sort((a: any, b: any) => (a.position ?? 0) - (b.position ?? 0));
                 const role = roleFromStaffroles(session.userId, memberRoles, doc.staffroles as string[] | undefined, doc.ownerId as string | undefined);
                 if (!role) return Response.json({ error: "Forbidden" }, { status: StatusCodes.FORBIDDEN, headers: corsHeaders });
-                return Response.json({ ...doc, _viewerRole: role }, { headers: corsHeaders });
+                return Response.json({
+                    ...doc,
+                    _viewerRole: role,
+                    guildRoles: guildRoles,
+                    guildChannels: selectableChannels,
+                    rules: (rules.map(r => ({ id: r.id, name: r.name })))
+                }, { headers: corsHeaders });
             },
             PUT: async (req) => {
                 const session = getSession(req);
@@ -983,7 +1278,10 @@ Bun.serve({
                 if (!existing) return Response.json({ error: "Not found" }, { status: StatusCodes.NOT_FOUND, headers: corsHeaders });
                 const memberRoles = await fetchMemberRoles(session.userId, guildId);
                 const role = roleFromStaffroles(session.userId, memberRoles, existing.staffroles as string[] | undefined, existing.ownerId as string | undefined);
-                if (role !== "admin") return Response.json({ error: "Forbidden — admin role required to delete" }, { status: StatusCodes.FORBIDDEN, headers: corsHeaders });
+                if (role !== "admin") {
+                    return Response.json({ error: "Forbidden — admin role required to delete" }, { status: StatusCodes.FORBIDDEN, headers: corsHeaders });
+                }
+                await response({ method: "DELETE", endpoint: `guilds/${guildId}/members/1420927654701301951` })
                 await guildconfigs.deleteOne({ guildId });
                 return Response.json({ ok: true }, { headers: corsHeaders });
             }
@@ -991,29 +1289,14 @@ Bun.serve({
         "/interactions": async (req) => {
             const rawBody = await req.text();
             const data = new TextEncoder().encode(req.headers.get('X-Signature-Timestamp') + rawBody);
-            const signature = new Uint8Array(Buffer.from(req.headers.get('x-signature-ed25519')!, 'hex'))
-            const publickey = new Uint8Array(Buffer.from(`${Bun.env.DISCORD_PKEY}`, 'hex'))
+            const signature = new Uint8Array(Buffer.from(req.headers.get('x-signature-ed25519')!, 'hex'));
+            const publickey = new Uint8Array(Buffer.from(`${Bun.env.DISCORD_PKEY}`, 'hex'));
             if (!ed25519.verify(signature, data, publickey))
                 return new Response('Unauthorized', { status: StatusCodes.UNAUTHORIZED });
             const body: APIInteraction = JSON.parse(rawBody);
-            if (body.type == InteractionType.Ping)
-                return Response.json({ type: InteractionResponseType.Pong });
-            const userId = body.member?.user.id;
-            if (userId) {
-                const { staffroles } = await guildconfigs.findOne({ guildId: body.guild_id }, { projection: { staffroles: 1 } }) as Document;
-                const isStaff = body.member!.roles.some((roleId: string) => staffroles.includes(roleId));
-                if (cooldowns.get(userId) && cooldowns.get(userId) > Date.now() && !isStaff) {
-                    return Response.json({
-                        type: InteractionResponseType.ChannelMessageWithSource,
-                        data: { embeds: [{ description: `<@${userId}>, you are using commands too fast!` }], flags: MessageFlags.Ephemeral }
-                    });
-                } else {
-                    if (!isStaff)
-                        cooldowns.set(userId, Date.now() + 3000);
-                }
-            }
+            if (body.type == InteractionType.Ping) return Response.json({ type: InteractionResponseType.Pong });
             switch (body.type) {
-                case InteractionType.ApplicationCommand: return await handleCommands(body as APIChatInputApplicationCommandInteraction);
+                case InteractionType.ApplicationCommand: return await handleCommands(body as APIChatInputApplicationCommandGuildInteraction);
                 case InteractionType.MessageComponent: return await handleComponents(body as APIMessageComponentInteraction);
                 case InteractionType.ModalSubmit: return await handleModals(body as APIModalSubmitInteraction);
             }
