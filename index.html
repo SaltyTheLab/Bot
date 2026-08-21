@@ -8,6 +8,29 @@
   
   <link href="./output.css" rel="stylesheet">
   <script type="module" src="./controller.js" defer></script>
+  <style>
+    /* Mobile tab bar -> hamburger menu. Pure CSS breakpoint; JS only toggles open/closed. */
+    #hamburgerBtn {
+      display: none;
+    }
+  
+    @media (max-width: 767px) {
+      #hamburgerBtn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+  
+      #tabBar {
+        display: none;
+        flex-direction: column;
+      }
+  
+      #tabBar.mobile-open {
+        display: flex;
+      }
+    }
+  </style>
 </head>
 <body class="bg-gray-900 text-gray-100 p-4 rounded-xl shadow-lg space-y-6">
   <h1 class="text-3xl font-bold text-blue-400 justify-center"> Bot Configuration</h1>
@@ -42,12 +65,18 @@
       </div>
       <!--Config tabs-->
       <div id="channelsContainer" class="space-y-6">
-        <div class="flex border-b border-gray-600">
+        <div class="flex items-center justify-between">
+          <button id="hamburgerBtn" type="button" class="p-2 rounded-lg bg-gray-700 hover:bg-gray-600" aria-label="Toggle menu"
+            aria-expanded="false" aria-controls="tabBar">
+            <span aria-hidden="true">&#9776;</span>
+            <span>Config Settings</span>
+          </button>
+        </div>
+        <div id="tabBar" class="flex border-b border-gray-600">
           <button id="modChannelsTab" class="tab-btn" data-target="modChannelsContent">Log Channels</button>
           <button id="autoModTab" class="tab-btn" data-target="autoModContent">AutoMod Settings</button>
           <button id="publicChannelsTab" class="tab-btn" data-target="publicChannelsContent">Public Channels</button>
           <button id="GeneralTab" class="tab-btn" data-target="GeneralContent">General Channels</button>
-          <button id="reactionsTab" class="tab-btn" data-target="reactionsContent">Reactions</button>
           <button id="StaffRoles" class="tab-btn " data-target="StaffRolesContent">Staff Roles</button>
           <button id="stringReactionsTab" class="tab-btn" data-target="stringReactionsContent">String Reactions</button>
           <button id="EmbedContentTab" class="tab-btn" data-target="embedContent">Embeds</button>

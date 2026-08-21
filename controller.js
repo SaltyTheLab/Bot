@@ -93,6 +93,26 @@ function renderAuthUI() {
         authStatus.textContent = 'Not logged in';
     }
 }
+function addReactionRow(list, reaction = { emoji: '', roleId: '' }) {
+    if (list.children.length >= 20) {
+        showMessage('Discord messages can only track up to 20 distinct reactions.', 'bg-yellow-500');
+        return;
+    }
+    const optionsHtml = currentGuildRoles
+        .map(role => `<option value="${role.id}" style="color:${roleColorHex(role.color)}" ${role.id === reaction.roleId ? 'selected' : ''}>@${role.name}</option>`)
+        .join('');
+    const row = document.createElement('div');
+    row.classList.add('row', 'gap-2');
+    row.innerHTML = `
+        <input type="text" placeholder="Emoji" value="${reaction.emoji || ''}" class="field-name" data-reaction-emoji style="max-width:90px">
+        <select class="field" data-reaction-role>
+            <option value="">-- Select a role --</option>
+            ${optionsHtml}
+        </select>
+        <button type="button" class="remove-btn self-start" data-remove-reaction-row>&times;</button>`;
+    row.querySelector('[data-remove-reaction-row]').addEventListener('click', () => row.remove());
+    list.appendChild(row);
+}
 async function refreshAuthStatus() {
     const response = await fetch(`/api/auth/me`, { credentials: 'include' });
     const res = await response.json();
@@ -247,6 +267,16 @@ const OPTIONAL_EMBED_FIELDS = [
             <div data-embed-fields-list class="space-y-2"></div>
             <button type="button" class="add-btn" data-add-embed-field>Add Field</button>`,
         },
+    {
+        key: 'reactions', label: 'Reaction Roles', render: () => `
+            <span class="field-label">Reaction Roles</span>
+            <span class="flex items-center gap-2 text-gray-300 text-sm mb-1">
+                <input type="checkbox" data-embed-field="single">
+                Single select (picking one removes the others)
+            </span>
+            <div data-reactions-list class="space-y-2"></div>
+            <button type="button" class="add-btn" data-add-reaction>Add Reaction</button>`,
+    }
 ];
 
 function blankEmbed() {
@@ -311,9 +341,21 @@ function syncActiveEmbedFromForm(formContainer) {
             if (fields.length) embed.fields = fields;
         }
 
+    const reactionsList = formContainer.querySelector('[data-reactions-list]');
+    let reactionsPatch = {};
+    if (reactionsList) {
+        const reactions = [...reactionsList.querySelectorAll('.row')]
+            .map(row => ({
+                emoji: row.querySelector('[data-reaction-emoji]').value.trim(),
+                roleId: row.querySelector('[data-reaction-role]').value,
+            }))
+            .filter(r => r.emoji && r.roleId);
+        reactionsPatch = { reactions, single: !!get('single')?.checked };
+    }
+
         const channelid = formContainer.querySelector('[data-embed-field="channelid"]')?.value.trim() || '';
         const existing = messageConfigsDraft[activeEmbedKey] || {};
-        messageConfigsDraft[activeEmbedKey] = { ...existing, channelid, embeds: [embed] };
+    messageConfigsDraft[activeEmbedKey] = { ...existing, channelid, embeds: [embed], ...reactionsPatch };
 }
 function validateEmbedsDraft() {
         for (const [key, entry] of Object.entries(messageConfigsDraft)) {
@@ -326,6 +368,18 @@ function validateEmbedsDraft() {
             }
             if (!entry.channelid?.trim()) {
                 return `Embed "${key}": Channel ID is required.`;
+            }
+            if (entry.reactions?.length) {
+                const seenEmojis = new Set();
+                for (const r of entry.reactions) {
+                    if (!r.emoji || !r.roleId) {
+                        return `Embed "${key}": every reaction row needs both an emoji and a role.`;
+                    }
+                    if (seenEmojis.has(r.emoji)) {
+                        return `Embed "${key}": duplicate emoji "${r.emoji}" in reactions.`;
+                    }
+                    seenEmojis.add(r.emoji);
+                }
             }
         }
         return null;
@@ -666,16 +720,14 @@ async function loadSelectedGuild() {
             exportConfigBtn.classList.remove('hidden');
             buttonColumnText.textContent = '';
         try {
-            if(guilds.has(guildSelect.value)) {
-                currentConfig = guilds.get(guildSelect.value);
-    } else {
-            const res = await fetch(`/api/guilds/${encodeURIComponent(currentGuildId)}`, { headers: authHeaders(), credentials: 'include' });
+            // Always fetch fresh — a stale in-memory cache here previously meant
+            // out-of-band DB edits (e.g. via Compass) wouldn't show up until a hard reload.
+            const res = await fetch(`/api/guilds/${encodeURIComponent(currentGuildId)}`, { headers: authHeaders(), credentials: 'include', cache: 'no-store' });
             if (!res.ok) throw new Error(`Failed to load guild ${currentGuildId} (${res.status})`);
             const doc = await res.json();
             guilds.set(currentGuildId, doc)
-            currentConfig = doc;   
-    }
-           
+            currentConfig = doc;
+
             currentAutomodRules = currentConfig.rules
             currentRole = currentConfig._viewerRole || guildRoles.get(currentGuildId) || null;
             currentGuildChannels = currentConfig.guildChannels || [];
@@ -872,10 +924,10 @@ function renderEmbedSection(container, messageConfigs) {
 
         const entry = messageConfigsDraft[activeEmbedKey];
         const embed = entry.embeds?.[0] || blankEmbed();
-
         const visibleOptional = new Set(
             OPTIONAL_EMBED_FIELDS.filter(f => {
                 if (f.key === 'fields') return (embed.fields?.length || 0) > 0;
+                if (f.key === 'reactions') return (entry.reactions?.length || 0) > 0;
                 if (f.key === 'footer') return !!(embed.footer?.text || embed.footer?.icon_url);
                 if (f.key === 'image') return !!embed.image?.url;
                 if (f.key === 'thumbnail') return !!embed.thumbnail?.url;
@@ -945,6 +997,16 @@ function renderEmbedSection(container, messageConfigs) {
                     });
                 }
 
+                if (f.key === 'reactions') {
+                    const list = wrap.querySelector('[data-reactions-list]');
+                    const singleCheckbox = wrap.querySelector('[data-embed-field="single"]');
+                    if (singleCheckbox) singleCheckbox.checked = !!entry.single;
+                    (entry.reactions || []).forEach(r => addReactionRow(list, r));
+                    wrap.querySelector('[data-add-reaction]').addEventListener('click', () => {
+                        addReactionRow(list);
+                    });
+                }
+
                 wrap.addEventListener('input', () => syncActiveEmbedFromForm(formContainer));
                 wrap.addEventListener('change', () => syncActiveEmbedFromForm(formContainer));
             });
@@ -959,6 +1021,8 @@ function renderEmbedSection(container, messageConfigs) {
 function initTabs() {
     const tabs = document.querySelectorAll('.tab-btn:not(.subtab-btn)');
     const tabContents = document.querySelectorAll('.tab-content');
+    const tabBar = document.getElementById('tabBar');
+    const hamburgerBtn = document.getElementById('hamburgerBtn');
 
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
@@ -968,7 +1032,17 @@ function initTabs() {
             const targetId = tab.getAttribute('data-target');
             document.getElementById(targetId).classList.remove('hidden');
             tab.classList.add('tab-btn-active');
+
+            // Close the mobile dropdown after picking a tab. No-op on desktop —
+            // the CSS media query keeps #tabBar visible regardless of this class.
+            tabBar.classList.remove('mobile-open');
+            hamburgerBtn.setAttribute('aria-expanded', 'false');
         });
+    });
+
+    hamburgerBtn.addEventListener('click', () => {
+        const isOpen = tabBar.classList.toggle('mobile-open');
+        hamburgerBtn.setAttribute('aria-expanded', String(isOpen));
     });
 
     document.getElementById('modChannelsTab').click();
