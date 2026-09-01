@@ -1,10 +1,10 @@
-import { type APIMessage, type RESTError, type RESTRateLimit } from "discord-api-types/v10";
+import { type APIGuildMember, type APIMessage, type RESTError, type RESTRateLimit } from "discord-api-types/v10";
 import { appendFile } from "node:fs/promises";
 import { StatusCodes } from "http-status-codes"
 let globalLockUntil = 0;
 const buckets = new Map<string, { limit: number; remaining: number; resetAt: number; }>();
 const routeToBucket = new Map<string, string>();
-interface options { method: "GET" | "DELETE" | 'POST' | 'PUT' | 'PATCH'; endpoint: string; body?: object | APIMessage; reason?: string | null; headers?: Headers; }
+interface options { method: "GET" | "DELETE" | 'POST' | 'PUT' | 'PATCH'; endpoint: string; body?: object | APIMessage | APIGuildMember; reason?: string | null; headers?: Headers; }
 /**
  * A custom REST handler designed to manage HTTP requests to the Discord API.
  * Handles dynamic route bucket mapping, client-side rate limiting (both local 
