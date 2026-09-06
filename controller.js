@@ -153,6 +153,14 @@ async function apiDeleteGuild(guildId) {
         }
         return res.json();
 }
+async function apiDeleteEmbed() {
+    const res = await fetch(`/api/deleteembed/${currentGuildId}/${encodeURIComponent(activeEmbedKey)}`, {
+        method: 'DELETE',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        credentials: 'include',
+    })
+    return { status: 200 }
+}
 function roleColorHex(colorInt) {
     if (!colorInt) return '#b9bbbe';
     return `#${colorInt.toString(16).padStart(6, '0')}`;
@@ -845,28 +853,33 @@ function renderEmbedSection(container, messageConfigs) {
     activeEmbedKey = keys.includes(activeEmbedKey) ? activeEmbedKey : (keys[0] || '');
 
     container.innerHTML = `
-        <div class="flex flex-wrap items-center gap-2">
-            <select id="embedSelect" class="field"></select>
-            <button type="button" id="deleteEmbedBtn" class="remove-btn" style="max-width:200px">Delete</button>
-            <span id="orSeparator" class="text-gray-300 font-semibold shrink-0">- or -</span>
-            <button type="button" id="createEmbedBtn" class="add-btn" style="max-width:200px">+ New Embed</button>
-        </div>
-        <p class="text-sm text-gray-400 mt-2">At least one of Title, Description, or Author Name is required.</p>
-        <div id="embedFormFields" class="space-y-4 mt-2"></div>
-        `;
+       <div class="flex flex-wrap items-center gap-2">
+        <select id="embedSelect" class="field"></select>
+        <button type="button" id="deleteEmbedBtn" class="remove-btn" style="max-width:200px">Delete</button>
+        <span id="orSeparator" class="text-gray-300 font-semibold shrink-0">- or -</span>
+        <button type="button" id="createEmbedBtn" class="add-btn" style="max-width:200px">+ New Embed</button>
+        <button type="button" id="pushEmbedBtn" class="action-btn bg-purple-500 hover:bg-purple-600" style="max-width:220px">Push to Discord</button>
+    </div>
+    <p class="text-sm text-gray-400 mt-2">At least one of Title, Description, or Author Name is required.</p>
+    <p class="text-xs text-yellow-400 mt-1 hidden" id="pushEmbedHint">Pushes the current form contents to Discord. This does not save your changes to the database — hit Save separately to persist them.</p>
+    <div id="embedFormFields" class="space-y-4 mt-2"></div>
+    `;
 
     const select = container.querySelector('#embedSelect');
     const deleteBtn = container.querySelector('#deleteEmbedBtn');
     const orSeparator = container.querySelector('#orSeparator');
     const createBtn = container.querySelector('#createEmbedBtn');
+    const pushBtn = container.querySelector('#pushEmbedBtn');
+    const pushHint = container.querySelector('#pushEmbedHint');
     const hasEmbeds = keys.length > 0;
 
     setDisabledState(select, !hasEmbeds);
     select.classList.toggle('hidden', !hasEmbeds);
     setDisabledState(deleteBtn, !hasEmbeds);
+    setDisabledState(pushBtn, !hasEmbeds);
     deleteBtn.classList.toggle('hidden', !hasEmbeds);
     orSeparator.classList.toggle('hidden', !hasEmbeds);
-
+    pushBtn.classList.toggle('hidden', !hasEmbeds);
     select.innerHTML = hasEmbeds
         ? keys.map(k => `<option value="${k}" ${k === activeEmbedKey ? 'selected' : ''}>${k}</option>`).join('')
         : '<option value="">-- No embeds yet, create one --</option>';
@@ -875,7 +888,30 @@ function renderEmbedSection(container, messageConfigs) {
         activeEmbedKey = select.value;
         renderEmbedForm();
     });
+    pushBtn.addEventListener('click', async () => {
+        if (!activeEmbedKey || !currentGuildId) return;
+        const config = messageConfigsDraft[activeEmbedKey];
+        if (!config?.channelid) { showMessage('Set a Channel ID before pushing.', 'bg-yellow-500'); return; }
 
+        const embed = config.embeds?.[0] || {};
+        const hasContent = !!(embed.title?.trim() || embed.description?.trim() || embed.author?.name?.trim());
+        if (!hasContent) {
+            showMessage('Add a Title, Description, or Author Name before pushing.', 'bg-yellow-500');
+            return;
+        }
+
+        setDisabledState(pushBtn, true);
+        pushHint.classList.remove('hidden');
+        try {
+            const result = await apiSendEmbed(currentGuildId, activeEmbedKey, config);
+            showMessage(result.status === 'sent' ? 'Sent new message to Discord!' : 'Updated existing Discord message.', 'bg-green-500');
+        } catch (error) {
+            showMessage(`Push failed: ${error.message}`, 'bg-red-500');
+        } finally {
+            setDisabledState(pushBtn, false);
+            pushHint.classList.add('hidden');
+        }
+    });
     createBtn.addEventListener('click', () => {
         let nameInput = container.querySelector('#newEmbedNameInput');
 
@@ -906,9 +942,10 @@ function renderEmbedSection(container, messageConfigs) {
         renderEmbedSection(container, messageConfigsDraft);
     });
 
-    deleteBtn.addEventListener('click', () => {
+    deleteBtn.addEventListener('click', async () => {
         if (!activeEmbedKey) return;
         delete messageConfigsDraft[activeEmbedKey];
+        await apiDeleteEmbed(activeEmbedKey)
         activeEmbedKey = '';
         renderEmbedSection(container, messageConfigsDraft);
     });
@@ -1016,6 +1053,20 @@ function renderEmbedSection(container, messageConfigs) {
         drawGroups();
         formContainer.addEventListener('input', () => syncActiveEmbedFromForm(formContainer));
     }
+}
+
+async function apiSendEmbed(guildId, embedName, config) {
+    const res = await fetch(`/api/sendembed/${encodeURIComponent(embedName)}`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        credentials: 'include',
+        body: JSON.stringify({ guildId, embedName, config }),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Failed to push embed (${res.status})`);
+    }
+    return res.json();
 }
 // --- Tabs ------------------------------------------------------------------
 function initTabs() {

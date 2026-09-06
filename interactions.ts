@@ -5,61 +5,144 @@ import sharp from 'sharp'
 import { ed25519 } from '@noble/curves/ed25519.js'
 import { StatusCodes } from "http-status-codes";
 import { appendFile } from "node:fs/promises";
-import { type APIMessageComponentInteraction, InteractionType, ComponentType, type APIEmbed, type APIInteraction, type APIMessageComponent, type APIMessage, InteractionResponseType, MessageFlags, type APIGuild, type APIGuildMember, type APIModalSubmitInteraction, type APIUser, type APIActionRowComponent, type APIComponentInMessageActionRow, type APIButtonComponent, type APIChannel, ButtonStyle, type APIChatInputApplicationCommandGuildInteraction, ChannelType, type APIRole, type APIAutoModerationRule, type APIApplicationCommandSubcommandOption, type APIApplicationCommandBasicOption, DiscordAPIError, Collection, ApplicationCommandOptionType, type APIInteractionDataResolvedGuildMember, type AnyComponentV2, subtext, type APIMessageTopLevelComponent } from "discord.js";
+import { type APIMessageComponentInteraction, InteractionType, ComponentType, type APIEmbed, type APIInteraction, type APIMessageComponent, type APIMessage, InteractionResponseType, MessageFlags, type APIGuild, type APIGuildMember, type APIModalSubmitInteraction, type APIUser, type APIActionRowComponent, type APIComponentInMessageActionRow, type APIButtonComponent, type APIChannel, ButtonStyle, type APIChatInputApplicationCommandGuildInteraction, ChannelType, type APIRole, type APIAutoModerationRule, type APIApplicationCommandSubcommandOption, type APIApplicationCommandBasicOption, DiscordAPIError, Collection, ApplicationCommandOptionType, type APIInteractionDataResolvedGuildMember, subtext, type APIMessageTopLevelComponent, bold, quote, type APIButtonComponentWithCustomId, type RESTAPIChannelPatchOverwrite, ModalBuilder, TextInputStyle, type ModalSubmitLabelComponent } from "discord.js";
 type CommandContext = {
     body: APIChatInputApplicationCommandGuildInteraction;
     res: { type: InteractionResponseType; data: any };
     guildConfig: () => Promise<Document>; // lazy — only fetched if a handler actually calls it
 };
 type CommandHandler = ((ctx: CommandContext) => Promise<Response | void>) & { cooldownMs?: number };
-// --- Mod application: hub message + one modal per section, fillable/editable in any order ---
-type ApplyField = { custom_id: string; dbKey: string; label: string; type: 'text' | 'select'; style?: number; max_length?: number; options?: { label: string; value: string }[] };
-const PART_CONFIG: Record<number, { title: string; modalTitle: string; fields: ApplyField[] }> = {
+type Apply = { modal: any, fields: string[] };
+
+const PART_CONFIG: Record<number, Apply> = {
     1: {
+        modal: {
         title: 'Experience & Activity',
-        modalTitle: 'Experience and Activity (1/3)',
-        fields: [
-            { custom_id: 'age', dbKey: 'Agerange', label: 'What age range are you in?', type: 'select', options: [{ label: '12 or under', value: '12 or under' }, { label: '13 to 15', value: '13-15' }, { label: '16 to 17', value: '16-17' }, { label: '18 or over', value: '18 or over' }] },
-            { custom_id: 'experience', dbKey: 'Experience', label: 'Any prior mod experience?', type: 'text', style: 2, max_length: 300 },
-            { custom_id: 'punishments', dbKey: 'History', label: 'Have you been warned/muted?', type: 'text', style: 1, max_length: 100 },
-            { custom_id: 'timezone', dbKey: 'Timezone', label: 'Timezone?', type: 'text', style: 1, max_length: 8 },
-            { custom_id: 'activity', dbKey: 'Activity', label: 'How active are you in the server?', type: 'text', style: 1, max_length: 150 },
-        ],
+            customId: 'apply-modal-1',
+            components: [
+                {
+                    type: ComponentType.Label, label: 'What age range are you in?', component: { custom_id: 'age', type: ComponentType.StringSelect, options: [{ label: '12 or under', value: '12 or under' }, { label: '13 to 15', value: '13-15' }, { label: '16 to 17', value: '16-17' }, { label: '18 or over', value: '18 or over' }] }
+                },
+                {
+                    type: ComponentType.Label, label: 'Any prior mod experience?', component: { custom_id: 'experience', type: ComponentType.TextInput, style: TextInputStyle.Paragraph, max_length: 300 }
+                },
+                {
+                    type: ComponentType.Label, label: 'Have you been warned/muted?', component: {
+                        custom_id: 'punishments', type: ComponentType.TextInput, style: TextInputStyle.Short, max_length: 100
+                    }
+                },
+                {
+                    type: ComponentType.Label, label: 'Timezone?', component: {
+                        custom_id: 'timezone', type: ComponentType.TextInput, style: TextInputStyle.Short, max_length: 8
+                    }
+                },
+                {
+                    type: ComponentType.Label, label: 'How active are you in the server?', component: {
+                        custom_id: 'activity', type: ComponentType.TextInput, style: TextInputStyle.Short, max_length: 150
+                    }
+                }],
+        },
+        fields: ['Agerange', 'Experience', 'History', 'Timezone', 'Activity']
     },
     2: {
-        title: 'Definitions & Motivation',
-        modalTitle: 'Definitions, Why mod, and Staff issues (2/3)',
-        fields: [
-            { custom_id: 'why', dbKey: 'why', label: 'Why should you be on the team?', type: 'text', style: 2, max_length: 500 },
-            { custom_id: 'trolldef', dbKey: 'Trolldef', label: 'What is your definition of a troll?', type: 'text', style: 1, max_length: 65 },
-            { custom_id: 'raiddef', dbKey: 'Raiddef', label: 'What is your definition of a raid?', type: 'text', style: 1, max_length: 65 },
-            { custom_id: 'staffissues', dbKey: 'Staffissues', label: 'You disagree with an action from staff', type: 'text', style: 2, max_length: 300 },
-            { custom_id: 'memberreport', dbKey: 'Memberreport', label: 'How would you handle a member report?', type: 'text', style: 2, max_length: 300 },
-        ],
+        modal: {
+            title: 'Definitions, Why mod, and Staff issues',
+            customId: 'apply-modal-2',
+            components: [
+                {
+                    type: ComponentType.Label,
+                    label: 'Why should you be on the team?',
+                    component: {
+                        custom_id: 'why',
+                        type: ComponentType.TextInput,
+                        style: TextInputStyle.Paragraph,
+                        max_length: 500
+                    }
+                },
+                {
+                    type: ComponentType.Label, label: 'What is your definition of a troll?', component: {
+                        type: ComponentType.TextInput,
+                        custom_id: 'trolldef',
+                        style: TextInputStyle.Short,
+                        max_length: 65
+                    }
+                },
+                {
+                    type: ComponentType.Label, label: 'What is your definition of a raid?', component: {
+                        type: ComponentType.TextInput,
+                        custom_id: 'raiddef',
+                        style: TextInputStyle.Short,
+                        max_length: 65
+                    }
+                },
+                {
+                    type: ComponentType.Label, label: 'You disagree with an action from staff', component: {
+                        type: ComponentType.TextInput,
+                        style: TextInputStyle.Paragraph,
+                        max_length: 300,
+                        custom_id: 'staffissues'
+                    }
+                },
+                {
+                    type: ComponentType.Label, label: 'How would you handle a member report?', component: {
+                        custom_id: 'memberreport', type: ComponentType.TextInput, style: TextInputStyle.Paragraph, max_length: 300
+                    }
+                }]
+        },
+        fields: ['why', 'Trolldef', 'Raiddef', 'Staffissues', 'Memberreport']
     },
     3: {
+        modal: {
         title: 'Situations',
-        modalTitle: 'Situations (3/3)',
-        fields: [
-            { custom_id: 'dmmember', dbKey: 'dmmember', label: 'A member messages you about being harassed', type: 'text', style: 2, max_length: 350 },
-            { custom_id: 'arguments', dbKey: 'arguments', label: 'Users are arguing in general chat', type: 'text', style: 2, max_length: 350 },
-            { custom_id: 'rulebreakdm', dbKey: 'rulebreakdm', label: 'A member DMs you about a rule-breaking DM', type: 'text', style: 2, max_length: 350 },
-            { custom_id: 'staffrulebreak', dbKey: 'staffrulebreak', label: 'Staff is failing to follow the rules', type: 'text', style: 2, max_length: 350 },
-            { custom_id: 'illegal', dbKey: 'illegal', label: 'A user shares illegal content', type: 'text', style: 2, max_length: 350 },
-        ],
+            customId: 'apply-modal-3',
+            components: [{
+                type: ComponentType.Label, label: 'A member messages you about being harassed', component: {
+                    type: ComponentType.TextInput,
+                    style: TextInputStyle.Paragraph,
+                    max_length: 350,
+                    custom_id: 'dmmember'
+                }
+            },
+            {
+                type: ComponentType.Label, label: 'Users are arguing in general chat', component: {
+                    custom_id: 'arguments',
+                    type: ComponentType.TextInput,
+                    style: TextInputStyle.Paragraph,
+                    max_length: 350
+                }
+            }, {
+                type: ComponentType.Label, label: 'A member DMs you about a rule-breaking DM', component: {
+                    type: ComponentType.TextInput,
+                    custom_id: 'rulebreakdm',
+                    style: TextInputStyle.Paragraph,
+                    max_length: 350
+                }
+            },
+            {
+                type: ComponentType.Label, label: 'Staff is failing to follow the rules', component: {
+                    custom_id: 'staffrulebreak', type: ComponentType.TextInput, style: TextInputStyle.Paragraph, max_length: 350
+                }
+            },
+            {
+                type: ComponentType.Label, label: 'A user shares illegal content', component: {
+                    type: ComponentType.TextInput,
+                    style: TextInputStyle.Paragraph,
+                    max_length: 350,
+                    custom_id: 'illegal',
+                }
+            }]
+
+        },
+        fields: ['dmmember', 'arguments', 'rulebreakdm', 'staffrulebreak', 'illegal']
     },
 };
 await Bun.write("./interpid.txt", String(process.pid))
-const DEFAULT_COOLDOWN_MS = 3000;
-const activeCooldowns = new Collection<string, number>(); // userId -> expiry timestamp
-const commands = new Collection<string, CommandHandler>()
-const corsHeaders = {
-    "Access-Control-Allow-Origin": Bun.env.CONFIGURATOR_ORIGIN!, "Access-Control-Allow-Methods": "GET, PUT, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type", "Access-Control-Allow-Credentials": "true",
-};
+const commands = new Collection<string, CommandHandler>();
 const sessions = new Map<string, { userId: string; expires: number }>();
 const oauthStates = new Map<string, number>();
-const CONFIGURATOR_MANAGED_KEYS = ["modChannels", "publicChannels", "generalchannels", "reactions", "automodsettings", "responses", "staffroles", "Stages", "messageConfigs"] as const;
+const DEFAULT_COOLDOWN_MS = 3000;
+const activeCooldowns = new Collection<string, number>(); // userId -> expiry timestamp
+const CONFIGURATOR_MANAGED_KEYS = ["modChannels", "publicChannels", "generalchannels", "reactions", "automodsettings", "responses", "staffroles", "Stages", "messageConfigs"];
 const statusMap: Record<string, { cmd: string, log: string, dm: string, color: number }> = {
     Ban: { cmd: 'was banned', log: 'banned a member', dm: `you were banned from`, color: 0xd10000 },
     Kick: { cmd: 'was kicked', log: 'kicked a member', dm: `you were kicked from`, color: 0x838383 },
@@ -67,6 +150,10 @@ const statusMap: Record<string, { cmd: string, log: string, dm: string, color: n
     Warn: { cmd: 'was issued a warning', log: 'warned a member', dm: `you were given a warning`, color: 0xffcc00 }
 };
 const unitMap: Record<string, number> = { min: 60000, hour: 3600000, day: 86400000 };
+const corsHeaders = {
+    "Access-Control-Allow-Origin": Bun.env.CONFIGURATOR_ORIGIN!, "Access-Control-Allow-Methods": "GET, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type", "Access-Control-Allow-Credentials": "true",
+};
 function checkCooldown(userId: string, isStaff: boolean, cooldownMs: number): Response | null {
     if (isStaff || cooldownMs <= 0) return null;
     const expiry = activeCooldowns.get(userId);
@@ -151,6 +238,7 @@ async function buildLogEmbed(targetUser: APIUser, log: WithId<Document>, idx: nu
     const mins = Math.round(log.duration / 60000);
     const hours = Math.floor(mins / 60);
     return {
+
         color: LOG_COLORS[log.type],
         thumbnail: { url: `https://cdn.discordapp.com/avatars/${targetUser.id}/${targetUser.avatar}.png` },
         fields: [
@@ -175,7 +263,7 @@ async function runPunishment(ctx: CommandContext): Promise<Response> {
     const { guild_id, channel, member, data: { resolved, options } } = body;
     const subcommand = options![0] as APIApplicationCommandSubcommandOption;
     const target = resolved?.users![0]
-    const reason = String(subcommand.options![1]!.value)
+    const reason: string = subcommand.options![1]!.value
     res.type = InteractionResponseType.DeferredChannelMessageWithSource;
     const { Stages, guildname, icon, modChannels } = await guildconfigs.findOne({ guildId: guild_id }, { projection: { Stages: 1, guildname: 1, icon: 1, modChannels: 1 } }) as Document
     const { punishments } = await usersCollection.findOne({ userId: target!.id, guildId: guild_id }, { projection: { punishments: 1 } }) as any;
@@ -184,8 +272,10 @@ async function runPunishment(ctx: CommandContext): Promise<Response> {
     const warnType = subcommand.name === 'ban' ? 'Ban' : subcommand.name === 'kick' ? 'Kick' : subcommand.name === 'mute' ? 'Mute' : 'Warn';
     let durationMs: number = 0, durationStr: string | null = null
     if (warnType === 'Mute') {
-        durationMs = subcommand!.options![2]!.value * unitMap[subcommand!.options![3]!.value]!
-        durationStr = `${subcommand!.options![2]!.value} ${subcommand!.options![3]!.value}`;
+        const unit: string = subcommand!.options![3]!.value
+        const duration: number = subcommand!.options![2]!.value
+        durationMs = duration * unitMap[unit]!
+        durationStr = `${duration} ${unit}`;
     }
     const finalMessage: any = await response({
         method: "POST", endpoint: `/webhooks/${body?.application_id}/${body?.token}`, body: {
@@ -200,20 +290,6 @@ async function runPunishment(ctx: CommandContext): Promise<Response> {
     await usersCollection.updateOne({ userId: target, guildId: guild_id }, { $push: { punishments: newPunishment as any } });
     const caseHistory = [...punishments, newPunishment].filter((r: any) => warnType === 'Ban' ? r.type === "Ban" : r.type !== 'Kick').slice(0, 10).map((p: any, idx: number) => p.refrence ? `[Case ${idx + 1}](${p.refrence})` : null).filter(Boolean);
     let dm = true
-    const logEmbed: AnyComponentV2[] = [{
-        components: [{
-            type: ComponentType.Section,
-            accessory: {
-                type: ComponentType.Thumbnail,
-                media: { url: `https://cdn.discordapp.com/avatars/${target!.id}/${target!.avatar}.webp` }
-            },
-            components: [{
-                type: ComponentType.TextDisplay,
-                content: `${member.user.username} ${statusMap[warnType]!.log}\n\nuser:<@${target!.id}>\nChannel: <#${channel.id}>\nHistory: ${caseHistory.join(' | ') || "none"}\nReason: \`${reason}\`\n${['Ban', 'Kick'].includes(warnType) ? '' : `Punishment: ${durationStr
-                    ? `\`1 warn,${durationStr}\`` : `\`1 warn\``}`}\nNext Punishment: \`${Stages[Math.min(totalWarns - 1, Stages.length - 1)].label}\`\n\n${subtext(dm ? 'User DMed ✅' : 'User DMed 🚫')}`
-            }]
-        }]
-    }]
     const dmchannel = await response({ method: 'POST', endpoint: `/users/@me/channels`, body: { recipient_id: target!.id } })
     const dmResult = await response({
         method: 'POST', endpoint: `/channels/${dmchannel.id}/messages`, body: {
@@ -266,7 +342,22 @@ async function runPunishment(ctx: CommandContext): Promise<Response> {
     }
     await response({
         method: "POST", endpoint: `/channels/${warnType === 'Ban' ? modChannels.banlogChannel : modChannels.mutelogChannel}/messages`, body: {
-            embeds: [logEmbed]
+            flags: MessageFlags.IsComponentsV2,
+            components: [{
+                type: ComponentType.Container,
+                accent_color: statusMap[warnType]!.color,
+                components: [{
+                    type: ComponentType.Section,
+                    accessory: {
+                        type: ComponentType.Thumbnail,
+                        media: { url: `https://cdn.discordapp.com/avatars/${target!.id}/${target!.avatar}.webp` }
+                    },
+                    components: [{
+                        type: ComponentType.TextDisplay,
+                        content: `${member.user.username} ${statusMap[warnType]!.log}\n\nuser:<@${target!.id}>\nChannel: <#${channel.id}>\nHistory: ${caseHistory.join(' | ') || "none"}\nReason: \`${reason}\`\n${['Ban', 'Kick'].includes(warnType) ? '' : `Punishment: ${durationStr ? `\`1 warn,${durationStr}\`` : `\`1 warn\``}`}\nNext Punishment: \`${Stages[Math.min(totalWarns - 1, Stages.length - 1)].label}\`\n\n${subtext(dm ? 'User DMed ✅' : 'User DMed 🚫')}`
+                    }]
+                }]
+            }]
         }
     }
     )
@@ -285,19 +376,60 @@ async function fetchMemberRoles(userId: string, guildId: string): Promise<string
         return null; // not a member of that guild (or guild/user not found)
     }
 }
-function partComplete(application: any, part: number): boolean {
-    return PART_CONFIG[part]!.fields.every(f => application?.[f.dbKey] !== undefined && application?.[f.dbKey] !== '');
+// shared sync logic — extracted from your existing loop
+async function syncEmbed(guildId: string, embedName: string, config: any, data: any[] | null = null) {
+    const { channelid, embeds, components, reactions } = config;
+    const existingdata = data ? data.find((m: any) => m.name === embedName) as { name: string, messageId: string } | undefined : null;
+    let msg: null | APIMessage = null;
+    if (existingdata) {
+        try {
+            const message = await response({ method: 'GET', endpoint: `/channels/${channelid}/messages/${existingdata.messageId}` }) as any;
+            const different = message.embeds.map((e: APIEmbed) => getComparableEmbed(e)).join('|||')
+                !== embeds.map((e: APIEmbed) => getComparableEmbed(e)).join('|||');
+            if (different) {
+                await response({ method: "PATCH", endpoint: `/channels/${channelid}/messages/${message.id}`, body: { embeds: embeds, components: components } })
+            }
+            return { status: 'updated', messageId: message.id, changed: different };
+        } catch {
+            try {
+                msg = await response({
+                    method: "POST", endpoint: `/channels/${channelid}/messages`, body: {
+                        embeds: embeds
+                    }
+                });
+            } catch (err) {
+                if (err instanceof DiscordAPIError) {
+                    await appendFile("./log.log", `Error sending embed: ${embedName} cause: ${err.message}\n`);
+                    throw err; // let the caller decide how to surface this (log-and-continue in bulk sync, 500 in the API route)
+                }
+                throw err;
+            }
+
+            if (reactions) {
+                for (const reaction of reactions) {
+                    await response({ method: "PUT", endpoint: `/channels/${channelid}/messages/${msg!.id}/reactions/${reaction}/@me` })
+                    await Bun.sleep(750);
+                }
+            }
+            const newData = data.filter((m: any) => m.name !== embedName);
+            newData.push({ name: embedName, messageId: msg!.id });
+            await guildconfigs.updateOne({ guildId }, { $set: { Data: newData } });
+        }
+
+    }
+    await appendFile("./log.log", `📝 Sent '${embedName}'. Message ID: ${msg!.id}\n`);
+    return { status: 'sent', messageId: msg!.id };
 }
-function buildApplicationHub(application: any) {
+function buildApplicationHub(application: any | {}) {
     const sections = [1, 2, 3].map(part => {
-        const done = partComplete(application, part);
+        const done = PART_CONFIG[part]!.fields.every(f => application?.[f] !== undefined && application?.[f] !== '');
         return {
             type: ComponentType.Section,
-            components: [{ type: ComponentType.TextDisplay, content: `${done ? '✅' : '⬜'} **Part ${part}: ${PART_CONFIG[part]!.title}**` }],
-            accessory: { type: ComponentType.Button, style: done ? 2 : 1, label: done ? 'Edit' : 'Fill out', custom_id: `apply-part-${part}` },
+            components: [{ type: ComponentType.TextDisplay, content: `${done ? '✅' : '⬜'} **Part ${part}: ${PART_CONFIG[part]!.modal.title}**` }],
+            accessory: { type: ComponentType.Button, disabled: done, style: done ? ButtonStyle.Secondary : ButtonStyle.Primary, label: done ? 'Done' : 'Fill out', custom_id: `apply-part-${part}` },
         };
     });
-    const allDone = [1, 2, 3].every(p => partComplete(application, p));
+    const allDone = [1, 2, 3].every(p => PART_CONFIG[p]!.fields.every(f => application?.[f] !== undefined && application?.[f] !== ''));
     return [{
         type: ComponentType.Container,
         accent_color: allDone ? 0x2ecc71 : 0x5865F2,
@@ -307,20 +439,6 @@ function buildApplicationHub(application: any) {
             { type: ComponentType.ActionRow, components: [{ type: ComponentType.Button, style: 3, label: 'Submit Application', custom_id: 'apply-submit', disabled: !allDone }] },
         ],
     }];
-}
-function buildPartModal(part: number, application: any) {
-    const config = PART_CONFIG[part]!;
-    return {
-        custom_id: `apply-modal-${part}`,
-        title: config.modalTitle,
-        components: config.fields.map(f => ({
-            type: ComponentType.Label,
-            label: f.label,
-            component: f.type === 'select'
-                ? { type: ComponentType.StringSelect, custom_id: f.custom_id, required: true, options: f.options!.map(o => ({ ...o, default: o.value === application?.[f.dbKey] })) }
-                : { type: ComponentType.TextInput, custom_id: f.custom_id, required: true, style: f.style, max_length: f.max_length, value: application?.[f.dbKey] ?? undefined },
-        })),
-    };
 }
 commands.set('dnd', async ({ body, res }) => {
     const sides = parseInt(body.data.options![0]!.name.slice(1));
@@ -361,13 +479,11 @@ commands.set('games.logos', async ({ body }) => {
             { type: ComponentType.ActionRow, components: comps }]
         }
     }));
-    console.log(form)
-    return new Response(form); // early return — dispatcher skips Response.json(res)
+    return new Response(form);
 })
 commands.set('games.bet', async ({ body, res }) => {
     const { member, guild_id } = body;
-    const subcommandoptions = (body.data.options![0] as APIApplicationCommandSubcommandOption).options as APIApplicationCommandBasicOption[];
-    const coincount: number = subcommandoptions[0]!.value;
+    const coincount: number = body.data.options![0]!.options[0]!.value
     const { coins } = await usersCollection.findOne({ userId: member?.user.id, guildId: guild_id }, { projection: { coins: 1 } }) as any;
     if (coincount > coins) return Response.json({ type: 4, data: { content: `You cannot bet more than you have!`, flags: 64 } });
     const win = Math.random() >= 0.5;
@@ -410,8 +526,7 @@ commands.set('appeal', async ({ body, res, guildConfig }) => {
 });
 commands.set('games.tictactoe', async ({ body, res }) => {
     const { member } = body;
-    const subcommandoptions = (body.data.options![0] as APIApplicationCommandSubcommandOption).options as APIApplicationCommandBasicOption[];
-    const player2: string = subcommandoptions[0]!.value;
+    const player2: string = body.data.options![0]!.options[0]!.value;
     if (member?.user.id === player2) return Response.json({ type: 4, data: { content: "You can't play against yourself.", flags: 64 } });
     const current = Math.random() < 0.5 ? member!.user.id : player2;
     res.data = {
@@ -460,7 +575,7 @@ commands.set('blacklist.view', async ({ body, res }) => {
 });
 commands.set('blacklist.add', async ({ body, res }) => {
     const { guild_id } = body;
-    const subcommandoptions = (body.data.options![0] as APIApplicationCommandSubcommandOption).options as APIApplicationCommandBasicOption[];
+    const subcommandoptions: APIApplicationCommandBasicOption[] = body.data.options![0]!.options;
     const targetUser = body.data.resolved?.users![subcommandoptions[0]!.value as string];
     const role = subcommandoptions[1]!.value as string;
     const { embed, blacklist } = await buildBlacklistEmbed(targetUser, guild_id);
@@ -486,6 +601,7 @@ commands.set('blacklist.remove', async ({ body, res }) => {
 commands.set('apply', async ({ body, res }) => {
     const { member, guild_id } = body;
     const doc = await usersCollection.findOne({ userId: member?.user.id, guildId: guild_id }, { projection: { application: 1 } }) as any;
+    res.type = InteractionResponseType.ChannelMessageWithSource
     res.data = { flags: MessageFlags.IsComponentsV2, components: buildApplicationHub(doc?.application ?? {}) };
 });
 commands.set('leaderboard', async ({ body, res }) => {
@@ -523,18 +639,36 @@ commands.set('modlogs', async ({ body, res }) => {
     };
 });
 commands.set('note.add', async ({ body, res }) => {
-    const { member, guild_id } = body;
-    const subcommandoptions = (body.data.options![0] as APIApplicationCommandSubcommandOption).options as APIApplicationCommandBasicOption[];
-    const targetUser = subcommandoptions[0]!.value as string;
-    const note = subcommandoptions[1]!.value as string;
+    const { member, guild_id, data: { options, resolved } } = body;
+    const targetUser = resolved?.users![options![0]!.options[0]!.value];
+    const note: string = options![0]!.options[1]!.value;
     await usersCollection.updateOne({ userId: targetUser, guildId: guild_id }, { $push: { notes: { _id: new ObjectId(), moderatorId: member?.user.id, note, timestamp: Date.now() } } as any });
-    res.data = { embeds: [{ color: 0x00a900, description: `📝 note created for <@${targetUser}>\n\n > ${note}` }] };
+    res.data = {
+        flags: MessageFlags.IsComponentsV2,
+        components: [{
+            type: ComponentType.Container,
+            components: [{
+                type: ComponentType.Section,
+                components: [{
+                    type: ComponentType.TextDisplay,
+                    content: `📝 note created for <@${targetUser}>\n\n ${quote(note)}`
+                }],
+                accessory: {
+                    type: ComponentType.Thumbnail,
+                    media: {
+                        url: `https://cdn.discordapp.com/avatars/${targetUser!.id}/${targetUser!.avatar}.png`
+                    }
+                }
+            }],
+            accent_color: 0x00a900
+        }]
+    } as APIMessage;
 });
 commands.set('note.show', async ({ body, res }) => {
-    const { member, guild_id, application_id, token } = body;
+    const { member, guild_id, application_id, token, data: { resolved } } = body;
     const subcommandoptions = (body.data.options![0] as APIApplicationCommandSubcommandOption).options as APIApplicationCommandBasicOption[];
-    const targetUser = subcommandoptions[0]!.value as string;
-    const u = body.data.resolved?.users![targetUser];
+    const targetUser = subcommandoptions[0]!.value;
+    const u = resolved?.users![targetUser];
     const emptyEmbed: APIEmbed = { color: 0x00a900, description: `❌ No notes found for <@${u!.id}>`, thumbnail: { url: `https://cdn.discordapp.com/avatars/${u!.id}/${u!.avatar}.png` } };
 
     const [newData] = await usersCollection.aggregate([
@@ -560,30 +694,57 @@ commands.set('note.show', async ({ body, res }) => {
     ];
     setTimeout(() => { response({ method: "PATCH", endpoint: `webhooks/${application_id}/${token}/messages/@original`, body: { components: [{ type: 1, components: btn(true) }] } }).catch(() => null); }, 600000);
     res.data = {
-        embeds: [{ color: 0xdddddd, thumbnail: { url: `https://cdn.discordapp.com/avatars/${u!.id}/${u!.avatar}.png` }, description: `<@${u!.id}> notes | \`${1} of ${count}\`\n > ${firstNote.note}`, footer: { text: `${mod.username} | ${dateStr}`, icon_url: `https://cdn.discordapp.com/avatars/${mod.id}/${mod.avatar}.png` } }],
-        components: [{ type: 1, components: btn(false) }]
-    };
+        flags: MessageFlags.IsComponentsV2,
+        components: [{
+            type: ComponentType.Container,
+            components: [{
+                components: [{
+                    type: ComponentType.Section,
+                    components: [{
+                        type: ComponentType.TextDisplay,
+                        content: `<@${u!.id}> notes | \`${1} of ${count}\`\n > ${firstNote.note}\n\n${subtext(`<@${mod.id}> | ${dateStr}`)}`
+                    }],
+                    accessory: {
+                        type: ComponentType.Thumbnail,
+                        media: { url: `https://cdn.discordapp.com/avatars/${u!.id}/${u!.avatar}.png` }
+                    }
+                }]
+            }],
+            accent_color: 0xdddddd
+        }, { type: ComponentType.ActionRow, components: btn(false) }],
+    } as APIMessage;
 });
 commands.set('applications.open', async ({ body, res }) => {
-    const { guild_id, channel } = body;
-    await response({ method: "PATCH", endpoint: `channels/${channel.id}`, body: { permissionOverwrites: [{ id: guild_id, type: 0, allow: "2147848672", deny: "0" }] } });
+    const { modChannels } = await guildconfigs.findOne({ guildId: body.guild_id }, { projection: { applyChannel: 1 } }) as Document
+    await response({
+        method: "PUT", endpoint: `channels/${modChannels.applyChannel}/permissions/1463354464747524136`, body: {
+            type: 0, // role
+            allow: "2147484672",
+            deny: "0"
+        }
+    });
     res.data = { content: 'Apps have now been opened!' };
 });
 commands.set('applications.close', async ({ body, res }) => {
-    const { guild_id, channel } = body;
-    await response({ method: "PATCH", endpoint: `channels/${channel.id}`, body: { permissionOverwrites: [{ id: guild_id, type: 0, allow: "0", deny: "2147848672" }] } });
-    await usersCollection.updateMany({ guildId: guild_id }, { $set: { application: {} } });
+    const { modChannels } = await guildconfigs.findOne({ guildId: body.guild_id }, { projection: { modChannels: 1 } }) as Document
+    await response({
+        method: "PUT", endpoint: `channels/${modChannels.applyChannel}/permissions/1463354464747524136`, body: {
+            type: 0, // role
+            allow: "0",
+            deny: "2147484672", // VIEW_CHANNEL | USE_APPLICATION_COMMANDS
+        } as RESTAPIChannelPatchOverwrite
+    });
+    await usersCollection.updateMany({ guildId: body.guild_id }, { $set: { application: {} } });
     res.data = { content: 'Apps have now been closed!' };
 });
 commands.set('member', async (ctx) => {
     const { body, res, guildConfig } = ctx;
-    const { member, guild_id } = body;
+    const { member, guild_id, data: { resolved } } = body;
     const subcommand = body.data.options![0] as APIApplicationCommandSubcommandOption;
-    const target = subcommand.options![0]!.value as string;
-    const targetmember: APIInteractionDataResolvedGuildMember | undefined = body.data.resolved!.members![target];
-    const targetuser = body.data.resolved?.users![target];
+    const targetmember: APIInteractionDataResolvedGuildMember | undefined = resolved!.members![subcommand.options![0]!.value];
+    const targetuser = resolved?.users![subcommand.options![0]!.value];
     const { modChannels, staffroles } = await guildConfig();
-    if (target === member?.user.id) {
+    if (targetuser!.id === member?.user.id) {
         res.data = { embeds: [{ description: 'You cannot moderate yourself.' }], flags: MessageFlags.Ephemeral };
         return Response.json(res);
     }
@@ -597,7 +758,7 @@ commands.set('member', async (ctx) => {
         return Response.json(res);
     }
     if (targetmember && targetmember.roles.some((r: string) => staffroles.includes(r))) {
-        await response({ method: "POST", endpoint: `channels/${modChannels.adminChannel}/messages`, body: { embeds: [{ description: `<@${member?.user.id}> tried to moderate <@${target}>.` }] } });
+        await response({ method: "POST", endpoint: `channels/${modChannels.adminChannel}/messages`, body: { embeds: [{ description: `<@${member?.user.id}> tried to moderate <@${targetuser!.id}>.` }] } });
         res.data = { embeds: [{ description: 'You cannot moderate other staff members.' }], flags: MessageFlags.Ephemeral };
         return Response.json(res);
     }
@@ -634,46 +795,6 @@ commands.set('link', async ({ body, res }) => {
         { $set: { twitchLinkCode: code, twitchLinkExpires: Date.now() + 10 * 60000 } }
     );
     res.data = { embeds: [{ description: `Type \`!verify ${code}\` in Twitch chat within 10 minutes.` }], flags: 64 };
-});
-commands.set('refresh', async ({ body, res }) => {
-    const { guild_id, application_id, token } = body;
-    (async () => {
-        const existing = await guildconfigs.findOne({ guildId: guild_id }, { projection: { _id: 0, messageConfigs: 1 } }) as Document;
-        const { messageConfigs } = existing;
-        for (const [embedName, config] of Object.entries(messageConfigs as Document)) {
-            const { channelid, embeds, components, reactions, messageId } = config;
-            try {
-                if (!messageId) throw new Error("no message sent yet");
-                const message = await response({ method: "GET", endpoint: `channels/${channelid}/messages/${messageId}` }) as any;
-                const different = message.embeds.map((embed: APIEmbed) => getComparableEmbed(embed)).join('|||') !== embeds.map((embed: APIEmbed) => getComparableEmbed(embed)).join('|||');
-                if (different) {
-                    await response({ method: "PATCH", endpoint: `channels/${channelid}/messages/${messageId}`, body: { embeds: embeds, ...components } });
-                }
-            } catch {
-                let msg: APIMessage;
-                try {
-                    msg = await response({ method: "POST", endpoint: `channels/${channelid}/messages`, body: { embeds: embeds, components: components } });
-                } catch (err) {
-                    if (err instanceof DiscordAPIError) {
-                        await appendFile("./log.log", `Error sending embed: ${embedName} cause: ${err.message}\n`);
-                        continue;
-                    }
-                    throw err;
-                }
-                if (reactions) {
-                    for (const r of reactions) {
-                        const emoji = typeof r === 'string' ? r : r.emoji;
-                        await response({ method: "PUT", endpoint: `/channels/${channelid}/messages/${msg!.id}/reactions/${emoji}/@me` });
-                        await Bun.sleep(750);
-                    }
-                }
-                await appendFile("./log.log", `📝 Sent '${embedName}'. Message ID: ${msg!.id} \n`);
-                await guildconfigs.updateOne({ guildId: guild_id }, { [`messageConfigs.${embedName}.messageId`]: msg!.id });
-            }
-        }
-        await response({ method: "PATCH", endpoint: `webhooks/${application_id}/${token}/messages/@original`, body: { embeds: [{ description: 'Embeds updated!' }] } });
-    })();
-    res.type = InteractionResponseType.DeferredChannelMessageWithSource;
 });
 commands.set('restart', async ({ res }) => {
     const botPid = parseInt(await Bun.file("./pid.txt").text());
@@ -756,13 +877,15 @@ async function handleModals(body: APIModalSubmitInteraction) {
         const part = Number(custom_id.split('-')[2]);
         const config = PART_CONFIG[part];
         if (config) {
-            components.forEach((row: any) => {
-                if (!row.component) return; // Guard clause safety check
-                const field = config.fields.find(f => f.custom_id === row.component.custom_id);
-                if (!field) return;
-                updates[`application.${field.dbKey}`] = field.type === 'select' ? row.component.values?.[0] : row.component.value;
+            (components).forEach((row) => {
+                if (!row.component) return;
+                const index = config.modal.components.findIndex((f: ModalSubmitLabelComponent) => f.component.custom_id === row.component.custom_id);
+                if (index === -1) return;
+                const dbKey = config.fields[index];
+                updates[`application.${dbKey}`] = row.component.type === ComponentType.StringSelect ? row.component.values?.[0] : row.component.value;
             });
-            await usersCollection.updateOne({ userId: member?.user.id, guildId: guild_id }, { $set: updates }, { upsert: true });
+
+            await usersCollection.updateOne({ userId: member?.user.id, guildId: guild_id }, { $set: updates });
         }
         const doc = await usersCollection.findOne({ userId: member?.user.id, guildId: guild_id }, { projection: { application: 1 } }) as any;
         res.type = InteractionResponseType.UpdateMessage;
@@ -806,42 +929,56 @@ async function handleComponents(body: APIMessageComponentInteraction) {
         const newPunishment = { _id: object, userId: targetUser.id, moderatorId: member!.user.id, reason: 'troll', duration: 0, timestamp: Date.now(), active: 1, weight: 1, type: 'Ban', guildId: guild_id, channel: channel.id, refrence: `https://discord.com/channels/${guild_id}/${channel.id}/${finalMessage.id}`, warns: 1 };
         await usersCollection.updateOne({ userId: targetUser!.id, guildId: guild_id }, { $push: { punishments: newPunishment as any } });
         const caseHistory = [...punishments, newPunishment].filter((r: any) => r.type === "Ban").slice(0, 10).map((p: any, idx: number) => p.refrence ? `[Case ${idx + 1}](${p.refrence})` : null).filter(Boolean);
-        const logEmbed: APIEmbed = {
-            color: 0xd10000,
-            author: { name: `${member!.user.username} banned a member`, icon_url: `https://cdn.discordapp.com/avatars/${member!.user.id}/${member!.user.avatar}` },
-            thumbnail: { url: `https://cdn.discordapp.com/avatars/${targetUser!.id}/${targetUser!.avatar}.webp` },
-            fields: [
-                { name: 'user.id:', value: `<@${targetUser!.id}>`, inline: true },
-                { name: 'Channel:', value: `<#${channel.id}>`, inline: true },
-                { name: 'History:', value: caseHistory.join(' | ') || "none", inline: true },
-                { name: 'Reason:', value: `\`troll\``, inline: false },
-            ],
-            timestamp: new Date().toISOString(),
-            footer: { text: 'User DMed ✅' }
-        };
+        let dm = true;
         const dmchannel = await response({ method: 'POST', endpoint: `/users/@me/channels`, body: { recipient_id: targetUser!.id } })
-        const dmResult = await response({
+        try {
+            await response({
             method: 'POST', endpoint: `/channels/${dmchannel.id}/messages`, body: {
                 flags: MessageFlags.IsComponentsV2,
                 components: [{
-                    type: ComponentType.
-                }],
-                embeds: [{
-                    color: 0xd10000, author: { name: targetUser!.username, icon_url: `https://cdn.discordapp.com/avatars/${targetUser!.id}/${targetUser!.avatar}.webp` },
-                    thumbnail: { url: `${icon}` },
-                    description: `<@${targetUser!.id}>, you were banned from [${guildname}](https://discord.com/channels/${guild_id}). To appeal this decision, please join our dedicated appeal server using the button below.`,
-                    fields: [
-                        { name: 'Reason:', value: `\`troll\``, inline: false },
-                    ],
-                    timestamp: new Date().toISOString()
-                }],
-                components: [{ type: ComponentType.ActionRow, components: [{ type: ComponentType.Button, style: ButtonStyle.Link, label: "Appeal", url: 'https://discord.gg/qMjjyXyYbr' }] }]
-            } as APIMessage
+                    type: ComponentType.Container,
+                    components: [{
+                        type: ComponentType.Section,
+                        components: [{
+                            type: ComponentType.TextDisplay,
+                            content: `<@${targetUser!.id}>, you were banned from [${guildname}](https://discord.com/channels/${guild_id}). To appeal this decision, please join our dedicated appeal server using the button below.\n${bold('Reason:')} ${quote(`troll`)}`
+                        }],
+                    }],
+                    accessory: {
+                        type: ComponentType.Thumbnail,
+                        media: `https://cdn.discordapp.com/icons/${guild_id}/${icon}.webp`
+                    }
+                },
+                    {
+                        type: ComponentType.ActionRow,
+                        components: [{ type: ComponentType.Button, style: ButtonStyle.Link, label: "Appeal", url: 'https://discord.gg/qMjjyXyYbr' }]
+                    }],
+                accent_color: 0xd10000
+            }
         })
-        if (!dmResult) logEmbed.footer!.text = 'User DMed 🚫';
+        } catch { dm = false }
         await guildconfigs.updateOne({ guildId: guild_id }, { $set: { Ban: targetUser!.id } });
         await response({ method: "PUT", endpoint: `/guilds/${guild_id}/bans/${targetUser!.id}`, body: { delete_message_seconds: 604800 }, reason: `Ban Command: troll` })
-        await response({ method: "POST", endpoint: `/channels/${modChannels.banlogChannel}/messages`, body: { embeds: [logEmbed] } })
+        await response({
+            method: "POST", endpoint: `/channels/${modChannels.banlogChannel}/messages`, body: {
+                flags: MessageFlags.IsComponentsV2,
+                components: [{
+                    type: ComponentType.Container,
+                    components: [{
+                        type: ComponentType.Section,
+                        components: [{
+                            type: ComponentType.TextDisplay,
+                            content: `${member!.user.username} banned a member\n\nuser: <@${targetUser!.id}>\nChannel: <#${channel.id}>\nHistory:${caseHistory.join(' | ') || "none"}\nReason: Troll\n\n${subtext(dm ? 'User DMed ✅' : 'User DMed 🚫')}`
+                        }],
+                    }],
+                    accessory: {
+                        type: ComponentType.Thumbnail,
+                        media: `https://cdn.discordapp.com/avatars/${targetUser!.id}/${targetUser!.avatar}.webp`
+                    }
+                }],
+                accent_color: 0xd10000
+            }
+        })
         if (inviteCode !== 'none') await response({ method: "DELETE", endpoint: `/invites/${inviteCode}` });
         await response({ method: "PATCH", endpoint: `/channels/${channel.id}/messages/${message.id}`, body: { components: [{ type: ComponentType.ActionRow, components: [{ type: ComponentType.Button, custom_id: 'expired', label: inviteCode !== 'none' ? '🔨 Banned & Invite Deleted!' : '🔨 Banned!', style: ButtonStyle.Danger, disabled: true }] }] } as APIMessage });
         res.data = { embeds: [{ description: `Banned <@${targetId}>${inviteCode !== 'none' ? ' Invite was deleted' : ''}` }], message_reference: { message_id: message.id } }
@@ -873,15 +1010,15 @@ async function handleComponents(body: APIMessageComponentInteraction) {
     }
     else if (custom_id.startsWith('apply-part-')) {
         const part = Number(custom_id.split('-')[2]);
-        const doc = await usersCollection.findOne({ userId: member?.user.id, guildId: guild_id }, { projection: { application: 1 } }) as any;
+        const config = PART_CONFIG[part]!;
         res.type = InteractionResponseType.Modal;
-        res.data = buildPartModal(part, doc?.application ?? {});
+        res.data = new ModalBuilder(config.modal)
     }
     else if (custom_id === 'apply-submit') {
         const doc = await usersCollection.findOne({ userId: member?.user.id, guildId: guild_id }, { projection: { application: 1 } }) as any;
         const application = doc?.application ?? {};
         const { modChannels } = await guildconfigs.findOne({ guildId: guild_id }, { projection: { modChannels: 1 } }) as Document;
-        await response({
+        const message: APIMessage = await response({
             method: "POST",
             endpoint: `channels/${modChannels.applicationChannel}/messages`, body: {
                 embeds: [{
@@ -895,6 +1032,7 @@ async function handleComponents(body: APIMessageComponentInteraction) {
             }
         });
         await usersCollection.updateOne({ userId: member?.user.id, guildId: guild_id }, { $set: { application: {} } });
+
         res.type = InteractionResponseType.UpdateMessage;
         res.data = {
             flags: MessageFlags.IsComponentsV2,
@@ -904,6 +1042,7 @@ async function handleComponents(body: APIMessageComponentInteraction) {
                 components: [{ type: ComponentType.TextDisplay, content: '## Application submitted!\nThanks for applying — the mod team will review it soon.' }],
             }],
         };
+        setTimeout(async () => { await response({ method: "DELETE", endpoint: `channels/${message.channel_id}/messages/${message.id}` }) }, 60000);
     }
     else if (custom_id.startsWith('note-') || custom_id.startsWith('modlog-')) {
         const isNote = custom_id.startsWith('note-');
@@ -937,21 +1076,35 @@ async function handleComponents(body: APIMessageComponentInteraction) {
                 res.data = { embeds: [{ description: "All notes deleted.", color: 0xdddddd }] }
                 return Response.json(res);
             }
-
             const count = newData.total[0].count;
             const activeNote = newData.notes[0].notes;
             const m = await response({ method: "GET", endpoint: `users/${activeNote.moderatorId}` });
             res.type = InteractionResponseType.UpdateMessage
             res.data = {
-                embeds: [{ color: 0xdddddd, thumbnail: { url: `https://cdn.discordapp.com/avatars/${targetUser.id}/${targetUser.avatar}.png` }, description: `<@${targetUser.id}> notes | \`${idx + 1} of ${count}\`\n> ${activeNote.note}`, footer: { text: `${m.username} | ${new Date(activeNote.timestamp).toLocaleString('en-US')}`, icon_url: `https://cdn.discordapp.com/avatars/${m.id}/${m.avatar}.png` } }],
+                flags: MessageFlags.IsComponentsV2,
                 components: [{
+                    type: ComponentType.Container,
+                    accent_color: 0xdddddd,
+                    components: [{
+                        type: ComponentType.Section,
+                        components: [{
+                            type: ComponentType.TextDisplay,
+                            content: `<@${targetUser.id}> notes | \`${idx + 1} of ${count}\`\n> ${activeNote.note}\n\n${subtext(`${m.username} | ${new Date(activeNote.timestamp).toLocaleString('en-US')}`)}`
+                        }],
+                        accessory: {
+                            type: ComponentType.Thumbnail,
+                            media: { url: `https://cdn.discordapp.com/avatars/${targetUser.id}/${targetUser.avatar}.png` }
+                        }
+                    }]
+                },
+                    {
                     type: ComponentType.ActionRow, components: [
                         { type: ComponentType.Button, custom_id: `note-prev-${target}-${idx}-${opener}`, label: '⬅️ Back', style: 2, disabled: idx === 0 },
                         { type: ComponentType.Button, custom_id: `note-next-${target}-${idx}-${opener}`, label: 'Next ➡️', style: 2, disabled: idx >= count - 1 },
                         { type: ComponentType.Button, custom_id: `note-del-${target}-${idx}-${opener}-${activeNote._id}`, label: 'Delete', style: 4 }
                     ]
-                }]
-            }
+                    }],
+            } as APIMessage
         } else {
             const { punishments } = await usersCollection.findOne({ userId: target, guildId: guild_id }, { projection: { punishments: 1, avatar: 1 } }) as any;
             if (!punishments?.length) {
@@ -975,31 +1128,23 @@ async function handleComponents(body: APIMessageComponentInteraction) {
     }
     else if (custom_id.startsWith('logos')) {
         const [, guess, logo] = custom_id.split('-');
-        const container = message.components[1]! as APIMessageTopLevelComponent;
-        console.log(container.components)
-        const updatedComponents = container.components.map((c: APIMessageTopLevelComponent) => {
-            c.components = c.components.map((b: APIButtonComponent) => {
+        let buttons: APIMessageTopLevelComponent[] = message.components!
+        buttons = buttons.map((c: APIMessageTopLevelComponent) => ({
+            type: ComponentType.ActionRow,
+            components: c.components.map((b: APIButtonComponentWithCustomId) => {
                 const brand = b.custom_id?.split('-')[1];
-                return {
-                    type: ComponentType.Button,
-                    label: b.label,
-                    custom_id: b.custom_id,
-                    style: brand === logo ? 3 : brand === guess ? 4 : 2,
-                    disabled: true,
-                };
+                return { type: b.type, label: b.label, custom_id: b.custom_id, style: brand === logo ? 3 : brand === guess ? 4 : 2, disabled: true };
             })
-        });
-        console.log(updatedComponents)
-        if (guess === logo) {
-            await usersCollection.findOneAndUpdate({ userId: member?.user.id, guildId: guild_id }, { $inc: { coins: 20 } });
-        }
+
+        }));
+
+        if (guess === logo) await usersCollection.findOneAndUpdate({ userId: member?.user.id, guildId: guild_id }, { $inc: { coins: 20 } });
 
         res.type = InteractionResponseType.UpdateMessage;
         res.data = {
             flags: MessageFlags.IsComponentsV2,
-            components: [{ ...container }, { components: updatedComponents }],
+            components: [message.components![0], buttons[1]],
         } as APIMessage;
-        console.log(res.data.components)
     }
     else if (custom_id.startsWith('tictactoe')) {
         const [, boardStr, player1, player2, currentplayer, index] = custom_id.split('-');
@@ -1109,6 +1254,30 @@ Bun.serve({
                     "Set-Cookie": `session=${sessionId}; HttpOnly; Path=/; Max-Age=86400; SameSite=Lax`,
                 },
             });
+        },
+        "/api/sendembed/:channel": {
+            OPTIONS: () => new Response(null, { headers: corsHeaders }),
+            POST: async (req) => {
+                const { guildId, embedName, config } = await req.json();
+                if (!config?.channelid || !config?.embeds) {
+                    return new Response(JSON.stringify({ error: 'Invalid embed config' }), { status: StatusCodes.BAD_REQUEST, headers: corsHeaders });
+                }
+                const guildconfig = await guildconfigs.findOne({ guildId }, { projection: { Data: 1 } });
+                try {
+                    const result = await syncEmbed(guildId, embedName, config, guildconfig?.Data || null);
+                    return new Response(JSON.stringify(result), { headers: corsHeaders });
+                } catch {
+                    return new Response(JSON.stringify({ error: 'Failed to sync embed' }), { status: StatusCodes.INTERNAL_SERVER_ERROR, headers: corsHeaders });
+                }
+            }
+        },
+        "/api/deleteembed/:guildId/:key": {
+            OPTIONS: () => new Response(null, { headers: corsHeaders }),
+            DELETE: async (req) => {
+                const { guildId, key } = req.params
+                await guildconfigs.findOneAndUpdate({ guildId: guildId }, { $unset: { [`messageConfigs.${key}`]: '' } })
+                return Response.json({ status: 200 })
+            }
         },
         "/api/discord/users/:userId": {
             OPTIONS: () => new Response(null, { headers: corsHeaders }),
@@ -1246,7 +1415,7 @@ Bun.serve({
                 }
                 const memberRoles = await fetchMemberRoles(session.userId, guildId);
                 const role = roleFromStaffroles(session.userId, memberRoles, existing.staffroles as string[] | undefined, existing.ownerId as string | undefined);
-                if (role !== "admin") return Response.json({ error: "Forbidden — admin role required to save" }, { status: StatusCodes.FORBIDDEN, headers: corsHeaders });
+                if (role !== "admin" && role !== "owner") return Response.json({ error: "Forbidden — admin role required to save" }, { status: StatusCodes.FORBIDDEN, headers: corsHeaders });
 
                 let body: Record<string, unknown>;
                 try { body = await req.json(); }
@@ -1258,7 +1427,10 @@ Bun.serve({
                 if (Object.keys(setDoc).length === 0) {
                     return Response.json({ error: "No recognized fields in body" }, { status: StatusCodes.BAD_REQUEST, headers: corsHeaders });
                 }
-                await guildconfigs.updateOne({ guildId }, { $set: setDoc }, { upsert: false });
+                const { messageConfigs } = await guildconfigs.findOneAndUpdate({ guildId: guildId }, { $set: setDoc }, { projection: { messageConfigs: 1, returnDocument: 'after' } }) as Document;
+                for (const [embedName, config] of Object.entries(messageConfigs as Document)) {
+                    await syncEmbed(guildId, embedName, config, null);
+                }
                 return Response.json({ ok: true }, { headers: corsHeaders });
             },
             DELETE: async (req) => {
