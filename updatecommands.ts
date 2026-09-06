@@ -1,5 +1,6 @@
-import { response } from './rest'
-import { ApplicationCommandOptionType, ApplicationCommandType, InteractionContextType, PermissionFlagsBits, type RESTPostAPIChatInputApplicationCommandsJSONBody } from 'discord-api-types/v10';
+
+import { REST } from 'discord.js'
+import { ApplicationCommandOptionType, ApplicationCommandType, InteractionContextType, PermissionFlagsBits, Routes, type RESTPostAPIChatInputApplicationCommandsJSONBody } from 'discord-api-types/v10';
 const commands: RESTPostAPIChatInputApplicationCommandsJSONBody[] = [
     {
         name: 'appeal',
@@ -226,7 +227,6 @@ const commands: RESTPostAPIChatInputApplicationCommandsJSONBody[] = [
         contexts: [InteractionContextType.Guild]
     }
 ];
-async function updatecommands() {
-    console.log(await response({ method: 'PUT', endpoint: `applications/1420927654701301951/commands`, body: commands }));
-}
+const rest = new REST().setToken(`${Bun.env.TOKEN}`)
+async function updatecommands() { console.log(await rest.put(Routes.applicationCommands('1420927654701301951'), { body: commands })); }
 updatecommands()

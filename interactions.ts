@@ -1,11 +1,11 @@
 import { guildconfigs, usersCollection, logos } from "./Database";
-import { response } from "./rest"
 import { type Document, type WithId, ObjectId } from "mongodb";
 import sharp from 'sharp'
 import { ed25519 } from '@noble/curves/ed25519.js'
 import { StatusCodes } from "http-status-codes";
 import { appendFile } from "node:fs/promises";
-import { type APIMessageComponentInteraction, InteractionType, ComponentType, type APIEmbed, type APIInteraction, type APIMessageComponent, type APIMessage, InteractionResponseType, MessageFlags, type APIGuild, type APIGuildMember, type APIModalSubmitInteraction, type APIUser, type APIActionRowComponent, type APIComponentInMessageActionRow, type APIButtonComponent, type APIChannel, ButtonStyle, type APIChatInputApplicationCommandGuildInteraction, ChannelType, type APIRole, type APIAutoModerationRule, type APIApplicationCommandSubcommandOption, type APIApplicationCommandBasicOption, DiscordAPIError, Collection, ApplicationCommandOptionType, type APIInteractionDataResolvedGuildMember, subtext, type APIMessageTopLevelComponent, bold, quote, type APIButtonComponentWithCustomId, type RESTAPIChannelPatchOverwrite, ModalBuilder, TextInputStyle, type ModalSubmitLabelComponent } from "discord.js";
+import { type APIMessageComponentInteraction, InteractionType, ComponentType, type APIEmbed, type APIInteraction, type APIMessageComponent, type APIMessage, InteractionResponseType, MessageFlags, type APIGuild, type APIGuildMember, type APIModalSubmitInteraction, type APIUser, type APIActionRowComponent, type APIComponentInMessageActionRow, type APIButtonComponent, type APIChannel, ButtonStyle, type APIChatInputApplicationCommandGuildInteraction, ChannelType, type APIRole, type APIAutoModerationRule, type APIApplicationCommandSubcommandOption, type APIApplicationCommandBasicOption, DiscordAPIError, Collection, ApplicationCommandOptionType, type APIInteractionDataResolvedGuildMember, subtext, type APIMessageTopLevelComponent, bold, quote, type APIButtonComponentWithCustomId, ModalBuilder, TextInputStyle, type ModalSubmitLabelComponent, REST, Routes, DMChannel } from "discord.js";
+const rest = new REST().setToken(`${Bun.env.TOKEN}`)
 type CommandContext = {
     body: APIChatInputApplicationCommandGuildInteraction;
     res: { type: InteractionResponseType; data: any };
@@ -233,7 +233,7 @@ function roleFromStaffroles(userId: string, memberRoles: string[] | null, staffr
 }
 async function buildLogEmbed(targetUser: APIUser, log: WithId<Document>, idx: number, totalLogs: number) {
     const LOG_COLORS: Record<string, number> = { Warn: 0xffcc00, Mute: 0xff4444, Ban: 0xd10000, Kick: 0x838383 };
-    const moderator = await response({ method: "GET", endpoint: `users/${log.moderatorId}` }) as APIUser;
+    const moderator = await rest.get(Routes.user(log.moderatorId)) as APIUser
     const formattedDate = new Date(log.timestamp).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Chicago' });
     const mins = Math.round(log.duration / 60000);
     const hours = Math.floor(mins / 60);
@@ -277,22 +277,22 @@ async function runPunishment(ctx: CommandContext): Promise<Response> {
         durationMs = duration * unitMap[unit]!
         durationStr = `${duration} ${unit}`;
     }
-    const finalMessage: any = await response({
-        method: "POST", endpoint: `/webhooks/${body?.application_id}/${body?.token}`, body: {
+    const finalMessage: any = await rest.post(Routes.webhook(body.application_id, body.token), {
+        body: {
             embeds: [{
                 color: statusMap[warnType]!.color,
                 author: { name: `${target!.username} ${warnType === 'Mute' ? `was issued a ${durationStr}` : statusMap[warnType]!.cmd}`, icon_url: `https://cdn.discordapp.com/avatars/${target!.id}/${target!.avatar}.webp` }
             }]
         }
-    })
+    });
     const object = new ObjectId();
     const newPunishment = { _id: object, userId: target, moderatorId: member.user.id, reason: reason, duration: durationMs, timestamp: Date.now(), active: 1, weight: 1, type: warnType, guildId: guild_id, channel: channel.id, refrence: `https://discord.com/channels/${guild_id}/${channel.id}/${finalMessage.id}`, warns: totalWarns - 1 };
     await usersCollection.updateOne({ userId: target, guildId: guild_id }, { $push: { punishments: newPunishment as any } });
     const caseHistory = [...punishments, newPunishment].filter((r: any) => warnType === 'Ban' ? r.type === "Ban" : r.type !== 'Kick').slice(0, 10).map((p: any, idx: number) => p.refrence ? `[Case ${idx + 1}](${p.refrence})` : null).filter(Boolean);
     let dm = true
-    const dmchannel = await response({ method: 'POST', endpoint: `/users/@me/channels`, body: { recipient_id: target!.id } })
-    const dmResult = await response({
-        method: 'POST', endpoint: `/channels/${dmchannel.id}/messages`, body: {
+    const dmchannel = await rest.post(Routes.userChannels(), { body: { recipient_id: target!.id } }) as DMChannel
+    const dmResult = await rest.post(Routes.channelMessages(dmchannel.id), {
+        body: {
             flags: MessageFlags.IsComponentsV2,
             components: [{
                 type: ComponentType.Container,
@@ -326,22 +326,22 @@ async function runPunishment(ctx: CommandContext): Promise<Response> {
             }],
 
         }
-    })
+    }) 
     if (!dmResult) dm = false
     switch (warnType) {
         case 'Ban':
             await guildconfigs.updateOne({ guildId: guild_id }, { $set: { ban: target!.id } });
-            await response({ method: "PUT", endpoint: `/guilds/${guild_id}/bans/${target!.id}`, body: { delete_message_seconds: 604800 }, reason: `Ban Command: ${reason}` })
+            await rest.put(Routes.guildBan(guild_id, target!.id), { body: { delete_message_seconds: 604800 }, reason: `Ban Command: ${reason}` });
             break;
         case 'Mute':
-            await response({ method: "PATCH", endpoint: `/guilds/${guild_id}/members/${target!.id}`, body: { communication_disabled_until: new Date(Date.now() + Math.min(durationMs, 2419200000)).toISOString() }, reason: reason })
+            await rest.patch(Routes.guildMember(guild_id, target!.id), { body: { communication_disabled_until: new Date(Date.now() + Math.min(durationMs, 2419200000)).toISOString() }, reason: reason });
             break;
         case 'Kick':
-            await response({ method: "DELETE", endpoint: `/guilds/${guild_id}/members/${target!.id}` })
+            await rest.delete(Routes.guildMember(guild_id, target!.id));
             break;
     }
-    await response({
-        method: "POST", endpoint: `/channels/${warnType === 'Ban' ? modChannels.banlogChannel : modChannels.mutelogChannel}/messages`, body: {
+    await rest.post(Routes.channelMessages(warnType === 'Ban' ? modChannels.banlogChannel : modChannels.mutelogChannel), {
+        body: {
             flags: MessageFlags.IsComponentsV2,
             components: [{
                 type: ComponentType.Container,
@@ -359,8 +359,7 @@ async function runPunishment(ctx: CommandContext): Promise<Response> {
                 }]
             }]
         }
-    }
-    )
+    })
     if (['Warn', 'Mute'].includes(warnType)) {
         setTimeout(async () => {
             await usersCollection.updateOne({ userId: target!.id, guildId: guild_id }, { $set: { "punishments.$[elem].active": 0 } }, { arrayFilters: [{ "elem._id": object }] });
@@ -370,7 +369,7 @@ async function runPunishment(ctx: CommandContext): Promise<Response> {
 }
 async function fetchMemberRoles(userId: string, guildId: string): Promise<string[] | null> {
     try {
-        const member = await response({ method: "GET", endpoint: `guilds/${guildId}/members/${userId}` }) as APIGuildMember;
+        const member = await rest.get(Routes.guildMember(guildId, userId)) as APIGuildMember;
         return member.roles;
     } catch {
         return null; // not a member of that guild (or guild/user not found)
@@ -383,20 +382,14 @@ async function syncEmbed(guildId: string, embedName: string, config: any, data: 
     let msg: null | APIMessage = null;
     if (existingdata) {
         try {
-            const message = await response({ method: 'GET', endpoint: `/channels/${channelid}/messages/${existingdata.messageId}` }) as any;
+            const message = await rest.get(Routes.channelMessage(channelid, existingdata.messageId)) as APIMessage;
             const different = message.embeds.map((e: APIEmbed) => getComparableEmbed(e)).join('|||')
                 !== embeds.map((e: APIEmbed) => getComparableEmbed(e)).join('|||');
-            if (different) {
-                await response({ method: "PATCH", endpoint: `/channels/${channelid}/messages/${message.id}`, body: { embeds: embeds, components: components } })
-            }
+            if (different) { await rest.patch(Routes.channelMessage(channelid, message.id), { body: { embeds: embeds, components: components } }) }
             return { status: 'updated', messageId: message.id, changed: different };
         } catch {
             try {
-                msg = await response({
-                    method: "POST", endpoint: `/channels/${channelid}/messages`, body: {
-                        embeds: embeds
-                    }
-                });
+                msg = await rest.post(Routes.channelMessages(channelid), { body: { embeds: embeds } }) as APIMessage
             } catch (err) {
                 if (err instanceof DiscordAPIError) {
                     await appendFile("./log.log", `Error sending embed: ${embedName} cause: ${err.message}\n`);
@@ -407,11 +400,11 @@ async function syncEmbed(guildId: string, embedName: string, config: any, data: 
 
             if (reactions) {
                 for (const reaction of reactions) {
-                    await response({ method: "PUT", endpoint: `/channels/${channelid}/messages/${msg!.id}/reactions/${reaction}/@me` })
+                    await rest.put(Routes.channelMessageOwnReaction(channelid, msg!.id, reaction));
                     await Bun.sleep(750);
                 }
             }
-            const newData = data.filter((m: any) => m.name !== embedName);
+            const newData = data!.filter((m: any) => m.name !== embedName);
             newData.push({ name: embedName, messageId: msg!.id });
             await guildconfigs.updateOne({ guildId }, { $set: { Data: newData } });
         }
@@ -555,8 +548,15 @@ commands.set('rank', async ({ body }) => {
     const targetUser = options ? resolved!.users![options[0]!.value] : member.user;
     const { level, xp, coins, totalmessages } = await usersCollection.findOne({ userId: targetUser!.id, guildId: guild_id }, { projection: { level: 1, xp: 1, coins: 1, avatar: 1, totalmessages: 1, nick: 1 } }) as Document;
     const { exponent, baseMultiplier, roundToNearest, flatOffset } = await guildconfigs.findOne({ guildId: guild_id }, { projection: { exponent: 1, baseMultiplier: 1, roundToNearest: 1, flatOffset: 1 } }) as Document;
+    const avatarURL = targetUser!.avatar
+        ? rest.cdn.avatar(targetUser!.id, targetUser!.avatar, { extension: "webp" })
+        : rest.cdn.defaultAvatar(
+            targetUser!.discriminator !== "0"
+                ? Number(targetUser!.discriminator) % 5
+                : Number((BigInt(targetUser!.id) >> 22n) % 6n)
+        );
     const rank = await usersCollection.countDocuments({ guildId: guild_id, $or: [{ level: { $gt: level } }, { level: level, xp: { $gt: xp } }] });
-    const avRes = await response({ method: "GET", endpoint: targetUser!.avatar ? `https://cdn.discordapp.com/avatars/${targetUser?.id}/${targetUser!.avatar}.webp` : `https://cdn.discordapp.com/embed/avatars/${targetUser!.discriminator !== '0' ? parseInt(targetUser!.discriminator) % 5 : Number((BigInt(targetUser!.id) >> 22n) % 6n)}.png` });
+    const avRes = await fetch(avatarURL);
     const resizedAvatarBuf = await new Bun.Image(await avRes.arrayBuffer()).resize(100, 100).png().toBase64();
     const reqXp = Math.round(((level < 100 ? level : 100) ** exponent * baseMultiplier + flatOffset) / roundToNearest);
     const rankCardSvg = `<svg width="500" height="150" xmlns="http://www.w3.org/2000/svg"><defs><clipPath id="avatarClip"><circle cx="70" cy="75" r="50"/></clipPath></defs><rect width="500" height="150" rx="16" fill="#2c2f33"/><circle cx="70" cy="75" r="52" stroke="#3ba55d" stroke-width="3" fill="none" /><image href="data:image/png;base64,${resizedAvatarBuf}" x="20" y="25" width="100" height="100" clip-path="url(#avatarClip)"/><text x="130" y="60" fill="white" font-size="20" font-family="Arial" font-weight="bold">${targetUser?.username.slice(0, 15) + (targetUser?.username.length! > 15 ? "..." : "")}</text><text x="300" y="35" fill="white" font-size="16" font-family="Arial" font-weight="bold" text-anchor="middle">Level ${level}</text><text x="440" y="35" fill="white" font-size="16" font-family="Arial" font-weight="bold" text-anchor="end">Rank #${rank + 1}</text><rect x="130" y="85" width="350" height="20" rx="10" fill="#484b4e"/><rect x="130" y="85" width="${Math.min(Math.max(350 * (xp / reqXp), 25), 350)}" height="20" rx="10" fill="#3ba55d"/><text x="480" y="75" fill="#ccc" font-size="16" font-family="Arial" text-anchor="end">${xp} / ${reqXp} xp</text><text x="150" y="130" fill="#ccc" font-size="18" font-family="Arial">Coins: ${coins} | Messages: ${totalmessages}</text></svg>`;
@@ -581,7 +581,7 @@ commands.set('blacklist.add', async ({ body, res }) => {
     const { embed, blacklist } = await buildBlacklistEmbed(targetUser, guild_id);
     if (!blacklist.includes(role)) {
         await usersCollection.updateOne({ userId: targetUser!.id, guildId: guild_id }, { $push: { blacklist: role } as any });
-        await response({ method: "DELETE", endpoint: `guilds/${guild_id}/members/${targetUser!.id}/roles/${role}` });
+        await rest.delete(Routes.guildMemberRole(guild_id, targetUser!.id, role)) 
         embed.description = `<@&${role}> was blacklisted from <@${targetUser!.id}>`;
     } else {
         embed.description = `<@&${role}> is already blacklisted from <@${targetUser!.id}>`;
@@ -607,7 +607,7 @@ commands.set('apply', async ({ body, res }) => {
 commands.set('leaderboard', async ({ body, res }) => {
     const { guild_id } = body;
     const board = await usersCollection.find({ guildId: guild_id }).limit(10).sort({ level: -1, xp: -1 }).toArray();
-    const guild = await response({ method: "GET", endpoint: `guilds/${guild_id}` }) as APIGuild;
+    const guild = await rest.get(Routes.guild(guild_id)) as APIGuild;
     res.data = {
         embeds: [{
             title: `Most active in ${guild.name}`, thumbnail: { url: `https://cdn.discordapp.com/icons/${guild_id}/${guild.icon}.png` }, color: 0x0c23a3,
@@ -632,7 +632,9 @@ commands.set('modlogs', async ({ body, res }) => {
         { type: 2, custom_id: `modlog-next-${targetUser!.id}-0-${member?.user.id}`, label: 'Next ➡️', style: 2, disabled: punishments.length <= 1 || disabled },
         ...(isAdmin ? [{ type: 2, custom_id: `modlog-del-${targetUser!.id}-0-${member?.user.id}-${punishments[0]._id}`, label: 'Delete', style: 4, disabled }] : [])
     ];
-    setTimeout(() => { response({ method: "PATCH", endpoint: `webhooks/${id}/${token}/messages/@original`, body: { components: [{ type: 1, components: btn(true) }] } }).catch(() => null); }, 600000);
+    setTimeout(() => {
+        rest.patch(Routes.webhookMessage(id, token), { body: { components: [{ type: 1, components: btn(true) }] } }).catch(() => null);
+    }, 600000);
     res.data = {
         embeds: [await buildLogEmbed(targetUser!, punishments[0], 0, punishments.length)],
         components: [{ type: 1, components: btn(false) }]
@@ -685,14 +687,16 @@ commands.set('note.show', async ({ body, res }) => {
 
     const count = newData.total[0].count;
     const firstNote = newData.notes[0].notes;
-    const mod = await response({ method: "GET", endpoint: `users/${firstNote.moderatorId}` }) as any;
+    const mod = await rest.get(Routes.user(firstNote.moderatorId)) as APIUser;
     const dateStr = new Date(firstNote.timestamp).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Chicago' });
     const btn = (disabled: boolean) => [
         { type: ComponentType.Button, custom_id: `note-prev-${u!.id}-0-${member?.user.id}`, label: '◀️ prev', style: ButtonStyle.Secondary, disabled: true },
         { type: ComponentType.Button, custom_id: `note-next-${u!.id}-0-${member?.user.id}`, label: '▶️ next', style: ButtonStyle.Secondary, disabled: count <= 1 || disabled },
         { type: ComponentType.Button, custom_id: `note-del-${u!.id}-0-${member?.user.id}-${firstNote._id}`, label: '🗑️ delete', style: ButtonStyle.Danger, disabled }
     ];
-    setTimeout(() => { response({ method: "PATCH", endpoint: `webhooks/${application_id}/${token}/messages/@original`, body: { components: [{ type: 1, components: btn(true) }] } }).catch(() => null); }, 600000);
+    setTimeout(() => {
+        rest.patch(Routes.webhookMessage(application_id, token), { body: { components: [{ type: 1, components: btn(true) }] } }).catch(() => null);
+    }, 600000);
     res.data = {
         flags: MessageFlags.IsComponentsV2,
         components: [{
@@ -716,24 +720,12 @@ commands.set('note.show', async ({ body, res }) => {
 });
 commands.set('applications.open', async ({ body, res }) => {
     const { modChannels } = await guildconfigs.findOne({ guildId: body.guild_id }, { projection: { applyChannel: 1 } }) as Document
-    await response({
-        method: "PUT", endpoint: `channels/${modChannels.applyChannel}/permissions/1463354464747524136`, body: {
-            type: 0, // role
-            allow: "2147484672",
-            deny: "0"
-        }
-    });
+    await rest.put(Routes.channelPermission(modChannels.applyChannel, "1463354464747524136"), { body: { type: 0, allow: "2147484672", deny: "0" } })
     res.data = { content: 'Apps have now been opened!' };
 });
 commands.set('applications.close', async ({ body, res }) => {
     const { modChannels } = await guildconfigs.findOne({ guildId: body.guild_id }, { projection: { modChannels: 1 } }) as Document
-    await response({
-        method: "PUT", endpoint: `channels/${modChannels.applyChannel}/permissions/1463354464747524136`, body: {
-            type: 0, // role
-            allow: "0",
-            deny: "2147484672", // VIEW_CHANNEL | USE_APPLICATION_COMMANDS
-        } as RESTAPIChannelPatchOverwrite
-    });
+    await rest.put(Routes.channelPermission(modChannels.applyChannel, '1463354464747524136'), { body: { type: 0, allow: "0", deny: "2147484672", } })
     await usersCollection.updateMany({ guildId: body.guild_id }, { $set: { application: {} } });
     res.data = { content: 'Apps have now been closed!' };
 });
@@ -753,12 +745,12 @@ commands.set('member', async (ctx) => {
         return Response.json(res);
     }
     if (member?.roles.includes(staffroles[2]) && ['ban', 'unwarn', 'unmute'].includes(subcommand.name)) {
-        await response({ method: "POST", endpoint: `channels/${modChannels.adminChannel}/messages`, body: { embeds: [{ description: `Jr. mod ${member?.user} tried to use a mod only command.` }] } });
+        await rest.post(Routes.channelMessages(modChannels.adminChannel), { body: { embeds: [{ description: `Jr. mod ${member?.user} tried to use a mod only command.` }] } });
         res.data = { embeds: [{ description: 'Jr mods do not have access to this command.' }], flags: MessageFlags.Ephemeral };
         return Response.json(res);
     }
     if (targetmember && targetmember.roles.some((r: string) => staffroles.includes(r))) {
-        await response({ method: "POST", endpoint: `channels/${modChannels.adminChannel}/messages`, body: { embeds: [{ description: `<@${member?.user.id}> tried to moderate <@${targetuser!.id}>.` }] } });
+        await rest.post(Routes.channelMessages(modChannels.adminChannel), { body: { embeds: [{ description: `<@${member?.user.id}> tried to moderate <@${targetuser!.id}>.` }] } });
         res.data = { embeds: [{ description: 'You cannot moderate other staff members.' }], flags: MessageFlags.Ephemeral };
         return Response.json(res);
     }
@@ -769,7 +761,7 @@ commands.set('member', async (ctx) => {
     }
     if (subcommand.name === 'unmute') {
         if (targetmember?.communication_disabled_until) {
-            await response({ method: "PATCH", endpoint: `/guilds/${guild_id}/members/${targetuser!.id}`, body: { communication_disabled_until: null } })
+            await rest.patch(Routes.guildMember(guild_id, targetuser!.id), { body: { communication_disabled_until: null } })
             ctx.res.data = { embeds: [{ description: '⚠️ User has been unmuted.' }] };
         }
         else {
@@ -834,9 +826,7 @@ async function handleModals(body: APIModalSubmitInteraction) {
         const targetGuild = gId.component.values[0];
         const gConf = await guildconfigs.findOne({ guildId: targetGuild }, { projection: { staffroles: 1, modChannels: 1 } }) as any;
         const attachments = resolved?.attachments || {};
-        const appealMsg = await response({
-            method: "POST",
-            endpoint: `channels/${gConf.modChannels.appealChannel}/messages`,
+        const appealMsg = await rest.post(Routes.channelMessages(gConf.modChannels.appealChannel), {
             body: {
                 flags: MessageFlags.IsComponentsV2,
                 components: [
@@ -867,9 +857,9 @@ async function handleModals(body: APIModalSubmitInteraction) {
                         ],
                     },
                 ],
-            } as APIMessage,
-        }) as APIMessage;
-        await response({ method: "POST", endpoint: `channels/${gConf.modChannels.appealChannel}/messages/${appealMsg.id}/threads`, body: { type: 11, name: `${member?.user.username}` } });
+            }
+        }) as APIMessage
+        await rest.post(Routes.threads(gConf.modChannels.appealChannel, appealMsg.id), { body: { type: 11, name: `${member?.user.username}` } });
         await usersCollection.updateOne({ userId: member?.user.id, guildId: targetGuild }, { $set: { appeals: { _id: new ObjectId(), reason: reason.component.value, justification: justification.component.value, extra: extra.component.value } } });
         res.data = { content: 'Your appeal has been submitted!', flags: 64 };
     }
@@ -901,12 +891,12 @@ async function handleComponents(body: APIMessageComponentInteraction) {
     if (custom_id.startsWith('ban_')) {
         const [, targetId, inviteCode] = custom_id.split('_');
         if (member?.roles.includes(staffroles[2])) return Response.json({ type: InteractionResponseType.ChannelMessageWithSource, data: { content: 'jrs cannot use this button.', flags: MessageFlags.Ephemeral } });
-        const targetUser = await response({ method: "GET", endpoint: `users/${targetId}` }) as APIUser
+        const targetUser = await rest.get(Routes.user(targetId)) as APIUser
         res.type = InteractionResponseType.DeferredChannelMessageWithSource;
         const { guildname, icon, modChannels } = await guildconfigs.findOne({ guildId: guild_id }, { projection: { Stages: 1, guildname: 1, icon: 1, modChannels: 1 } }) as Document
         const { punishments } = await usersCollection.findOne({ userId: targetUser!.id, guildId: guild_id }, { projection: { punishments: 1 } }) as any;
-        const finalMessage: any = await response({
-            method: "POST", endpoint: `/webhooks/${body?.application_id}/${body?.token}`, body: {
+        const finalMessage = await rest.post(Routes.webhook(body.application_id, body.token), {
+            body: {
                 flags: MessageFlags.IsComponentsV2,
                 components: [{
                     type: ComponentType.Container,
@@ -923,44 +913,45 @@ async function handleComponents(body: APIMessageComponentInteraction) {
                     }],
                     accent_color: 0xd10000
                 }],
-            } as APIMessage
-        })
+
+            }
+        }) as APIMessage
         const object = new ObjectId();
         const newPunishment = { _id: object, userId: targetUser.id, moderatorId: member!.user.id, reason: 'troll', duration: 0, timestamp: Date.now(), active: 1, weight: 1, type: 'Ban', guildId: guild_id, channel: channel.id, refrence: `https://discord.com/channels/${guild_id}/${channel.id}/${finalMessage.id}`, warns: 1 };
         await usersCollection.updateOne({ userId: targetUser!.id, guildId: guild_id }, { $push: { punishments: newPunishment as any } });
         const caseHistory = [...punishments, newPunishment].filter((r: any) => r.type === "Ban").slice(0, 10).map((p: any, idx: number) => p.refrence ? `[Case ${idx + 1}](${p.refrence})` : null).filter(Boolean);
         let dm = true;
-        const dmchannel = await response({ method: 'POST', endpoint: `/users/@me/channels`, body: { recipient_id: targetUser!.id } })
+        const dmchannel = await rest.post(Routes.userChannels(), { body: { recipient_id: targetUser!.id } }) as DMChannel
         try {
-            await response({
-            method: 'POST', endpoint: `/channels/${dmchannel.id}/messages`, body: {
-                flags: MessageFlags.IsComponentsV2,
-                components: [{
-                    type: ComponentType.Container,
+            await rest.post(Routes.channelMessages(dmchannel.id), {
+                body: {
+                    flags: MessageFlags.IsComponentsV2,
                     components: [{
-                        type: ComponentType.Section,
+                        type: ComponentType.Container,
                         components: [{
-                            type: ComponentType.TextDisplay,
-                            content: `<@${targetUser!.id}>, you were banned from [${guildname}](https://discord.com/channels/${guild_id}). To appeal this decision, please join our dedicated appeal server using the button below.\n${bold('Reason:')} ${quote(`troll`)}`
+                            type: ComponentType.Section,
+                            components: [{
+                                type: ComponentType.TextDisplay,
+                                content: `<@${targetUser!.id}>, you were banned from [${guildname}](https://discord.com/channels/${guild_id}). To appeal this decision, please join our dedicated appeal server using the button below.\n${bold('Reason:')} ${quote(`troll`)}`
+                            }],
                         }],
-                    }],
-                    accessory: {
-                        type: ComponentType.Thumbnail,
-                        media: `https://cdn.discordapp.com/icons/${guild_id}/${icon}.webp`
-                    }
-                },
+                        accessory: {
+                            type: ComponentType.Thumbnail,
+                            media: `https://cdn.discordapp.com/icons/${guild_id}/${icon}.webp`
+                        }
+                    },
                     {
                         type: ComponentType.ActionRow,
                         components: [{ type: ComponentType.Button, style: ButtonStyle.Link, label: "Appeal", url: 'https://discord.gg/qMjjyXyYbr' }]
                     }],
-                accent_color: 0xd10000
-            }
-        })
+                    accent_color: 0xd10000
+                }
+            }) 
         } catch { dm = false }
         await guildconfigs.updateOne({ guildId: guild_id }, { $set: { Ban: targetUser!.id } });
-        await response({ method: "PUT", endpoint: `/guilds/${guild_id}/bans/${targetUser!.id}`, body: { delete_message_seconds: 604800 }, reason: `Ban Command: troll` })
-        await response({
-            method: "POST", endpoint: `/channels/${modChannels.banlogChannel}/messages`, body: {
+        await rest.put(Routes.guildBan(guild_id!, targetUser!.id), { body: { delete_message_seconds: 604800 }, reason: `Ban Command: troll` });
+        await rest.post(Routes.channelMessages(modChannels.banlogChannel), {
+            body: {
                 flags: MessageFlags.IsComponentsV2,
                 components: [{
                     type: ComponentType.Container,
@@ -979,29 +970,32 @@ async function handleComponents(body: APIMessageComponentInteraction) {
                 accent_color: 0xd10000
             }
         })
-        if (inviteCode !== 'none') await response({ method: "DELETE", endpoint: `/invites/${inviteCode}` });
-        await response({ method: "PATCH", endpoint: `/channels/${channel.id}/messages/${message.id}`, body: { components: [{ type: ComponentType.ActionRow, components: [{ type: ComponentType.Button, custom_id: 'expired', label: inviteCode !== 'none' ? '🔨 Banned & Invite Deleted!' : '🔨 Banned!', style: ButtonStyle.Danger, disabled: true }] }] } as APIMessage });
+        if (inviteCode !== 'none') await rest.delete(Routes.invite(inviteCode!));
+        await rest.patch(Routes.channelMessage(channel.id, message.id), { body: { components: [{ type: ComponentType.ActionRow, components: [{ type: ComponentType.Button, custom_id: 'expired', label: inviteCode !== 'none' ? '🔨 Banned & Invite Deleted!' : '🔨 Banned!', style: ButtonStyle.Danger, disabled: true }] }] } });
         res.data = { embeds: [{ description: `Banned <@${targetId}>${inviteCode !== 'none' ? ' Invite was deleted' : ''}` }], message_reference: { message_id: message.id } }
     }
     else if (custom_id.startsWith('unban_')) {
         const [, action, userId] = custom_id.split('_');
-        const targetUser = await response({ method: "GET", endpoint: `users/${userId}` }) as APIUser
+        const targetUser = await rest.get(Routes.user(userId)) as APIUser
         const { appeals } = await usersCollection.findOne({ userId: userId, guildId: guild_id }, { projection: { appeals: 1 } }) as any;
         if (!appeals) return Response.json({ content: `I could not find any appeal entries`, flags: 64 });
         if (!member?.roles.includes(staffroles[0])) {
-            await response({ method: "POST", endpoint: `channels/${modChannels.adminChannel}/messages`, body: { content: `Letting you know <@${member?.user.id}> tried to jump the gun on an appeal.` } });
+            await rest.post(Routes.channelMessages(modChannels.adminChannel), { body: { content: `Letting you know <@${member?.user.id}> tried to jump the gun on an appeal.` } });
             res.data = { content: `Please wait for an admin to make a decision. `, flags: 64 }
             return Response.json(res)
         }
         if (action === 'reject') await usersCollection.deleteOne({ userId: userId, guildId: guild_id });
-        else { await response({ method: "DELETE", endpoint: `guilds/${guild_id}/bans/${userId}` }); await usersCollection.updateOne({ userId: userId, guildId: guild_id }, { $set: { appeals: {} } }); }
-        const dm = await response({ method: "POST", endpoint: `users/@me/channels`, body: { recipient_id: userId } }) as any;
-        await response({ method: "POST", endpoint: `channels/${dm.id}/messages`, body: { embeds: [{ color: action == 'reject' ? 0x890000 : 0x008900, description: action == 'reject' ? `<@${userId}> your ban appeal has been denied.` : `<@${userId}> your ban appeal has been accepted! click below to rejoin the server!\n\n invite: ${appealInvite}` }] } });
+        else {
+            await rest.delete(Routes.guildBan(guild_id!, userId!));
+            await usersCollection.updateOne({ userId: userId, guildId: guild_id }, { $set: { appeals: {} } });
+        }
+        const dm = await rest.post(Routes.userChannels(), { body: { recipient_id: userId } }) as DMChannel;
+        await rest.post(Routes.channelMessages(dm.id), { body: { embeds: [{ color: action == 'reject' ? 0x890000 : 0x008900, description: action == 'reject' ? `<@${userId}> your ban appeal has been denied.` : `<@${userId}> your ban appeal has been accepted! click below to rejoin the server!\n\n invite: ${appealInvite}` }] } });
         res.type = InteractionResponseType.UpdateMessage
         res.data = {
             embeds: [{
                 color: action === 'reject' ? 0x890000 : 0x008900, title: `Ban appeal`,
-                author: { name: ((await response({ method: "GET", endpoint: `users/${userId}` })) as any).username, iconURL: `https://cdn.discordapp.com/avatars/${userId}/${targetUser.avatar}.${targetUser.avatar?.startsWith('a_') ? 'gif' : 'png'}` },
+                author: { name: targetUser.username, iconURL: targetUser.avatar ? rest.cdn.avatar(userId!, targetUser.avatar) : rest.cdn.defaultAvatar(6) },
                 fields: [{ name: 'Why did you get banned?', value: appeals.reason }, { name: 'Why accept appeal?', value: appeals.justification }, { name: 'Extra info', value: appeals.extra }, { name: action === 'reject' ? 'Denied by:' : 'Approved by:', value: `<@${member.user.id}> `, inline: true }],
                 image: { url: message.attachments[0]?.proxy_url }, footer: { text: `User ID: ${userId}` }, timestamp: new Date().toISOString()
             }],
@@ -1018,9 +1012,8 @@ async function handleComponents(body: APIMessageComponentInteraction) {
         const doc = await usersCollection.findOne({ userId: member?.user.id, guildId: guild_id }, { projection: { application: 1 } }) as any;
         const application = doc?.application ?? {};
         const { modChannels } = await guildconfigs.findOne({ guildId: guild_id }, { projection: { modChannels: 1 } }) as Document;
-        const message: APIMessage = await response({
-            method: "POST",
-            endpoint: `channels/${modChannels.applicationChannel}/messages`, body: {
+        const message: APIMessage = await rest.post(Routes.channelMessages(modChannels.applicationChannel), {
+            body: {
                 embeds: [{
                     author: { name: `@${member?.user.username}`, icon_url: `https://cdn.discordapp.com/avatars/${member?.user.id}/${member?.user.avatar}.png` },
                     color: 0x13b6df, title: `Mod Application`,
@@ -1030,7 +1023,7 @@ async function handleComponents(body: APIMessageComponentInteraction) {
                     ]
                 }], timestamp: new Date().toISOString()
             }
-        });
+        }) as APIMessage
         await usersCollection.updateOne({ userId: member?.user.id, guildId: guild_id }, { $set: { application: {} } });
 
         res.type = InteractionResponseType.UpdateMessage;
@@ -1042,12 +1035,12 @@ async function handleComponents(body: APIMessageComponentInteraction) {
                 components: [{ type: ComponentType.TextDisplay, content: '## Application submitted!\nThanks for applying — the mod team will review it soon.' }],
             }],
         };
-        setTimeout(async () => { await response({ method: "DELETE", endpoint: `channels/${message.channel_id}/messages/${message.id}` }) }, 60000);
+        setTimeout(async () => { await rest.delete(Routes.channelMessage(message.channel_id, message.id)) }, 60000);
     }
     else if (custom_id.startsWith('note-') || custom_id.startsWith('modlog-')) {
         const isNote = custom_id.startsWith('note-');
         const [, action, target, index, opener, noteOrLogId] = custom_id.split('-');
-        const targetUser = await response({ method: "GET", endpoint: `users/${target}` }) as APIUser
+        const targetUser = await rest.get(Routes.user(target)) as APIUser
         if (member!.user.id !== opener) return Response.json({ type: 4, data: { content: 'You did not initiate this command', flags: 64 } });
         let idx = parseInt(index!);
         if (action === 'del') {
@@ -1078,7 +1071,7 @@ async function handleComponents(body: APIMessageComponentInteraction) {
             }
             const count = newData.total[0].count;
             const activeNote = newData.notes[0].notes;
-            const m = await response({ method: "GET", endpoint: `users/${activeNote.moderatorId}` });
+            const m = await rest.get(Routes.user(activeNote.moderatorId)) as APIUser;
             res.type = InteractionResponseType.UpdateMessage
             res.data = {
                 flags: MessageFlags.IsComponentsV2,
@@ -1156,7 +1149,7 @@ async function handleComponents(body: APIMessageComponentInteraction) {
         const tie = !win && board.every((c: string) => c !== ' ');
         if (win || tie) {
             if (win) await usersCollection.findOneAndUpdate({ userId: currentplayer, guildId: guild_id }, { $inc: { coins: 100 } });
-            setTimeout(() => { response({ method: "DELETE", endpoint: `webhooks/${application_id}/${token}/messages/@original` }).catch(() => null); }, 10000);
+            setTimeout(() => { rest.delete(Routes.webhookMessage(application_id, token)).catch(() => null); }, 10000);
             res.type = InteractionResponseType.UpdateMessage
             res.data = { embeds: [{ color: win ? 0xceab10 : 0x555555, title: 'TicTacToe', description: win ? `<@${currentplayer}> wins!!` : `It's a draw!` }], components: generateButtons(board, player1!, player2!, currentplayer!, true) }
             return Response.json(res);
@@ -1176,22 +1169,21 @@ async function handleComponents(body: APIMessageComponentInteraction) {
     else if (custom_id.startsWith('verify')) {
         const joinedTime = await usersCollection.findOne({ guildId: guild_id, userId: member?.user.id }, { projection: { joinedTime: 1 } }) as Document
         if (Date.now() - joinedTime.joinedTime < ((Math.random() + 5) * 1000)) {
-            const channel = await response({ method: "POST", endpoint: `users/@me/channels`, body: { recipient_id: member?.user.id } })
-            await response({
-                method: "POST",
-                endpoint: `channels/${channel.id}`, body: {
+            const channel = await rest.post(Routes.userChannels(), { body: { recipient_id: member?.user.id } }) as DMChannel
+            await rest.post(Routes.channelMessages(channel.id), {
+                body: {
                     embeds: [{
                         author: { name: member?.user.username, icon_url: `https://cdn.discordapp.com/avatars/${member?.user.id}/${member!.user.avatar}.png` },
                         description: `Hi <@${member?.user.id}>, your interaction speed with the verification system was too fast for a typical human and was flagged for an auto kick.\n\nYou are free to rejoin the server through a new or public invite.`
                     }]
-                } as APIMessage
-            })
-            await response({ method: "DELETE", endpoint: `guilds/${guild_id}/members/${member?.user.id}` })
+                }
+            });
+            await rest.delete(Routes.guildMember(guild_id!, member?.user.id));
             return;
         }
-        const av = member?.user.avatar ? `https://cdn.discordapp.com/avatars/${member!.user.id}/${member!.user.avatar}.png` : `https://cdn.discordapp.com/embed/avatars/${(BigInt(member!.user.id) >> 22n) % 6n}.png`;
-        await response({ method: "PUT", endpoint: `guilds/${guild_id}/members/${member!.user.id}/roles/1463354464747524136` });
-        await response({ method: "POST", endpoint: `channels/${generalchannels[0]}/messages`, body: { embeds: [{ description: `Everyone, Welcome <@${member?.user.id}> to the server !\n\n`, thumbnail: { url: av }, fields: [{ name: 'Discord Join Date:', value: `<t:${Number(((BigInt(member!.user.id) >> 22n) + 1420070400000n) / 1000n)}>`, inline: true }] }] } as APIMessage });
+        const av = member?.user.avatar ? rest.cdn.avatar(member!.user.id, member.user.avatar) : rest.cdn.defaultAvatar(6);
+        await rest.put(Routes.guildMemberRole(guild_id!, member!.user.id, '1463354464747524136'));
+        await rest.post(Routes.channelMessages(generalchannels[0]), { body: { embeds: [{ description: `Everyone, Welcome <@${member?.user.id}> to the server !\n\n`, thumbnail: { url: av }, fields: [{ name: 'Discord Join Date:', value: `<t:${Number(((BigInt(member!.user.id) >> 22n) + 1420070400000n) / 1000n)}>`, inline: true }] }] } }) 
         res.type = InteractionResponseType.ChannelMessageWithSource
         res.data = { content: `Welcome to the cave <@${member?.user.id}>!!`, flags: 64 }
     }
@@ -1287,7 +1279,7 @@ Bun.serve({
                 const { userId } = req.params;
                 if (!userId) return Response.json({ error: "Invalid User" }, { status: StatusCodes.NOT_FOUND, headers: corsHeaders });
                 try {
-                    const user = await response({ method: "GET", endpoint: `users/${userId}` }) as APIUser;
+                    const user = await rest.get(Routes.user(userId)) as APIUser;
                     return Response.json(
                         { ...user },
                         { headers: { ...corsHeaders, "Cache-Control": "private, max-age=3600" } }
@@ -1301,7 +1293,7 @@ Bun.serve({
             const url = new URL(req.url)
             const guildId = url.searchParams.get('guild_id')
             if (!guildId) return;
-            const guild = await response({ method: "GET", endpoint: `guilds/${guildId}` }) as APIGuild;
+            const guild = await rest.get(Routes.guild(guildId)) as APIGuild;
             await guildconfigs.insertOne(
                 {
                     guildId: guild.id,
@@ -1384,9 +1376,9 @@ Bun.serve({
                 if (!doc) return Response.json({ error: "Not found" }, { status: StatusCodes.NOT_FOUND, headers: corsHeaders });
                 const [memberRoles, guildRoles, guildChannels, rules] = await Promise.all([
                     fetchMemberRoles(session.userId, guildId),
-                    response({ method: "GET", endpoint: `guilds/${guildId}/roles` }) as Promise<APIRole[]>,
-                    response({ method: "GET", endpoint: `guilds/${guildId}/channels` }) as Promise<APIChannel[]>,
-                    response({ method: "GET", endpoint: `guilds/${guildId}/auto-moderation/rules` }) as Promise<APIAutoModerationRule[]>,
+                    rest.get(Routes.guildRoles(guildId)) as Promise<APIRole[]>,
+                    rest.get(Routes.guildChannels(guildId)) as Promise<APIChannel[]>,
+                    rest.get(Routes.guildAutoModerationRules(guildId)) as Promise<APIAutoModerationRule[]>,
                 ]);
                 const selectableChannels = guildChannels
                     .filter((c: APIChannel) => [ChannelType.GuildText, ChannelType.GuildAnnouncement].includes(c.type))
@@ -1444,8 +1436,8 @@ Bun.serve({
                 if (role !== "admin") {
                     return Response.json({ error: "Forbidden — admin role required to delete" }, { status: StatusCodes.FORBIDDEN, headers: corsHeaders });
                 }
-                await response({ method: "DELETE", endpoint: `guilds/${guildId}/members/1420927654701301951` })
-                await guildconfigs.deleteOne({ guildId });
+                await rest.delete(Routes.guildMember(guildId, '1420927654701301951'))
+                await guildconfigs.deleteOne({ guildId: guildId });
                 return Response.json({ ok: true }, { headers: corsHeaders });
             }
         },
