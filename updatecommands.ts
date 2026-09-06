@@ -215,12 +215,6 @@ const commands: RESTPostAPIChatInputApplicationCommandsJSONBody[] = [
         options: [{ name: 'member', description: 'The Member', type: ApplicationCommandOptionType.User }]
     },
     {
-        name: 'refresh',
-        description: 'Refreshes the Posted embeds',
-        default_member_permissions: String(PermissionFlagsBits.Administrator),
-        contexts: [InteractionContextType.Guild]
-    },
-    {
         name: 'restart',
         description: 'Restart the bot',
         default_member_permissions: String(PermissionFlagsBits.Administrator),
