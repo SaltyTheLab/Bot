@@ -290,6 +290,244 @@ const OPTIONAL_EMBED_FIELDS = [
 function blankEmbed() {
         return { title: '', description: '', author: { name: '' } };
 }
+
+// --- Components V2 Builder ---------------------------------------------------
+// Discord component type ids (matches discord.js's ComponentType enum).
+const V2_TYPE = { Section: 9, TextDisplay: 10, Thumbnail: 11, MediaGallery: 12, Separator: 14, Container: 17 };
+
+// Each entry describes one node kind: its Discord type id, what it's allowed to
+// contain (drives which "+ Add" buttons show up inside it), and its own editable
+// fields. This is the "typing" the tree editor is built around — adding a new
+// component kind later means adding one entry here plus its render/serialize
+// handling below, not touching the tree-walking logic itself.
+const V2_NODE_KINDS = {
+    container: {
+        label: 'Container', discordType: V2_TYPE.Container,
+        canContain: ['textDisplay', 'separator', 'mediaGallery', 'section'],
+        fields: [{ key: 'accent_color', label: 'Accent Color (hex)', input: 'text', placeholder: '#5865F2' }],
+    },
+    section: {
+        label: 'Section', discordType: V2_TYPE.Section,
+        canContain: ['textDisplay'], maxChildren: 3, hasThumbnailAccessory: true,
+        fields: [],
+    },
+    textDisplay: {
+        label: 'Text', discordType: V2_TYPE.TextDisplay,
+        canContain: [],
+        fields: [{ key: 'content', label: 'Content (markdown)', input: 'textarea', placeholder: 'Type text...' }],
+    },
+    separator: {
+        label: 'Separator', discordType: V2_TYPE.Separator,
+        canContain: [],
+        fields: [
+            { key: 'divider', label: 'Show divider line', input: 'checkbox' },
+            { key: 'spacing', label: 'Spacing', input: 'select', options: [{ value: '1', label: 'Small' }, { value: '2', label: 'Large' }] },
+        ],
+    },
+    mediaGallery: {
+        label: 'Media Gallery', discordType: V2_TYPE.MediaGallery,
+        canContain: [], hasItemsList: true,
+        fields: [],
+    },
+};
+const V2_ROOT_KINDS = ['container', 'textDisplay', 'separator', 'mediaGallery', 'section'];
+
+function hexColorToInt(hex) {
+    const n = parseInt(String(hex || '').trim().replace(/^#/, ''), 16);
+    return Number.isNaN(n) ? undefined : n;
+}
+function intColorToHex(n) {
+    return typeof n === 'number' ? '#' + n.toString(16).padStart(6, '0') : '';
+}
+function createV2Node(kind) {
+    return { id: crypto.randomUUID(), kind, fields: {}, children: [], accessory: null, items: [] };
+}
+function v2NodeToApi(node) {
+    const def = V2_NODE_KINDS[node.kind];
+    const api = { type: def.discordType };
+    for (const f of def.fields) {
+        const val = node.fields[f.key];
+        if (f.input === 'checkbox') { if (val) api[f.key] = true; continue; }
+        if (val === undefined || val === '') continue;
+        if (f.key === 'accent_color') { const c = hexColorToInt(val); if (c !== undefined) api.accent_color = c; }
+        else if (f.key === 'spacing') api.spacing = parseInt(val, 10);
+        else api[f.key] = val;
+    }
+    if (def.hasItemsList) {
+        api.items = (node.items || []).filter(u => u.trim()).map(u => ({ media: { url: u.trim() } }));
+    }
+    if (def.canContain.length) {
+        api.components = (node.children || []).map(v2NodeToApi);
+    }
+    if (def.hasThumbnailAccessory && node.accessory?.url?.trim()) {
+        api.accessory = { type: V2_TYPE.Thumbnail, media: { url: node.accessory.url.trim() } };
+    }
+    return api;
+}
+function v2ApiToNode(api) {
+    const kind = Object.keys(V2_NODE_KINDS).find(k => V2_NODE_KINDS[k].discordType === api.type);
+    if (!kind) return null; // unknown/unsupported component type (e.g. ActionRow) — dropped rather than guessed at
+    const def = V2_NODE_KINDS[kind];
+    const node = createV2Node(kind);
+    for (const f of def.fields) {
+        if (f.key === 'accent_color') node.fields.accent_color = intColorToHex(api.accent_color);
+        else if (f.input === 'checkbox') node.fields[f.key] = !!api[f.key];
+        else if (api[f.key] !== undefined) node.fields[f.key] = String(api[f.key]);
+    }
+    if (def.hasItemsList) node.items = (api.items || []).map(it => it.media?.url || '');
+    if (def.canContain.length && Array.isArray(api.components)) {
+        node.children = api.components.map(v2ApiToNode).filter(Boolean);
+    }
+    if (def.hasThumbnailAccessory && api.accessory?.media?.url) node.accessory = { url: api.accessory.media.url };
+    return node;
+}
+
+function renderV2Builder(formContainer, entry) {
+    const tree = (entry.components || []).map(v2ApiToNode);
+    const commit = () => {
+        messageConfigsDraft[activeEmbedKey] = { ...messageConfigsDraft[activeEmbedKey], components: tree.map(v2NodeToApi) };
+    };
+
+    formContainer.innerHTML = `
+        <div class="flex flex-col gap-2">
+            <span class="field-label text-red-400">Channel ID</span>
+            <input type="text" class="field" data-embed-field="channelid" value="${entry.channelid || ''}">
+            <p class="text-sm text-yellow-400">Format can't be changed after creation — switching to Standard means deleting this entry and sending a new one.</p>
+            <div id="v2TreeRoot" class="space-y-3 mt-2"></div>
+            <div id="v2RootAddButtons" class="flex gap-2 flex-wrap"></div>
+        </div>
+    `;
+    formContainer.querySelector('[data-embed-field="channelid"]').addEventListener('input', (e) => {
+        messageConfigsDraft[activeEmbedKey] = { ...messageConfigsDraft[activeEmbedKey], channelid: e.target.value.trim() };
+    });
+
+    const treeRoot = formContainer.querySelector('#v2TreeRoot');
+    const rootAddButtons = formContainer.querySelector('#v2RootAddButtons');
+
+    function rerender() {
+        treeRoot.innerHTML = '';
+        tree.forEach((node, idx) => treeRoot.appendChild(renderNode(node, tree, idx)));
+        rootAddButtons.innerHTML = V2_ROOT_KINDS.map(k => `<button type="button" class="add-btn" data-add-root="${k}">+ ${V2_NODE_KINDS[k].label}</button>`).join('');
+        rootAddButtons.querySelectorAll('[data-add-root]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                tree.push(createV2Node(btn.dataset.addRoot));
+                commit(); rerender();
+            });
+        });
+    }
+
+    // Renders one node (its own fields + accessory/items + nested children), and returns the wrapping element.
+    function renderNode(node, parentArray, index) {
+        const def = V2_NODE_KINDS[node.kind];
+        const wrap = document.createElement('div');
+        wrap.className = 'border border-gray-600 rounded-lg p-3 space-y-2 bg-gray-800';
+
+        const header = document.createElement('div');
+        header.className = 'flex items-center justify-between';
+        header.innerHTML = `<span class="font-semibold text-blue-300">${def.label}</span>`;
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'remove-btn';
+        removeBtn.textContent = '×';
+        removeBtn.addEventListener('click', () => { parentArray.splice(index, 1); commit(); rerender(); });
+        header.appendChild(removeBtn);
+        wrap.appendChild(header);
+
+        def.fields.forEach(f => {
+            const fieldWrap = document.createElement('div');
+            fieldWrap.className = 'flex flex-col';
+            if (f.input === 'textarea') {
+                fieldWrap.innerHTML = `<span class="field-label">${f.label}</span><textarea class="field">${node.fields[f.key] || ''}</textarea>`;
+                const el = fieldWrap.querySelector('textarea');
+                el.addEventListener('input', () => { node.fields[f.key] = el.value; commit(); });
+            } else if (f.input === 'checkbox') {
+                fieldWrap.innerHTML = `<span class="flex items-center gap-2 text-gray-300"><input type="checkbox" ${node.fields[f.key] ? 'checked' : ''}>${f.label}</span>`;
+                const el = fieldWrap.querySelector('input');
+                el.addEventListener('change', () => { node.fields[f.key] = el.checked; commit(); });
+            } else if (f.input === 'select') {
+                const optionsHtml = f.options.map(o => `<option value="${o.value}" ${node.fields[f.key] === o.value ? 'selected' : ''}>${o.label}</option>`).join('');
+                fieldWrap.innerHTML = `<span class="field-label">${f.label}</span><select class="field">${optionsHtml}</select>`;
+                const el = fieldWrap.querySelector('select');
+                el.addEventListener('change', () => { node.fields[f.key] = el.value; commit(); });
+            } else {
+                fieldWrap.innerHTML = `<span class="field-label">${f.label}</span><input type="text" class="field" placeholder="${f.placeholder || ''}" value="${node.fields[f.key] || ''}">`;
+                const el = fieldWrap.querySelector('input');
+                el.addEventListener('input', () => { node.fields[f.key] = el.value; commit(); });
+            }
+            wrap.appendChild(fieldWrap);
+        });
+
+        if (def.hasItemsList) {
+            const listWrap = document.createElement('div');
+            listWrap.className = 'space-y-1';
+            (node.items || []).forEach((url, i) => {
+                const row = document.createElement('div');
+                row.className = 'row gap-2';
+                row.innerHTML = `<input type="text" class="field" placeholder="https://..." value="${url}"><button type="button" class="remove-btn self-start">&times;</button>`;
+                row.querySelector('input').addEventListener('input', (e) => { node.items[i] = e.target.value; commit(); });
+                row.querySelector('button').addEventListener('click', () => { node.items.splice(i, 1); commit(); rerender(); });
+                listWrap.appendChild(row);
+            });
+            wrap.appendChild(listWrap);
+            const addImgBtn = document.createElement('button');
+            addImgBtn.type = 'button';
+            addImgBtn.className = 'add-btn';
+            addImgBtn.textContent = '+ Add Image URL';
+            addImgBtn.addEventListener('click', () => { node.items.push(''); commit(); rerender(); });
+            wrap.appendChild(addImgBtn);
+        }
+
+        if (def.hasThumbnailAccessory) {
+            if (node.accessory) {
+                const accWrap = document.createElement('div');
+                accWrap.className = 'flex flex-col border-t border-gray-700 pt-2';
+                accWrap.innerHTML = `<span class="field-label">Thumbnail URL</span><input type="text" class="field" value="${node.accessory.url || ''}" placeholder="https://...">`;
+                accWrap.querySelector('input').addEventListener('input', (e) => { node.accessory.url = e.target.value; commit(); });
+                const removeAcc = document.createElement('button');
+                removeAcc.type = 'button';
+                removeAcc.className = 'remove-btn mt-1';
+                removeAcc.textContent = 'Remove Thumbnail';
+                removeAcc.addEventListener('click', () => { node.accessory = null; commit(); rerender(); });
+                accWrap.appendChild(removeAcc);
+                wrap.appendChild(accWrap);
+            } else {
+                const addAcc = document.createElement('button');
+                addAcc.type = 'button';
+                addAcc.className = 'add-btn';
+                addAcc.textContent = '+ Thumbnail';
+                addAcc.addEventListener('click', () => { node.accessory = { url: '' }; commit(); rerender(); });
+                wrap.appendChild(addAcc);
+            }
+        }
+
+        if (def.canContain.length) {
+            const childrenWrap = document.createElement('div');
+            childrenWrap.className = 'pl-4 border-l border-gray-600 space-y-2';
+            node.children.forEach((child, i) => childrenWrap.appendChild(renderNode(child, node.children, i)));
+            wrap.appendChild(childrenWrap);
+
+            const atLimit = def.maxChildren && node.children.length >= def.maxChildren;
+            if (!atLimit) {
+                const addChildButtons = document.createElement('div');
+                addChildButtons.className = 'flex gap-2 flex-wrap';
+                def.canContain.forEach(k => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'add-btn';
+                    btn.textContent = `+ ${V2_NODE_KINDS[k].label}`;
+                    btn.addEventListener('click', () => { node.children.push(createV2Node(k)); commit(); rerender(); });
+                    addChildButtons.appendChild(btn);
+                });
+                wrap.appendChild(addChildButtons);
+            }
+        }
+
+        return wrap;
+    }
+
+    rerender();
+    commit();
+}
 function addEmbedFieldRow(list, field = { name: '', value: '', inline: false }) {
         if (list.children.length >= 25) {
             showMessage('Discord embeds allow a maximum of 25 fields.', 'bg-yellow-500');
@@ -367,15 +605,19 @@ function syncActiveEmbedFromForm(formContainer) {
 }
 function validateEmbedsDraft() {
         for (const [key, entry] of Object.entries(messageConfigsDraft)) {
+            if (!entry.channelid?.trim()) {
+                return `Embed "${key}": Channel ID is required.`;
+            }
+            if (entry.format === 'v2') {
+                if (!entry.components?.length) return `Embed "${key}": add at least one component before saving.`;
+                continue;
+            }
             const embed = entry.embeds?.[0] || {};
             const hasTitle = !!embed.title?.trim();
             const hasDescription = !!embed.description?.trim();
             const hasAuthor = !!embed.author?.name?.trim();
             if (!hasTitle && !hasDescription && !hasAuthor) {
                 return `Embed "${key}": at least one of Title, Description, or Author Name is required.`;
-            }
-            if (!entry.channelid?.trim()) {
-                return `Embed "${key}": Channel ID is required.`;
             }
             if (entry.reactions?.length) {
                 const seenEmojis = new Set();
@@ -893,10 +1135,11 @@ function renderEmbedSection(container, messageConfigs) {
         const config = messageConfigsDraft[activeEmbedKey];
         if (!config?.channelid) { showMessage('Set a Channel ID before pushing.', 'bg-yellow-500'); return; }
 
-        const embed = config.embeds?.[0] || {};
-        const hasContent = !!(embed.title?.trim() || embed.description?.trim() || embed.author?.name?.trim());
+        const hasContent = config.format === 'v2'
+            ? !!config.components?.length
+            : !!(config.embeds?.[0]?.title?.trim() || config.embeds?.[0]?.description?.trim() || config.embeds?.[0]?.author?.name?.trim());
         if (!hasContent) {
-            showMessage('Add a Title, Description, or Author Name before pushing.', 'bg-yellow-500');
+            showMessage(config.format === 'v2' ? 'You need to add some components first' : 'Add a Title, Description, or Author Name before pushing.', 'bg-yellow-500');
             return;
         }
 
@@ -915,7 +1158,7 @@ function renderEmbedSection(container, messageConfigs) {
     createBtn.addEventListener('click', () => {
         let nameInput = container.querySelector('#newEmbedNameInput');
 
-        // First click: reveal the name input and switch the button into "confirm" mode.
+        // First click: reveal the name input, format switch, and warning; switch the button into "confirm" mode.
         if (!nameInput) {
             nameInput = document.createElement('input');
             nameInput.type = 'text';
@@ -924,6 +1167,22 @@ function renderEmbedSection(container, messageConfigs) {
             nameInput.placeholder = 'new-embed-key';
             nameInput.style.maxWidth = '200px';
             createBtn.insertAdjacentElement('beforebegin', nameInput);
+
+            const formatSelect = document.createElement('select');
+            formatSelect.id = 'newEmbedFormatSelect';
+            formatSelect.className = 'field';
+            formatSelect.style.maxWidth = '160px';
+            formatSelect.innerHTML = `
+                <option value="v1">Standard Embed</option>
+                <option value="v2">Components V2</option>
+            `;
+            nameInput.insertAdjacentElement('afterend', formatSelect);
+
+            const warning = document.createElement('p');
+            warning.id = 'newEmbedFormatWarning';
+            warning.className = 'text-sm text-yellow-400 w-full mt-1';
+            warning.textContent = "Format can't be changed after creation. Switching a message between Standard and Components V2 later means deleting the existing message on Discord and sending a new one — the bot can't convert it in place.";
+            formatSelect.insertAdjacentElement('afterend', warning);
             nameInput.focus();
             createBtn.textContent = 'Confirm';
             nameInput.addEventListener('keydown', (e) => {
@@ -937,15 +1196,24 @@ function renderEmbedSection(container, messageConfigs) {
         if (!name) { showMessage('Enter a key name for the new embed.', 'bg-yellow-500'); return; }
         if (messageConfigsDraft[name]) { showMessage(`"${name}" already exists.`, 'bg-yellow-500'); return; }
 
-        messageConfigsDraft[name] = { channelid: '', embeds: [blankEmbed()] };
+        const format = container.querySelector('#newEmbedFormatSelect')?.value === 'v2' ? 'v2' : 'v1';
+
+        messageConfigsDraft[name] = format === 'v2'
+            ? { channelid: '', format: 'v2', components: [] }
+            : { channelid: '', format: 'v1', embeds: [blankEmbed()] };
         activeEmbedKey = name;
+        v1info.classList.toggle('hidden', format === 'v2')
         renderEmbedSection(container, messageConfigsDraft);
     });
 
     deleteBtn.addEventListener('click', async () => {
         if (!activeEmbedKey) return;
+        else if (messageConfigsDraft[activeEmbedKey].channelid = '') {
+            showMessage('Message not deleted, channelid is blank', 'bg-yellow-500')
+        } else {
+            await apiDeleteEmbed(activeEmbedKey)
+        }
         delete messageConfigsDraft[activeEmbedKey];
-        await apiDeleteEmbed(activeEmbedKey)
         activeEmbedKey = '';
         renderEmbedSection(container, messageConfigsDraft);
     });
@@ -960,6 +1228,13 @@ function renderEmbedSection(container, messageConfigs) {
         }
 
         const entry = messageConfigsDraft[activeEmbedKey];
+
+        // v2 entries get the component tree builder; v1 keeps the classic embed form below.
+        if (entry.format === 'v2') {
+            renderV2Builder(formContainer, entry);
+            return;
+        }
+
         const embed = entry.embeds?.[0] || blankEmbed();
         const visibleOptional = new Set(
             OPTIONAL_EMBED_FIELDS.filter(f => {
