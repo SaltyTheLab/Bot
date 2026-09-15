@@ -3,7 +3,7 @@ import { ObjectId, type Document, type WithId } from 'mongodb';
 import { appendFile } from 'node:fs/promises'
 import { ChatClient } from '@twurple/chat';
 import { RefreshingAuthProvider } from '@twurple/auth';
-import { ComponentType, ButtonStyle, MessageType, ActivityType, PresenceUpdateStatus, AuditLogEvent, Client, Options, Role, Routes, Partials, GatewayIntentBits, TextChannel, MessageFlags, type AnyComponentV2, subtext, GuildMember, GuildMemberFlags, DMChannel, Invite, type APIMessage } from 'discord.js'
+import { ComponentType, ButtonStyle, MessageType, ActivityType, PresenceUpdateStatus, Client, Options, Role, Routes, Partials, GatewayIntentBits, TextChannel, MessageFlags, type AnyComponentV2, subtext, GuildMember, GuildMemberFlags, Invite, type APIMessage } from 'discord.js'
 import { createHash } from 'crypto'
 interface xp { Id: string | GuildMember; channel?: TextChannel | string; guildId?: string };
 type DbInvite = Record<string, { uses: number; id: string; code: string }>;
@@ -22,7 +22,6 @@ process.on("unhandledRejection", async (reason: any) => {
     client.destroy();
     Bun.spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", "C:\\Users\\micha\\Desktop\\Bot\\restart.ps1", "-BotPid", `${process.pid}`, "-intpid", `${intpid}`], { stderr: "pipe", stdout: 'pipe', stdin: 'pipe' });
 });
-const startedAt = Date.now();
 const authProvider = new RefreshingAuthProvider({ clientId: Bun.env.TWITCH_ID!, clientSecret: Bun.env.TWITCH_SECRET! });
 let massban = 0;
 const doc = await ws.findOne({}, { projection: { twitchbot: 1, twitchaccess: 1, twitchrefresh: 1, twitchexpires: 1, twitchobtained: 1 } }) as any;
@@ -33,7 +32,7 @@ const client = new Client({
     presence: { activities: [{ name: `for 0d 0h 0m 0s`, type: ActivityType.Watching, }], status: 'online', afk: false },
     makeCache: Options.cacheWithLimits({ ...Options.DefaultMakeCacheSettings }),
     sweepers: { ...Options.DefaultSweeperSettings }
-})
+});
 const TwitchClient = new ChatClient({ authProvider, channels: ['saltytbsl'] });
 authProvider.addUser(doc.twitchbot, { accessToken: doc.twitchaccess, scope: ['chat:read', 'chat:edit'], refreshToken: doc.twitchrefresh, expiresIn: doc.twitchexpires, obtainmentTimestamp: doc.twitchobtained, }, ['chat']);
 authProvider.onRefresh(async (userId, newTokenData) => {
@@ -42,16 +41,18 @@ authProvider.onRefresh(async (userId, newTokenData) => {
 TwitchClient.connect();
 TwitchClient.onAuthenticationSuccess(() => { appendFile("./log.log", "Febot is listening on twitch!\n") })
 
-function keyify(text: string): string {
-    return createHash('md5').update(text).digest('hex')
-}
 async function inactiveusers() {
     const list = await usersCollection.find({ level: 1, totalmessages: 0, guildId: '1231453115937587270' }, { projection: { userId: 1, _id: 0 } }).toArray()
     const userIds: string[] = list.map(doc => doc.userId);
     for (const id of userIds) {
-        const member: any = await client.rest.get(Routes.guildMember('1231453115937587270', id));
-        if (member.roles.length === 0)
+        let member: null | GuildMember = null
+        try {
+            member = await client.rest.get(Routes.guildMember('1231453115937587270', id)) as GuildMember;
+            if (member?.roles.cache.size === 0)
             await client.rest.delete(Routes.guildMember('1231453115937587270', id))
+        } catch {
+            appendFile("./log.log", `${id} is no longer in guild.`)
+        }
         await Bun.sleep(750);
     }
     await usersCollection.deleteMany({ guildId: '1231453115937587270', userId: { $in: userIds } });
@@ -105,10 +106,9 @@ let presenceInterval: NodeJS.Timeout | undefined;
 function startStatusLoop() {
     clearInterval(presenceInterval);
     presenceInterval = setInterval(() => {
-        const uptimeMs = Date.now() - startedAt;
         client.user?.setPresence({
             activities: [{
-                name: `for ${Math.floor(uptimeMs / 86400000)}d ${Math.floor((uptimeMs / 3600000) % 24)}h ${Math.floor((uptimeMs / 60000) % 60)}m ${Math.floor((uptimeMs / 1000) % 60)}s`,
+                name: `for ${Math.floor(client.uptime! / 86400000)}d ${Math.floor((client.uptime! / 3600000) % 24)}h ${Math.floor((client.uptime! / 60000) % 60)}m ${Math.floor((client.uptime! / 1000) % 60)}s`,
                 type: ActivityType.Watching,
             }],
             status: PresenceUpdateStatus.Online,
@@ -132,13 +132,12 @@ client.on('clientReady', async (ready) => {
     }
 })
 client.on('autoModerationActionExecution', async (action) => {
-    const { guild, channel, ruleId, user } = action;
+    const { guild, channel, ruleId, user, member } = action;
     const { level, punishments } = await usersCollection.findOne({ userId: user!.id, guildId: guild.id }, { projection: { level: 1, punishments: 1 } }) as Document;;
     const { automodsettings: { automodreasonsandweights }, Stages, modChannels } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { automodsettings: 1, Stages: 1, modChannels: 1 } }) as Document;
     let totalWeight = automodreasonsandweights[ruleId].Weight;
     let reason = `AutoMod: ${automodreasonsandweights[ruleId].reason}`;
     if (level < 3) { totalWeight += 1; reason += ' while new to the server.'; }
-
     const bannable = level < 3 && (totalWeight >= 3 || punishments.length > 2);
     const activeWarns = punishments.filter((p: any) => p.active === 1).reduce((acc: number, cur: any) => acc + (cur.weight || 1), 0);
     const totalWarns = activeWarns + (!bannable ? totalWeight : 1);
@@ -175,49 +174,45 @@ client.on('autoModerationActionExecution', async (action) => {
         .filter(Boolean);
     let dm = true
     try {
-        const dmchannel = await client.rest.post(Routes.userChannels(), { body: { recipient_id: user!.id } }) as DMChannel;
-        await client.rest.post(Routes.channelMessages(dmchannel.id), {
-            body: {
-                flags: MessageFlags.IsComponentsV2,
-                components: [
-                    {
-                        type: ComponentType.Container,
-                        accent_color: statusMap[warnType]!.color,
-                        components: [
-                            {
-                                type: ComponentType.Section,
-                                components: [
-                                    {
-                                        type: ComponentType.TextDisplay,
-                                        content: `<@${user!.id}>,${statusMap[warnType]!.dm} ${warnType === 'Ban' ? ` [${guild.name}](https://discord.com/channels/${guild.id}). To appeal this decision, please join our dedicated appeal server using the button below.` : warnType === 'Mute' ? `\`${durationStr}\` in ${guild.name}` : `in ${guild.name}`}`
-                                    }
-                                ],
-                                accessory: { type: ComponentType.Thumbnail, media: { url: guild.iconURL()! } }
-                            },
-                            {
-                                type: ComponentType.TextDisplay,
-                                content: `Reason: \`${reason}\` ${(['Ban', 'Kick'].includes(warnType)) ? '' : `Punishment: \`${!bannable ? totalWeight : 1} warn\`${durationStr ? `, \`${durationStr}\`` : ''}\nActive Warnings:\`${totalWarns}\`\nWarn expires: <t:${Math.floor((Date.now() + 86400000) / 1000)}:F>`}`
-                            },
-                            ...(warnType == 'Ban' ? [{
-                                type: ComponentType.Section,
-                                components: [{
+        user!.send({
+            flags: MessageFlags.IsComponentsV2,
+            components: [
+                {
+                    type: ComponentType.Container,
+                    accent_color: statusMap[warnType]!.color,
+                    components: [
+                        {
+                            type: ComponentType.Section,
+                            components: [
+                                {
                                     type: ComponentType.TextDisplay,
-                                    content: 'Click on the right side/below to go to the server:'
-                                }],
-                                accessory: {
-                                    type: ComponentType.Button,
-                                    style: ButtonStyle.Link,
-                                    label: "Appeal",
-                                    url: 'https://discord.gg/qMjjyXyYbr'
+                                    content: `<@${user!.id}>,${statusMap[warnType]!.dm} ${warnType === 'Ban' ? ` [${guild.name}](https://discord.com/channels/${guild.id}). To appeal this decision, please join our dedicated appeal server using the button below.` : warnType === 'Mute' ? `\`${durationStr}\` in ${guild.name}` : `in ${guild.name}`}`
                                 }
-                            }] : [])],
-                    }]
-            }
+                            ],
+                            accessory: { type: ComponentType.Thumbnail, media: { url: guild.iconURL()! } }
+                        },
+                        {
+                            type: ComponentType.TextDisplay,
+                            content: `Reason: \`${reason}\` ${(['Ban', 'Kick'].includes(warnType)) ? '' : `Punishment: \`${!bannable ? totalWeight : 1} warn\`${durationStr ? `, \`${durationStr}\`` : ''}\nActive Warnings:\`${totalWarns}\`\nWarn expires: <t:${Math.floor((Date.now() + 86400000) / 1000)}:F>`}`
+                        },
+                        ...(warnType == 'Ban' ? [{
+                            type: ComponentType.Section as const,
+                            components: [{
+                                type: ComponentType.TextDisplay as const,
+                                content: 'Click on the right side/below to go to the server:'
+                            }],
+                            accessory: {
+                                type: ComponentType.Button as const,
+                                style: ButtonStyle.Link as const,
+                                label: "Appeal",
+                                url: 'https://discord.gg/qMjjyXyYbr'
+                            }
+                        }] : [])],
+                }]
         })
     } catch {
         dm = false;
     }
-    const member = await guild.members.fetch(user!.id).catch(() => null);
     switch (warnType) {
         case 'Ban':
             await guildconfigs.updateOne({ guildId: guild.id }, { $set: { Ban: user!.id } });
@@ -230,25 +225,26 @@ client.on('autoModerationActionExecution', async (action) => {
             await member?.kick(reason);
             break;
     }
-    const logchannel = client.channels.cache.get(warnType === 'Ban' ? modChannels.banlogChannel : modChannels.mutelogChannel) as TextChannel;
-    logchannel.send({
-        flags: MessageFlags.IsComponentsV2,
-        components: [{
-            type: ComponentType.Container,
-            accent_color: statusMap[warnType]!.color,
+    await client.rest.post(Routes.channelMessages(warnType === 'Ban' ? modChannels.banlogChannel : modChannels.mutelogChannel), {
+        body: {
+            flags: MessageFlags.IsComponentsV2,
             components: [{
-                type: ComponentType.Section,
-                accessory: {
-                    type: ComponentType.Thumbnail,
-                    media: { url: client.rest.cdn.avatar('1420927654701301951', 'a96f0e3049ea9aae9798f45cc2479ebc') }
-                },
+                type: ComponentType.Container,
+                accent_color: statusMap[warnType]!.color,
                 components: [{
-                    type: ComponentType.TextDisplay,
-                    content: `febot ${statusMap[warnType]!.log}\n\nuser: <@${user!.id}>  Channel:<#${channel!.id}>  History: ${caseHistory.join(' | ')} || "none"\n\nReason: \`${reason}\`\n\n ${['Ban', 'Kick'].includes(warnType) ? '' : `Punishment: \`${!bannable ? totalWeight : 1} warn\`${durationStr ? `, \`${durationStr}\`` : ''}\nWarns at log time: \`${activeWarns}\`\nNext Punishment: \`${label}\`\n\n ${dm ? 'User DMed ✅' : 'User DMed 🚫'}`}`
+                    type: ComponentType.Section,
+                    accessory: {
+                        type: ComponentType.Thumbnail,
+                        media: { url: client.rest.cdn.avatar('1420927654701301951', 'a96f0e3049ea9aae9798f45cc2479ebc') }
+                    },
+                    components: [{
+                        type: ComponentType.TextDisplay,
+                        content: `febot ${statusMap[warnType]!.log}\n\nuser: <@${user!.id}>  Channel:<#${channel!.id}>  History: ${caseHistory.join(' | ')} || "none"\n\nReason: \`${reason}\`\n\n ${['Ban', 'Kick'].includes(warnType) ? '' : `Punishment: \`${!bannable ? totalWeight : 1} warn\`${durationStr ? `, \`${durationStr}\`` : ''}\nWarns at log time: \`${activeWarns}\`\nNext Punishment: \`${label}\`\n\n ${dm ? 'User DMed ✅' : 'User DMed 🚫'}`}`
+                    }]
                 }]
             }]
-        }]
-    })
+        }
+    });
     if (['Warn', 'Mute'].includes(warnType)) {
         setTimeout(async () => { await usersCollection.updateOne({ userId: user!.id, guildId: guild.id }, { $set: { "punishments.$[elem].active": 0 } }, { arrayFilters: [{ "elem._id": object }] }); }, 86400000);
     }
@@ -261,12 +257,12 @@ client.on('guildCreate', async (guild) => {
     await guildconfigs.updateOne({ guildId: id }, { $set: { icon: guild.iconURL(), name: name, ownerId: ownerId, Invites: Object.fromEntries(guildinvites.map(i => [i.code, { uses: i.uses, inviter: i.inviter!.id, code: i.code }])) } })
 })
 client.on('guildMemberAdd', async (member) => {
-    const { guild, user } = member;
-    const { modChannels, generalchannels, Invites } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { modChannels: 1, staffroles: 1, generalchannels: 1, Invites: 1 } }) as WithId<Document>;
+    const { guild, user, joinedTimestamp, flags } = member;
+    const { modChannels: { welcomeChannel, mutelogChannel }, generalchannels, Invites } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { modChannels: 1, staffroles: 1, generalchannels: 1, Invites: 1 } }) as WithId<Document>;
     const currentInvites = await guild.invites.fetch();
     const invite: Invite | DbInvite | undefined = currentInvites.find((i: any) => i.uses > (Invites[i.code]?.uses || 0)) ?? Object.values(Invites)?.find((i: any) => !currentInvites.get(i!.code!)) ?? undefined;
     const inviter: string | undefined | { uses: number; id: string; code: string } = invite instanceof Invite ? invite?.inviter?.id : invite && invite satisfies DbInvite ? invite!.id : undefined;
-    const originalMessage = await client.rest.post(Routes.channelMessages(modChannels.welcomeChannel), {
+    const originalMessage = await client.rest.post(Routes.channelMessages(welcomeChannel), {
         body: {
             flags: MessageFlags.IsComponentsV2,
             components: [{
@@ -279,24 +275,24 @@ client.on('guildMemberAdd', async (member) => {
                     }, { type: ComponentType.Separator },
                     {
                         type: ComponentType.Section,
-                        components: [{ type: ComponentType.TextDisplay, content: subtext(`${invite ? `Invited by: <@${inviter}> | ${invite?.code}` : 'No Invite'}`), }],
+                        components: [{ type: ComponentType.TextDisplay, content: subtext(`${invite instanceof Invite || (invite && invite satisfies DbInvite) ? `Invited by: <@${inviter}> | ${invite?.code}` : 'No Invite'}`), }],
                         accessory: { type: ComponentType.Button, style: ButtonStyle.Danger, custom_id: `ban_${user.id}_${invite instanceof Invite && inviter ? invite?.code : 'none'}`, label: `🔨 ${invite ? `Ban & Delete Invite` : 'Ban'}` }
                     }],
             }]
         }
-    }) as APIMessage
-    if (Date.now() - member.user.createdTimestamp < 172800000) {
+    }) as APIMessage;
+    if (Date.now() - user.createdTimestamp < 172800000) {
         await member.kick('Account less than 2 days old');
-        await client.rest.post(Routes.channelMessages(modChannels.mutelogChannel), {
+        await client.rest.post(Routes.channelMessages(mutelogChannel), {
             body: {
                 flags: MessageFlags.IsComponentsV2,
-                componets: [{
+                components: [{
                     type: ComponentType.Container,
                     components: [{
                         type: ComponentType.Section,
                         components: [{
                             type: ComponentType.TextDisplay,
-                            content: `A member was auto-kicked \n\n**User:**<@${user.id}>\n\n**Reason:**New Account\n** Created:** <t:${member.user.createdTimestamp}:R>\n\n**Created on:**<t:${Math.floor(user.createdTimestamp / 1000)}:R>`
+                            content: `A member was auto-kicked \n\n**User:**<@${user.id}>\n\n**Reason:**New Account\n** Created:** <t:${user.createdTimestamp}:R>\n\n**Created on:**<t:${Math.floor(user.createdTimestamp / 1000)}:R>`
                         }],
                         accessory: {
                             type: ComponentType.Thumbnail,
@@ -309,26 +305,20 @@ client.on('guildMemberAdd', async (member) => {
         return;
     }
     try {
-        const dmChannel = await client.rest.post(Routes.userChannels(), { body: { recipient_id: user.id } }) as DMChannel;
-        dmChannel.send({
+        user.send({
             flags: MessageFlags.IsComponentsV2,
             components: [{
                 type: ComponentType.Container,
                 accent_color: 0x00FF99,
                 components: [
-                    {
-                        type: ComponentType.TextDisplay,
-                        content: `Welcome to the server ${user}!\n\nBe sure to check out the rules and grab some roles in the role channel.`
-                    }
-                ]
-
+                    { type: ComponentType.TextDisplay, content: `Welcome to the server ${user}!\n\nBe sure to check out the rules and grab some roles in the role channel.` }]
             }]
         })
     } catch {
         await appendFile("./log.log", `[Member Add] Error: ${user.id} does not have dms open/channel cannot be created.`)
     }
-    if (!member.flags.has(GuildMemberFlags.DidRejoin) && !user.bot) {
-        await usersCollection.insertOne({ userId: user.id, guildId: guild.id, level: 1, coins: 100, xp: 0, totalmessages: 0, punishments: [], notes: [], blacklist: [], avatar: member.user.avatarURL() ?? member.user.defaultAvatarURL, total: 0, mediaCount: 0, duplicateCounts: {}, timestamps: [], nick: member.user.username, lastmessage: null, joinedTime: member.joinedTimestamp })
+    if (!flags.has(GuildMemberFlags.DidRejoin) && !user.bot) {
+        await usersCollection.insertOne({ userId: user.id, guildId: guild.id, level: 1, coins: 100, xp: 0, totalmessages: 0, punishments: [], notes: [], blacklist: [], avatar: user.avatarURL() ?? user.defaultAvatarURL, total: 0, mediaCount: 0, duplicateCounts: {}, timestamps: [], nick: user.username, lastmessage: null, joinedTime: joinedTimestamp })
     } else {
             if (guild.id == "1231453115937587270")
                 await client.rest.put(Routes.guildMemberRole(guild.id, user.id, `1463354464747524136`))
@@ -342,11 +332,11 @@ client.on('guildMemberAdd', async (member) => {
                                 type: ComponentType.Section,
                                 components: [{
                                     type: ComponentType.TextDisplay,
-                                    content: `Everyone, Welcome <@${member?.user.id}> back to the server!\n\nDiscord Join Date: <t:${Math.floor(user.createdTimestamp / 1000)}>`
+                                    content: `Everyone, Welcome <@${user.id}> back to the server!\n\nDiscord Join Date: <t:${Math.floor(user.createdTimestamp / 1000)}>`
                                 }],
                                 accessory: {
                                     type: ComponentType.Thumbnail,
-                                    media: { url: member.user.avatarURL() ?? member.user.defaultAvatarURL },
+                                    media: { url: user.avatarURL() ?? user.defaultAvatarURL },
                                     description: "User icon",
                                     spoiler: false
                                 }
@@ -360,9 +350,9 @@ client.on('guildMemberAdd', async (member) => {
     }
         setTimeout(async () => {
             try {
-                await client.rest.patch(Routes.channelMessage(originalMessage.channel_id, originalMessage.id), {
+                await client.rest.patch(Routes.channelMessage(welcomeChannel, originalMessage.id), {
                 body: {
-                    allowedmentions: { "parse": [] },
+                    allowed_mentions: { "parse": [] },
                     flags: MessageFlags.IsComponentsV2,
                     components: [{
                         type: ComponentType.Container,
@@ -413,11 +403,11 @@ client.on('guildMemberRemove', async (member) => {
                     type: ComponentType.Section,
                     components: [{
                         type: ComponentType.TextDisplay,
-                        content: `<@${user.id}> left the server.`
+                        content: `<@${user.id}> left the server.\n\nJoined ${guild.name}: <t:${Math.floor(member.joinedTimestamp! / 1000)}>`
                     }],
                     accessory: {
                         type: ComponentType.Thumbnail,
-                        media: { url: member.avatarURL() ?? member.user.defaultAvatarURL }
+                        media: { url: user.avatarURL() ?? user.defaultAvatarURL }
                     }
                 }]
             }]
@@ -429,24 +419,26 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
     const { modChannels } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { modChannels: 1 } }) as Document
     await usersCollection.updateOne({ guildId: guild.id, userId: user.id }, { $set: { nick: nickname ?? user.username, avatar: avatar } });
     if (!oldMember || nickname === oldMember.nickname || newMember.user.username == nickname) return;
-    const logchannel = client.channels.cache.get(modChannels.namelogChannel) as TextChannel;
-    logchannel.send({
-        flags: MessageFlags.IsComponentsV2,
-        components: [{
-            type: ComponentType.Container,
-            accent_color: 0x4e85b6,
+    await client.rest.post(Routes.channelMessages(modChannels.namelogChannel), {
+        body: {
+            flags: MessageFlags.IsComponentsV2,
             components: [{
-                type: ComponentType.Section,
+                type: ComponentType.Container,
+                accent_color: 0x4e85b6,
                 components: [{
-                    type: ComponentType.TextDisplay,
-                    content: `< @${user.id} > ** changed their nickname **\n\n ** Before:**\n${oldMember.nickname}\n\n ** After:**\n${newMember.nickname ?? user.username}`
-                }],
-                accessory: {
-                    type: ComponentType.Thumbnail,
-                    media: { url: newMember.user.avatarURL() ?? newMember.user.defaultAvatarURL }
-                }
+                    type: ComponentType.Section,
+                    components: [{
+                        type: ComponentType.TextDisplay,
+                        content: `< @${user.id} > ** changed their nickname **\n\n ** Before:**\n${oldMember.nickname}\n\n ** After:**\n${newMember.nickname ?? user.username}`
+                    }],
+                    accessory: {
+                        type: ComponentType.Thumbnail,
+                        media: { url: newMember.user.avatarURL() ?? newMember.user.defaultAvatarURL }
+                    }
+                }]
             }]
-        }]
+
+        }
     })
 })
 client.on('guildBanAdd', async (ban) => {
@@ -456,13 +448,29 @@ client.on('guildBanAdd', async (ban) => {
     if (Ban === user.id) { await guildconfigs.updateOne({ guildId: guild.id }, { $set: { ban: '' } }); return; }
     else {
         massban += 1;
-        const auditLog = await guild.fetchAuditLogs({ limit: 1, user: user.id, type: AuditLogEvent.MemberBanAdd })
-        const reason = auditLog.entries.first()?.reason ?? null;
-        const userId = auditLog.entries.first()?.executorId
+        const result = await usersCollection.aggregate([
+            { $match: { guildId: guild.id, userId: user.id } },
+            {
+                $project: {
+                    punishments: {
+                        $sortArray: {
+                            input: {
+                                $filter: {
+                                    input: "$punishments",
+                                    as: "p",
+                                    cond: { $eq: ["$$p.type", "Ban"] } // swap for your actual filter condition
+                                }
+                            },
+                            sortBy: { timestamp: -1 }
+                        }
+                    }
+                }
+            }
+        ]).toArray();
+        const { punishments } = result[0] as Document;
         await Bun.sleep(massban * 1000)
         try {
-            const dmchannel = await client.rest.post(Routes.userChannels(), { body: { recipient_id: user.id } }) as DMChannel;
-            dmchannel.send({
+            await user.send({
                 flags: MessageFlags.IsComponentsV2,
                 components: [{
                     type: ComponentType.Container,
@@ -472,73 +480,73 @@ client.on('guildBanAdd', async (ban) => {
                         accessory: { type: ComponentType.Thumbnail, media: { url: guild.iconURL()! } },
                         components: [{
                             type: ComponentType.TextDisplay,
-                            content: `${user.username}, you were banned from [${guild.name}](https://discord.com/channels/${guild.id}).\n\n\nTo appeal this decision, please join our dedicated appeal server using the button below.\nReason: \`${reason}\``,
+                            content: `${user.username}, you were banned from [${guild.name}](https://discord.com/channels/${guild.id}).\n\n\nTo appeal this decision, please join our dedicated appeal server using the button below.\nReason: \`${punishments[0].reason}\``,
 
                         }]
                     },
                         {
                             type: ComponentType.Section,
-                                components: [{
+                            components: [{
                                 type: ComponentType.TextDisplay,
                                 content: "Click the button below/on the right to go to the Server:"
                             }],
                             accessory: {
-                                    type: ComponentType.Button,
-                                    style: ButtonStyle.Link,
-                                    label: "Appeal",
-                                    url: 'https://discord.gg/qMjjyXyYbr'
+                                type: ComponentType.Button,
+                                style: ButtonStyle.Link,
+                                label: "Appeal",
+                                url: 'https://discord.gg/qMjjyXyYbr'
                             }
                         }
                     ],
                 }]
             })
         } catch { dmed = false }
-        const logchannel = client.channels.cache.get(modChannels.banlogChannel) as TextChannel
-        logchannel.send({
-            flags: MessageFlags.IsComponentsV2,
-            components: [{
-                type: ComponentType.Container,
-                accent_color: 0xff3030,
+        await client.rest.post(Routes.channelMessages(modChannels.banlogChannel), {
+            body: {
+                flags: MessageFlags.IsComponentsV2,
                 components: [{
-                    type: ComponentType.Section,
-                    accessory: {
-                        type: ComponentType.Thumbnail,
-                        media: { url: guild.iconURL()! }
-                    },
+                    type: ComponentType.Container,
+                    accent_color: 0xff3030,
                     components: [{
-                        type: ComponentType.TextDisplay,
-                        content: `Mass Ban Detected\n**Moderator <@${userId}> banned <@${user.id}>:\n\nID: <@${user.id}>\n\n**TAG:**${user.username}\n\n**Reason:**\`${reason}\`\n\n ${subtext(dmed ? 'User DMed ✅' : 'UserDmed ❌')}`,
-
-                    },]
+                        type: ComponentType.Section,
+                        accessory: {
+                            type: ComponentType.Thumbnail,
+                            media: { url: guild.iconURL()! }
+                        },
+                        components: [{
+                            type: ComponentType.TextDisplay,
+                            content: `Mass Ban Detected\n**Moderator <@${punishments[0].moderatorId}> banned <@${user.id}>:\n\nID: <@${user.id}>\n\n**TAG:**${user.username}\n\n**Reason:**\`${punishments[0].reason}\`\n\n ${subtext(dmed ? 'User DMed ✅' : 'UserDmed ❌')}`,
+                        },]
+                    }]
                 }]
-            }]
+            }
         })
         massban -= 1;
     }
 })
 client.on('guildBanRemove', async (ban) => {
-    const { user, guild } = ban
+    const { user, guild, reason } = ban
     const { modChannels } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { modChannels: 1 } }) as Document
-    const doc = await usersCollection.findOne({ userId: user.id, guildId: guild.id }, { projection: { punishments: 1 } }) as Document;
-    const bans = (doc.punishments ?? []).filter((p: any) => p.type === 'Ban').sort((a: any, b: any) => b.timestamp - a.timestamp);
-    const logchannel = client.channels.cache.get(modChannels.banlogChannel) as TextChannel;
-    logchannel.send({
-        flags: MessageFlags.IsComponentsV2,
-        components: [{
-            type: ComponentType.Container,
-            accent_color: 0x309eff,
+    await client.rest.post(Routes.channelMessages(modChannels.banlogChannel), {
+        body: {
+            flags: MessageFlags.IsComponentsV2,
             components: [{
-                type: ComponentType.Section,
+                type: ComponentType.Container,
+                accent_color: 0x309eff,
                 components: [{
-                    type: ComponentType.TextDisplay,
-                    content: `A member was unbanned\n\n**User**: <@${user.id}>\n**Tag**:\`${user.username}\`\n**Reason**:\`${bans[0].reason}\``
-                }],
-                accessory: {
-                    type: ComponentType.Thumbnail,
-                    media: { url: user.avatarURL() ?? user.defaultAvatarURL }
-                }
+                    type: ComponentType.Section,
+                    components: [{
+                        type: ComponentType.TextDisplay,
+                        content: `A member was unbanned\n\n**User**: <@${user.id}>\n**Tag**:\`${user.username}\`\n**Reason**:\`${reason}\``
+                    }],
+                    accessory: {
+                        type: ComponentType.Thumbnail,
+                        media: { url: user.avatarURL() ?? user.defaultAvatarURL }
+                    }
+                }]
             }]
-        }]
+        }
+
     })
 })
 client.on('inviteCreate', async (invite) => {
@@ -558,36 +566,31 @@ client.on('messageReactionAdd', async (reaction, user) => {
     const { reactions, single } = config;
     const entry = reactions.find(e => e.emoji === (emoji.id ?? emoji.name));
     if (!entry) return;
-
-    const roleID = entry.roleId;
     const { blacklist } = await usersCollection.findOne({ userId: user.id, guildId: message.guild!.id }, { projection: { blacklist: 1 } }) as WithId<Document>;
 
-    const roleIds = Array.isArray(roleID) ? roleID : [roleID];
+    const roleIds = Array.isArray(entry.roleId) ? entry.roleId : [entry.roleId];
     if (blacklist?.length && roleIds.some(id => blacklist.includes(id))) return;
     const member = await message.guild.members.fetch(user.id);
     if (single) {
         const groupRoleIds = reactions.flatMap(r => Array.isArray(r.roleId) ? r.roleId : [r.roleId]);
         const staleRoleIds = groupRoleIds.filter(id => !roleIds.includes(id) && member.roles.cache.get(id));
-        await Promise.all(staleRoleIds.map(id => client.rest.delete(Routes.guildMemberRole(message.guild!.id, user.id, id))));
+        await Promise.all(staleRoleIds.map(id => message.member?.roles.add(id)));
     }
-    await Promise.all(roleIds.map(id => client.rest.put(Routes.guildMemberRole(message.guild!.id, user.id, id))));
+    await Promise.all(roleIds.map(id => message.member?.roles.add(id)));
 });
 client.on('messageReactionRemove', async (reaction, user) => {
     const { message, emoji } = reaction;
     if (!message.guild || user.bot) return;
-    const { messageConfigs } = await guildconfigs.findOne({ guildId: message.guild!.id }, { projection: { reactions: 1, Data: 1, messageConfigs: 1 } }) as Document
-    if (!Object.values(messageConfigs).find((info: any) => info.messageId === message.id)) return;
-    const config = Object.values(messageConfigs).find((info: any) => info.messageId === message.id) as any;
+    const { messageConfigs } = await guildconfigs.findOne({ guildId: message.guild!.id }, { projection: { messageConfigs: 1 } }) as Document
+    const config: { reactions: { emoji: string; roleId: string | string[] }[]; } | undefined = Object.values(messageConfigs).find((info: any) => info.messageId === message.id) ?? undefined;
+    if (!config) return;
+    else {
     const { reactions } = config
     const entry = reactions.find((entry: { emoji: string }) => entry.emoji === (emoji.id! ?? emoji.name!));
     if (!entry) return;
-    const roleID = entry.roleId
-    const { blacklist } = await usersCollection.findOne({ userId: user.id, guildId: message.guild!.id }, { projection: { blacklist: 1 } }) as WithId<Document>;
-    if (blacklist && blacklist.length > 0 && blacklist.includes(roleID)) return;
-    const roleIds = Array.isArray(roleID) ? roleID : [roleID];
-    await Promise.all(
-        roleIds.map((id: string) => client.rest.delete(Routes.guildMemberRole(message.guild!.id, user.id, id)))
-    );
+        const roleIds = Array.isArray(entry.roleId) ? entry.roleId : [entry.roleId];
+        await Promise.all(roleIds.map((id: string) => message.member?.roles.remove(id)));
+    }
 })
 client.on('messageDelete', async (deletedData) => {
     const { id, channelId, guildId, stickers, attachments, author, content } = deletedData;
@@ -595,7 +598,7 @@ client.on('messageDelete', async (deletedData) => {
     const imageAttachments = attachments
         .filter(att => att.contentType?.startsWith('image/'))
         .map(att => att.proxyURL);
-    const { modChannels } = await guildconfigs.findOne({ guildId }, { projection: { modChannels: 1 } }) as Document;
+    const { modChannels: { deletedlogChannel } } = await guildconfigs.findOne({ guildId }, { projection: { modChannels: 1 } }) as Document;
     const bodyComponents: AnyComponentV2[] = [
         {
             type: ComponentType.Section,
@@ -620,52 +623,53 @@ client.on('messageDelete', async (deletedData) => {
         components: [{ type: ComponentType.TextDisplay, content: `ID: ${id}` }],
         accessory: { type: ComponentType.Button, style: ButtonStyle.Link, label: 'Event link', url: `https://discord.com/channels/${guildId}/${channelId}/${id}` }
     })
-    await client.rest.post(Routes.channelMessages(modChannels.deletedlogChannel), {
+    await client.rest.post(Routes.channelMessages(deletedlogChannel), {
         body: { flags: MessageFlags.IsComponentsV2, components: [{ type: ComponentType.Container, accent_color: 0xf03030, components: bodyComponents }] }
     })
 })
 client.on('messageUpdate', async (oldMessage, newMessage) => {
     const { author, id, channelId, content, guildId } = newMessage;
     if (!oldMessage.content || oldMessage.content == newMessage.content || oldMessage.author?.bot) return;
-    const { modChannels } = await guildconfigs.findOne({ guildId: newMessage.guildId }, { projection: { modChannels: 1 } }) as Document
-    const channel = client.channels.cache.get(modChannels.updatedlogChannel) as TextChannel;
-    channel.send({
-        flags: MessageFlags.IsComponentsV2,
-        components: [{
-            type: ComponentType.Container,
-            accent_color: 0x309eff,
+    const { modChannels: { updatedlogChannel } } = await guildconfigs.findOne({ guildId: newMessage.guildId }, { projection: { modChannels: 1 } }) as Document
+    await client.rest.post(Routes.channelMessages(updatedlogChannel), {
+        body: {
+            flags: MessageFlags.IsComponentsV2,
             components: [{
-                type: ComponentType.Section,
+                type: ComponentType.Container,
+                accent_color: 0x309eff,
                 components: [{
-                    type: ComponentType.TextDisplay,
-                    content: `${author!.username} edited a message in <#${channelId}>\n\n **Before:**\n${oldMessage.content || ''}\n\n **After:**\n${content || ''}`
+                    type: ComponentType.Section,
+                    components: [{
+                        type: ComponentType.TextDisplay,
+                        content: `${author!.username} edited a message in <#${channelId}>\n\n **Before:**\n${oldMessage.content || ''}\n\n **After:**\n${content || ''}`
+                    }],
+                    accessory: { type: ComponentType.Thumbnail, media: { url: author.avatarURL() ?? author.defaultAvatarURL } }
+                },
+                {
+                    type: ComponentType.Section,
+                    components: [{ type: ComponentType.TextDisplay, content: `ID: ${id}` }],
+                    accessory: {
+                        type: ComponentType.Button,
+                        style: ButtonStyle.Link,
+                        label: 'Event Link',
+                        url: `https://discordapp.com/channels/${guildId}/${channelId}/messages/${id}`
+                    }
                 }],
-                accessory: { type: ComponentType.Thumbnail, media: { url: author.avatarURL() ?? author.defaultAvatarURL } }
-            },
-            {
-                type: ComponentType.Section,
-                components: [{ type: ComponentType.TextDisplay, content: `ID: ${id}` }],
-                accessory: {
-                    type: ComponentType.Button,
-                    style: ButtonStyle.Link,
-                    label: 'Event Link',
-                    url: `https://discordapp.com/channels/${guildId}/${channelId}/messages/${id}`
-                }
-            }],
-        }]
+            }]
+        }
     })
 })
 client.on('messageCreate', async (message) => {
-    const { author, guildId, member, content, attachments, type, mentions, guild, channel } = message;
-    if (author.bot == true || !guildId || type === MessageType.ChatInputCommand || type === MessageType.UserJoin) return;
-    const { publicChannels, responses, staffroles, generalchannels, automodsettings: { messagereasonsandweights, messagethreshold, Duplicatespamthreshold, mediathreshold, spamthreshold, capsthreshold }, count, lastuser, Stages, modChannels } = await guildconfigs.findOne({ guildId: guildId }, { projection: { publicChannels: 1, responses: 1, staffroles: 1, mediaexclusions: 1, automodsettings: 1, count: 1, lastuser: 1, baseMultiplier: 1, exponent: 1, flatOffset: 1, roundToNearest: 1, generalchannels: 1, Stages: 1, modChannels: 1 } }) as Document
+    const { author, member, content, attachments, type, mentions, guild, channel } = message;
+    if (author.bot == true || !guild || type === MessageType.ChatInputCommand || type === MessageType.UserJoin) return;
+    const { publicChannels, responses, staffroles, generalchannels, automodsettings: { messagereasonsandweights, messagethreshold, Duplicatespamthreshold, mediathreshold, spamthreshold, capsthreshold }, count, lastuser, Stages, modChannels } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { publicChannels: 1, responses: 1, staffroles: 1, mediaexclusions: 1, automodsettings: 1, count: 1, lastuser: 1, baseMultiplier: 1, exponent: 1, flatOffset: 1, roundToNearest: 1, generalchannels: 1, Stages: 1, modChannels: 1 } }) as Document
     const isstaff = member?.roles.cache.some((role: Role) => staffroles.includes(role.id)) || author.id === "521404063934447616"
     const hasMedia = (attachments.size > 0 || /https?:\/\/[^\s]+/i.test(content)) && generalchannels.includes(channel.id)
     let messageWords: string = '!';
     let changed: boolean = false
     if (channel.id == publicChannels.countingChannel) {
         if (!/^\d+$/.test(content)) return;
-        await guildconfigs.findOneAndUpdate({ guildId: guildId }, (count + 1 == parseInt(content) && lastuser !== author.id) ? { $inc: { count: 1 }, $set: { lastuser: author.id } } : { $set: { count: 0, lastuser: null } })
+        await guildconfigs.findOneAndUpdate({ guildId: guild.id }, (count + 1 == parseInt(content) && lastuser !== author.id) ? { $inc: { count: 1 }, $set: { lastuser: author.id } } : { $set: { count: 0, lastuser: null } })
         return (count + 1 == parseInt(content) && lastuser !== author.id) ?
             await message.react("%E2%9C%85") : await message.reply({ content: `<@${author.id}> missed or already counted!` })
     }
@@ -675,7 +679,7 @@ client.on('messageCreate', async (message) => {
         const lowerwords = messageWords.toLowerCase()
         const reactionsToApply = [];
         for (const [trigger, text] of Object.entries(responses))
-                if (lowerwords.includes(trigger))
+            if (lowerwords.includes(trigger))
                     await message.reply(text as string)
             if (lowerwords.includes('bad') && lowerwords.includes('bot'))
                 reactionsToApply.push('😡')
@@ -685,12 +689,11 @@ client.on('messageCreate', async (message) => {
                 reactionsToApply.push('🏳️‍🌈')
             for (const emoji of reactionsToApply)
                 await message.react(emoji);
-
     }
-    const key = keyify(messageWords)
+    const key = createHash('md5').update(messageWords).digest('hex')
     const capsRatio = messageWords.length > 20 ? (messageWords.match(/[A-Z]/g)?.length ?? 0) / messageWords.length : 0;
     const { automodMarks, punishments, level } = await usersCollection.findOneAndUpdate(
-        { userId: author.id, guildId: guildId }, [
+        { userId: author.id, guildId: guild.id }, [
         {
             $set: {
                 previoustime: { $ifNull: ["$lastmessage", 0] },
@@ -719,14 +722,14 @@ client.on('messageCreate', async (message) => {
         },
         { $unset: ["isModReset", "markDuplicateSpam", "markMessageThreshold", "markInactive30", "markMediaViolation", "markGeneralSpam"] }
     ], { returnDocument: 'after', projection: { automodMarks: 1, punishments: 1, level: 1 } }) as Document;
-    await grantXp({ Id: member!, guildId: guildId, channel: channel as TextChannel });
+    await grantXp({ Id: member!, guildId: guild.id, channel: channel as TextChannel });
     const isNewUser = Date.now() - member?.joinedTimestamp! < 2 * 24 * 60 * 60 * 1000 && level < 3
     if (isstaff) return;
     if (mentions.everyone) await message.delete();
     const activeChecks = Object.keys(messagereasonsandweights).filter((key: string) => automodMarks[key]).map(key => ({ ...messagereasonsandweights[key] })) as Array<{ reason: string, Weight: number }>;
     let totalWeight = activeChecks.reduce((acc, check) => acc + check.Weight, 0) as number;
     if (totalWeight == 0) return;
-    await usersCollection.updateOne({ guildId: guildId, userId: member!.user.id }, {
+    await usersCollection.updateOne({ guildId: guild.id, userId: member!.user.id }, {
         $set: { 'automodMarks.everyonePing': false, 'automodMarks.duplicateSpam': false, 'automodMarks.mediaViolation': false, 'automodMarks.generalspam': false, 'automodMarks.capSpam': false }
     })
     let reasonText = `AutoMod: ${activeChecks.map(check => check.reason).join('; ')}`;
@@ -735,16 +738,16 @@ client.on('messageCreate', async (message) => {
 
     const activeWarns = punishments.length > 0 ? punishments.filter((p: any) => p.active === 1).reduce((acc: number, cur: any) => acc + (cur.weight || 1), 0) : 0;
     const totalWarns = activeWarns + totalWeight;
-    const stage = Stages[Math.min(totalWarns - 1, Stages.length - 1)];
+    const { minutes, label } = Stages[Math.min(totalWarns - 1, Stages.length - 1)];
     const object = new ObjectId();
     let warnType = bannable ? 'Ban' : 'Warn';
     let durationMs = 0, durationStr = null;
-    if (warnType === 'Warn' && stage.minutes > 0) {
-        durationMs = stage.minutes * 60000;
-        durationStr = stage.minutes >= 60 ? `${Math.ceil(stage.minutes / 60)} hour mute` : `${stage.minutes} min mute`;
+    if (warnType === 'Warn' && minutes > 0) {
+        durationMs = minutes * 60000;
+        durationStr = minutes >= 60 ? `${Math.ceil(minutes / 60)} hour mute` : `${minutes} min mute`;
         warnType = 'Mute';
     }
-    const finalMessage: any = channel.send({
+    const finalMessage = await channel.send({
         embeds: [{
             author: {
                 name: `${member!.user!.username} ${warnType === 'Mute' ? `was issued a ${durationStr}` : `${statusMap[warnType]?.cmd}`}`,
@@ -753,42 +756,39 @@ client.on('messageCreate', async (message) => {
             color: statusMap[warnType]!.color,
         }]
     });
-    const newPunishment = { _id: object, userId: author.id, moderatorId: '1420927654701301951', reasonText, duration: durationMs, timestamp: Date.now(), active: 1, weight: !bannable ? totalWeight : 1, type: warnType, guildId, channel: channel.id, refrence: `https://discord.com/channels/${guildId}/${channel.id}/${finalMessage.id}`, warns: totalWarns - 1 };
-    await usersCollection.updateOne({ userId: author.id, guildId }, { $push: { punishments: newPunishment as any } });
+    const newPunishment = { _id: object, userId: author.id, moderatorId: '1420927654701301951', reasonText, duration: durationMs, timestamp: Date.now(), active: 1, weight: !bannable ? totalWeight : 1, type: warnType, guildId: guild.id, channel: channel.id, refrence: `https://discord.com/channels/${guild.id}/${channel.id}/${finalMessage.id}`, warns: totalWarns - 1 };
+    await usersCollection.updateOne({ userId: author.id, guildId: guild.id }, { $push: { punishments: newPunishment as any } });
     const caseHistory = [...punishments, newPunishment].filter((r: any) => warnType === 'Ban' ? r.type === "Ban" : r.type !== 'Kick').slice(0, 10).map((p: any, idx: number) => p.refrence ? `[Case ${idx + 1}](${p.refrence})` : null).filter(Boolean);
     let dm = true;
     try {
-        const dmchannel = await client.rest.post(Routes.userChannels(), { body: { recipient_id: author.id } }) as DMChannel;
-        await client.rest.post(Routes.channelMessages(dmchannel.id), {
-            body: {
-                flags: MessageFlags.IsComponentsV2,
+        author.send({
+            flags: MessageFlags.IsComponentsV2,
+            components: [{
+                type: ComponentType.Container,
+                accent_color: statusMap[warnType]!.color,
                 components: [{
-                    type: ComponentType.Container,
-                    accent_color: statusMap[warnType]!.color,
-                    components: [{
-                        type: ComponentType.Section,
-                        accessory: { type: ComponentType.Thumbnail, media: { url: message.guild?.iconURL()! } },
-                        components: [
-                            {
-                                type: ComponentType.TextDisplay,
-                                content: `<@${author.id}>,${statusMap[warnType]!.dm} ${warnType === 'Ban' ? ` [${message.guild!.name}](https://discord.com/channels/${guildId}). To appeal this decision, please join our dedicated appeal server using the button below.` : warnType === 'Mute' ? `\`${durationStr}\` in ${message.guild!.name}` : `in ${message.guild!.name}`}`
-                            }]
-                    },
+                    type: ComponentType.Section,
+                    accessory: { type: ComponentType.Thumbnail, media: { url: message.guild?.iconURL()! } },
+                    components: [
                         {
-                            type: ComponentType.Section,
-                            components: [{
-                                type: ComponentType.TextDisplay,
-                                content: `Reason: \`${reasonText}\` ${['Ban', 'Kick'].includes(warnType) ? '' : `Punishment: \`${totalWeight} warn\`${durationStr ? `, \`${durationStr}\`` : ''}\nActive Warnings: \`${totalWarns}\`\nWarn expires: <t:${Math.floor((Date.now() + 86400000) / 1000)}:F>`}`
-                            }],
-                            ...(warnType === 'Ban' ? { accessory: { type: ComponentType.Button, style: ButtonStyle.Link, label: "Appeal", url: 'https://discord.gg/qMjjyXyYbr' } } : {})
+                            type: ComponentType.TextDisplay,
+                            content: `<@${author.id}>,${statusMap[warnType]!.dm} ${warnType === 'Ban' ? ` [${message.guild!.name}](https://discord.com/channels/${guild.id}). To appeal this decision, please join our dedicated appeal server using the button below.` : warnType === 'Mute' ? `\`${durationStr}\` in ${message.guild!.name}` : `in ${message.guild!.name}`}`
                         }]
-                }]
-            }
+                },
+                    {
+                        type: ComponentType.Section,
+                        components: [{
+                            type: ComponentType.TextDisplay,
+                            content: `Reason: \`${reasonText}\` ${['Ban', 'Kick'].includes(warnType) ? '' : `Punishment: \`${totalWeight} warn\`${durationStr ? `, \`${durationStr}\`` : ''}\nActive Warnings: \`${totalWarns}\`\nWarn expires: <t:${Math.floor((Date.now() + 86400000) / 1000)}:F>`}`
+                        }],
+                        ...(warnType === 'Ban' ? { accessory: { type: ComponentType.Button, style: ButtonStyle.Link, label: "Appeal", url: 'https://discord.gg/qMjjyXyYbr' } } : {})
+                    }]
+            }]
         })
     } catch { dm = false; }
     switch (warnType) {
         case 'Ban':
-            await guildconfigs.updateOne({ guildId }, { $set: { ban: author.id } });
+            await guildconfigs.updateOne({ guildId: guild.id }, { $set: { ban: author.id } });
             await guild?.bans.create(author.id, { deleteMessageSeconds: 604800, reason: `Ban Command: ${reasonText}` })
             break;
         case 'Mute':
@@ -805,7 +805,7 @@ client.on('messageCreate', async (message) => {
                     type: ComponentType.Section,
                     components: [{
                         type: ComponentType.TextDisplay,
-                        content: `<@${client.user?.id}> ${statusMap[warnType]!.log}\n\n user:<@${author.id}>\nChannel:<#${channel.id}>\nHistory: ${caseHistory.join(' | ') || "none"}\n\nReason:  \`${reasonText}\`\n${['Ban', 'Kick'].includes(warnType) ? '' : `Punishment: \`${!bannable ? totalWeight : 1} warn\`${durationStr ? `, \`${durationStr}\`` : ''}\nWarns at log time: \`${activeWarns}\`\nNext Punishment: \`${stage.label}\`\n\n${subtext(dm ? 'User DMed ✅' : 'User DMed 🚫')}`}`
+                        content: `<@${client.user?.id}> ${statusMap[warnType]!.log}\n\n user:<@${author.id}>\nChannel:<#${channel.id}>\nHistory: ${caseHistory.join(' | ') || "none"}\n\nReason:  \`${reasonText}\`\n${['Ban', 'Kick'].includes(warnType) ? '' : `Punishment: \`${!bannable ? totalWeight : 1} warn\`${durationStr ? `, \`${durationStr}\`` : ''}\nWarns at log time: \`${activeWarns}\`\nNext Punishment: \`${label}\`\n\n${subtext(dm ? 'User DMed ✅' : 'User DMed 🚫')}`}`
                     }],
                     accessory: {
                         type: ComponentType.Thumbnail,
@@ -817,7 +817,7 @@ client.on('messageCreate', async (message) => {
     })
     if (['Warn', 'Mute'].includes(warnType)) {
         setTimeout(async () => {
-            await usersCollection.updateOne({ userId: author.id, guildId }, { $set: { "punishments.$[elem].active": 0 } }, { arrayFilters: [{ "elem._id": object }] });
+            await usersCollection.updateOne({ userId: author.id, guildId: guild.id }, { $set: { "punishments.$[elem].active": 0 } }, { arrayFilters: [{ "elem._id": object }] });
         }, 86400000);
     }
 });
@@ -825,8 +825,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     const { guild, channelId, member } = newState;
     const { modChannels } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { modChannels: 1 } }) as Document
     if (oldState.channelId === channelId) return;
-    const channel = client.channels.cache.get(modChannels.voicelogChannel) as TextChannel
-    await client.rest.post(Routes.channelMessages(channel.id), {
+    await client.rest.post(Routes.channelMessages(modChannels.voicelogChannel), {
         body: {
             flags: MessageFlags.IsComponentsV2,
             components: [{
