@@ -12,8 +12,7 @@ type CommandContext = {
     guildConfig: WithId<Document> | null; // lazy — only fetched if a handler actually calls it
 };
 type CommandHandler = ((ctx: CommandContext) => Promise<Response | void>) & { cooldownMs?: number };
-type Apply = { modal: ModalBuilder, fields: string[] };
-const PART_CONFIG: Record<number, Apply> = {
+const PART_CONFIG: Record<number, { modal: ModalBuilder, fields: string[] }> = {
     1: {
         modal: new ModalBuilder({
             title: 'Experience & Activity',
@@ -144,7 +143,7 @@ const statusMap: Record<string, { cmd: string, log: string, dm: string, color: n
     Mute: { cmd: 'was issued a mute', log: 'muted a member', dm: `you were given a`, color: 0xff4444 },
     Warn: { cmd: 'was issued a warning', log: 'warned a member', dm: `you were given a warning`, color: 0xffcc00 }
 };
-const unitMap: Record<string, number> = { min: 60000, hour: 3600000, day: 86400000 };
+
 function getComparableEmbed(embedData: APIEmbed): string | null {
     if (!embedData) return null; const normalizeText = (text: string | null) => text ? text.replace(/\r\n/g, '\n').trim() : null;
     return JSON.stringify({
@@ -256,6 +255,7 @@ async function runPunishment({ body, res, guildConfig }: CommandContext): Promis
     if (warnType === 'Mute') {
         const unit = getOption(options, "unit", ApplicationCommandOptionType.String) as string
         const duration: number = getOption(options, "duration", ApplicationCommandOptionType.Integer) as number
+        const unitMap: Record<string, number> = { min: 60000, hour: 3600000, day: 86400000 };
         durationMs = duration * unitMap[unit]!
         durationStr = `${duration} ${unit}`;
     }
@@ -357,7 +357,6 @@ async function fetchMemberRoles(userId: string, guildId: string): Promise<string
         return null; // not a member of that guild (or guild/user not found)
     }
 }
-// shared sync logic — extracted from your existing loop
 async function syncEmbed(guildId: string, embedName: string, config: { channelid: string, embeds: APIEmbed[], components: APIMessageTopLevelComponent[], reactions: string[], format: string, messageId: string }) {
     const { channelid, embeds, components, reactions, format, messageId: existingMessageId } = config;
     const isV2 = format === 'v2';
@@ -770,7 +769,6 @@ commands.set('restart', async ({ res }) => {
     Bun.spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", "C:\\Users\\micha\\Desktop\\Bot\\restart.ps1", "-BotPid", `${botPid}`, "-intpid", `${process.pid}`], { stderr: "pipe", stdout: 'pipe', stdin: 'pipe' });
 });
 const activeCooldowns = new Collection<string, number>(); // userId -> expiry timestamp
-const DEFAULT_COOLDOWN_MS = 3000;
 function checkCooldown(userId: string, isStaff: boolean, cooldownMs: number): Response | null {
     if (isStaff || cooldownMs <= 0) return null;
     const expiry = activeCooldowns.get(userId);
@@ -785,14 +783,14 @@ function checkCooldown(userId: string, isStaff: boolean, cooldownMs: number): Re
 }
 async function handleCommands(body: APIChatInputApplicationCommandGuildInteraction) {
     const { guild_id, member, data: { name, options } } = body;
-    const guildConfig = await guildconfigs.findOne({ guildId: guild_id }, { projection: { modChannels: 1, publicChannel: 1, staffroles: 1, guildname: 1 } });
+    const guildConfig = await guildconfigs.findOne({ guildId: guild_id }, { projection: { modChannels: 1, publicChannel: 1, staffroles: 1, guildname: 1, exponent: 1, baseMultiplier: 1, roundToNearest: 1, flatOffset: 1 }, });
     const key = options?.[0] && options?.[0].type == ApplicationCommandOptionType.Subcommand && name !== 'member' ? `${name}.${options?.[0].name}` : name;
     const handler = commands.get(key);
     if (!handler) return Response.json({ type: InteractionResponseType.ChannelMessageWithSource, data: { content: `Unhandled command: ${key}`, flags: MessageFlags.Ephemeral } });
     if (member?.user.id) {
         const { staffroles } = guildConfig as WithId<Document>;
         const isStaff = member.roles.some((r: string) => staffroles.includes(r));
-        const blocked = checkCooldown(member.user.id, isStaff, handler.cooldownMs ?? DEFAULT_COOLDOWN_MS);
+        const blocked = checkCooldown(member.user.id, isStaff, handler.cooldownMs ?? 3000);
         if (blocked) return blocked;
     }
     const res: { type: InteractionResponseType; data: any } = { type: InteractionResponseType.ChannelMessageWithSource, data: {} };
@@ -1310,8 +1308,7 @@ Bun.serve({
         "/api/discord/users/:userId": {
             OPTIONS: () => new Response(null, { headers: corsHeaders }),
             GET: async (req) => {
-                const session = getSession(req);
-                if (!session) return Response.json({ error: "Not logged in" }, { status: StatusCodes.UNAUTHORIZED, headers: corsHeaders });
+                if (!getSession(req)) return Response.json({ error: "Not logged in" }, { status: StatusCodes.UNAUTHORIZED, headers: corsHeaders });
                 const { userId } = req.params;
                 if (!userId) return Response.json({ error: "Invalid User" }, { status: StatusCodes.NOT_FOUND, headers: corsHeaders });
                 try {
