@@ -4,7 +4,7 @@ import sharp from 'sharp'
 import { ed25519 } from '@noble/curves/ed25519.js'
 import { StatusCodes } from "http-status-codes";
 import { appendFile } from "node:fs/promises";
-import { type APIMessageComponentInteraction, InteractionType, ComponentType, type APIEmbed, type APIInteraction, type APIMessage, InteractionResponseType, MessageFlags, type APIGuild, type APIGuildMember, type APIModalSubmitInteraction, type APIUser, type APIActionRowComponent, type APIComponentInMessageActionRow, type APIChannel, ButtonStyle, type APIChatInputApplicationCommandGuildInteraction, ChannelType, type APIRole, type APIAutoModerationRule, Collection, ApplicationCommandOptionType, subtext, bold, quote, type APIButtonComponentWithCustomId, ModalBuilder, TextInputStyle, REST, Routes, type APIDMChannel, type APIApplicationCommandInteractionDataOption, type APIApplicationCommandInteractionDataBasicOption, type APIMessageTopLevelComponent } from "discord.js";
+import { type APIMessageComponentInteraction, InteractionType, ComponentType, type APIEmbed, type APIInteraction, type APIMessage, InteractionResponseType, MessageFlags, type APIGuild, type APIGuildMember, type APIModalSubmitInteraction, type APIUser, type APIActionRowComponent, type APIComponentInMessageActionRow, type APIChannel, ButtonStyle, type APIChatInputApplicationCommandGuildInteraction, ChannelType, type APIRole, type APIAutoModerationRule, Collection, ApplicationCommandOptionType, subtext, bold, quote, type APIButtonComponentWithCustomId, ModalBuilder, TextInputStyle, REST, Routes, type APIDMChannel, type APIApplicationCommandInteractionDataOption, type APIApplicationCommandInteractionDataBasicOption, type APIMessageTopLevelComponent, OAuth2Routes } from "discord.js";
 const rest = new REST().setToken(`${Bun.env.TOKEN}`)
 type CommandContext = {
     body: APIChatInputApplicationCommandGuildInteraction;
@@ -1230,14 +1230,8 @@ Bun.serve({
         "/api/auth/discord/login": () => {
             const state = randomToken();
             oauthStates.set(state, Date.now() + 5 * 60 * 1000);
-            const params = new URLSearchParams({
-                client_id: Bun.env.CLIENT_ID!,
-                redirect_uri: Bun.env.DISCORD_REDIRECT_URI!,
-                response_type: "code",
-                scope: "identify",
-                state,
-            });
-            return new Response(null, { status: StatusCodes.MOVED_TEMPORARILY, headers: { Location: `https://discord.com/oauth2/authorize?${params}` } });
+            const params = new URLSearchParams({ client_id: Bun.env.CLIENT_ID!, redirect_uri: Bun.env.DISCORD_REDIRECT_URI!, response_type: "code", scope: "identify", state });
+            return new Response(null, { status: StatusCodes.MOVED_TEMPORARILY, headers: { Location: `${OAuth2Routes.authorizationURL}?${params}` } });
         },
         "/api/auth/discord/redirect": async (req) => {
             const url = new URL(req.url);
@@ -1245,31 +1239,25 @@ Bun.serve({
             const state = url.searchParams.get("state");
             if (!code || !state || !oauthStates.has(state)) return new Response("Invalid or expired OAuth state", { status: StatusCodes.BAD_REQUEST });
             oauthStates.delete(state);
-            const tokenRes = await fetch("https://discord.com/api/oauth2/token", {
-                method: "POST",
+            const tokenRes = await rest.post(Routes.oauth2TokenExchange(), {
                 headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                passThroughBody: true,
                 body: new URLSearchParams({
                     client_id: Bun.env.CLIENT_ID!,
                     client_secret: Bun.env.DISCORD_SECRET!,
                     grant_type: "authorization_code",
                     code,
                     redirect_uri: Bun.env.DISCORD_REDIRECT_URI!,
-                }),
-            });
-            if (!tokenRes.ok) return new Response("OAuth token exchange failed", { status: 502 });
-            const { access_token } = await tokenRes.json() as { access_token: string };
-            const userRes = await fetch("https://discord.com/api/users/@me", { headers: { Authorization: `Bearer ${access_token}` } });
-            if (!userRes.ok) return new Response("Failed to fetch Discord user", { status: StatusCodes.BAD_GATEWAY });
-            const discordUser = await userRes.json() as { id: string; username: string };
-
+                })
+            })
+            const { access_token } = tokenRes as { access_token: string };
+            const discordUser = await rest.get(Routes.user(), { auth: false, headers: { Authorization: `Bearer ${access_token}` } }) as APIUser | null
+            if (!discordUser) return new Response("")
             const sessionId = randomToken();
             sessions.set(sessionId, { userId: discordUser.id, expires: Date.now() + 24 * 60 * 60 * 1000 });
             return new Response(null, {
-                status: 302,
-                headers: {
-                    Location: "/",
-                    "Set-Cookie": `session=${sessionId}; HttpOnly; Path=/; Max-Age=86400; SameSite=Lax`,
-                },
+                status: StatusCodes.MOVED_PERMANENTLY,
+                headers: { Location: "/", "Set-Cookie": `session=${sessionId}; HttpOnly; Path=/; Max-Age=86400; SameSite=Lax`, }
             });
         },
         "/api/sendembed/:channel": {
@@ -1470,6 +1458,7 @@ Bun.serve({
                 }
                 await rest.delete(Routes.guildMember(guildId, '1420927654701301951'))
                 await guildconfigs.deleteOne({ guildId: guildId });
+                await usersCollection.deleteMany({ guildId: guildId });
                 return Response.json({ ok: true }, { headers: corsHeaders });
             }
         },
