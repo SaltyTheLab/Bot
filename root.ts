@@ -260,7 +260,7 @@ client.on('guildMemberAdd', async (member) => {
     const { guild, user, joinedTimestamp, flags } = member;
     const { modChannels: { welcomeChannel, mutelogChannel }, generalchannels, Invites } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { modChannels: 1, staffroles: 1, generalchannels: 1, Invites: 1 } }) as WithId<Document>;
     const currentInvites = await guild.invites.fetch();
-    const invite: Invite | DbInvite | undefined = currentInvites.find((i: any) => i.uses > (Invites[i.code]?.uses || 0)) ?? Object.values(Invites)?.find((i: any) => !currentInvites.get(i!.code!)) ?? undefined;
+    const invite = currentInvites.find((i: any) => i.uses > (Invites[i.code]?.uses || 0)) ?? Object.values(Invites)?.find((i: any) => !currentInvites.get(i!.code!)) as DbInvite ?? undefined;
     const inviter: string | undefined | { uses: number; id: string; code: string } = invite instanceof Invite ? invite?.inviter?.id : invite && invite satisfies DbInvite ? invite!.id : undefined;
     const originalMessage = await client.rest.post(Routes.channelMessages(welcomeChannel), {
         body: {
@@ -395,8 +395,8 @@ client.on('guildMemberAdd', async (member) => {
 client.on('guildMemberRemove', async (member) => {
     const { user, guild } = member;
     if (user.bot) { return }
-    const { modChannels } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { modChannels: 1 } }) as Document
-    await client.rest.post(Routes.channelMessages(modChannels.welcomeChannel), {
+    const { modChannels: { welcomeChannel } } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { modChannels: 1 } }) as Document
+    await client.rest.post(Routes.channelMessages(welcomeChannel), {
         body: {
             flags: MessageFlags.IsComponentsV2, components: [{
                 type: ComponentType.Container, components: [{
@@ -416,10 +416,10 @@ client.on('guildMemberRemove', async (member) => {
 })
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
     const { guild, user, nickname, avatar } = newMember;
-    const { modChannels } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { modChannels: 1 } }) as Document
+    const { modChannels: { namelogChannel } } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { modChannels: 1 } }) as Document
     await usersCollection.updateOne({ guildId: guild.id, userId: user.id }, { $set: { nick: nickname ?? user.username, avatar: avatar } });
     if (!oldMember || nickname === oldMember.nickname || newMember.user.username == nickname) return;
-    await client.rest.post(Routes.channelMessages(modChannels.namelogChannel), {
+    await client.rest.post(Routes.channelMessages(namelogChannel), {
         body: {
             flags: MessageFlags.IsComponentsV2,
             components: [{
@@ -444,7 +444,7 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
 client.on('guildBanAdd', async (ban) => {
     const { user, guild } = ban;
     let dmed = true;
-    const { Ban, modChannels } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { Ban: 1, modChannels: 1 } }) as Document
+    const { Ban, modChannels: { banlogChannel } } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { Ban: 1, modChannels: 1 } }) as Document
     if (Ban === user.id) { await guildconfigs.updateOne({ guildId: guild.id }, { $set: { ban: '' } }); return; }
     else {
         massban += 1;
@@ -501,7 +501,7 @@ client.on('guildBanAdd', async (ban) => {
                 }]
             })
         } catch { dmed = false }
-        await client.rest.post(Routes.channelMessages(modChannels.banlogChannel), {
+        await client.rest.post(Routes.channelMessages(banlogChannel), {
             body: {
                 flags: MessageFlags.IsComponentsV2,
                 components: [{
@@ -526,8 +526,8 @@ client.on('guildBanAdd', async (ban) => {
 })
 client.on('guildBanRemove', async (ban) => {
     const { user, guild, reason } = ban
-    const { modChannels } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { modChannels: 1 } }) as Document
-    await client.rest.post(Routes.channelMessages(modChannels.banlogChannel), {
+    const { modChannels: { banlogChannel } } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { modChannels: 1 } }) as Document
+    await client.rest.post(Routes.channelMessages(banlogChannel), {
         body: {
             flags: MessageFlags.IsComponentsV2,
             components: [{
@@ -582,7 +582,7 @@ client.on('messageReactionRemove', async (reaction, user) => {
     const { message, emoji } = reaction;
     if (!message.guild || user.bot) return;
     const { messageConfigs } = await guildconfigs.findOne({ guildId: message.guild!.id }, { projection: { messageConfigs: 1 } }) as Document
-    const config: { reactions: { emoji: string; roleId: string | string[] }[]; } | undefined = Object.values(messageConfigs).find((info: any) => info.messageId === message.id) ?? undefined;
+    const config = Object.values(messageConfigs).find((info: any) => info.messageId === message.id) as { reactions: { emoji: string; roleId: string | string[] }[]; } ?? undefined;
     if (!config) return;
     else {
     const { reactions } = config
@@ -662,12 +662,12 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
 client.on('messageCreate', async (message) => {
     const { author, member, content, attachments, type, mentions, guild, channel } = message;
     if (author.bot == true || !guild || type === MessageType.ChatInputCommand || type === MessageType.UserJoin) return;
-    const { publicChannels, responses, staffroles, generalchannels, automodsettings: { messagereasonsandweights, messagethreshold, Duplicatespamthreshold, mediathreshold, spamthreshold, capsthreshold }, count, lastuser, Stages, modChannels } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { publicChannels: 1, responses: 1, staffroles: 1, mediaexclusions: 1, automodsettings: 1, count: 1, lastuser: 1, baseMultiplier: 1, exponent: 1, flatOffset: 1, roundToNearest: 1, generalchannels: 1, Stages: 1, modChannels: 1 } }) as Document
+    const { publicChannels: { countingChannel }, responses, staffroles, generalchannels, automodsettings: { messagereasonsandweights, messagethreshold, Duplicatespamthreshold, mediathreshold, spamthreshold, capsthreshold }, count, lastuser, Stages, modChannels: { banlogChannel, mutelogChannel } } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { publicChannels: 1, responses: 1, staffroles: 1, mediaexclusions: 1, automodsettings: 1, count: 1, lastuser: 1, baseMultiplier: 1, exponent: 1, flatOffset: 1, roundToNearest: 1, generalchannels: 1, Stages: 1, modChannels: 1 } }) as Document
     const isstaff = member?.roles.cache.some((role: Role) => staffroles.includes(role.id)) || author.id === "521404063934447616"
     const hasMedia = (attachments.size > 0 || /https?:\/\/[^\s]+/i.test(content)) && generalchannels.includes(channel.id)
     let messageWords: string = '!';
     let changed: boolean = false
-    if (channel.id == publicChannels.countingChannel) {
+    if (channel.id == countingChannel) {
         if (!/^\d+$/.test(content)) return;
         await guildconfigs.findOneAndUpdate({ guildId: guild.id }, (count + 1 == parseInt(content) && lastuser !== author.id) ? { $inc: { count: 1 }, $set: { lastuser: author.id } } : { $set: { count: 0, lastuser: null } })
         return (count + 1 == parseInt(content) && lastuser !== author.id) ?
@@ -798,7 +798,7 @@ client.on('messageCreate', async (message) => {
             await member?.kick(reasonText)
             break;
     }
-    await client.rest.post(Routes.channelMessages(warnType === 'Ban' ? modChannels.banlogChannel : modChannels.mutelogChannel), {
+    await client.rest.post(Routes.channelMessages(warnType === 'Ban' ? banlogChannel : mutelogChannel), {
         body: {
             flags: MessageFlags.IsComponentsV2, components: [{
                 type: ComponentType.Container, accent_color: statusMap[warnType]!.color, components: [{
@@ -823,9 +823,9 @@ client.on('messageCreate', async (message) => {
 });
 client.on('voiceStateUpdate', async (oldState, newState) => {
     const { guild, channelId, member } = newState;
-    const { modChannels } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { modChannels: 1 } }) as Document
+    const { modChannels: { voicelogChannel } } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { modChannels: 1 } }) as Document
     if (oldState.channelId === channelId) return;
-    await client.rest.post(Routes.channelMessages(modChannels.voicelogChannel), {
+    await client.rest.post(Routes.channelMessages(voicelogChannel), {
         body: {
             flags: MessageFlags.IsComponentsV2,
             components: [{
@@ -849,8 +849,8 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     })
 })
 client.on('guildUpdate', async (oldGuild, newGuild) => {
-    const existing = await guildconfigs.findOne({ guildId: oldGuild.id }, { projection: { ownerId: 1 } }) as Document;
-    if (newGuild.ownerId == existing.ownerId) return;
+    const { ownerId } = await guildconfigs.findOne({ guildId: oldGuild.id }, { projection: { ownerId: 1 } }) as Document;
+    if (newGuild.ownerId == ownerId) return;
     else await guildconfigs.updateOne({ guildId: newGuild.id }, { $set: { ownerId: newGuild.ownerId } })
 })
 client.on('shardError', async (err, shardId) => {
