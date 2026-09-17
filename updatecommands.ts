@@ -62,13 +62,13 @@ const commands: RESTPostAPIChatInputApplicationCommandsJSONBody[] = [
         description: 'Roll DND dice',
         contexts: [InteractionContextType.Guild],
         options: [
-            { name: 'd4', description: 'Roll a D4', type: ApplicationCommandOptionType.Subcommand },
-            { name: 'd6', description: 'Roll a D6', type: ApplicationCommandOptionType.Subcommand },
-            { name: 'd8', description: 'Roll a D8', type: ApplicationCommandOptionType.Subcommand },
-            { name: 'd10', description: 'Roll a D10', type: ApplicationCommandOptionType.Subcommand },
-            { name: 'd12', description: 'Roll a D12', type: ApplicationCommandOptionType.Subcommand },
-            { name: 'd20', description: 'Roll a D20', type: ApplicationCommandOptionType.Subcommand },
-            { name: 'd100', description: 'Roll a D100', type: ApplicationCommandOptionType.Subcommand }
+            { name: '4', description: 'Roll a D4', type: ApplicationCommandOptionType.Subcommand },
+            { name: '6', description: 'Roll a D6', type: ApplicationCommandOptionType.Subcommand },
+            { name: '8', description: 'Roll a D8', type: ApplicationCommandOptionType.Subcommand },
+            { name: '10', description: 'Roll a D10', type: ApplicationCommandOptionType.Subcommand },
+            { name: '12', description: 'Roll a D12', type: ApplicationCommandOptionType.Subcommand },
+            { name: '20', description: 'Roll a D20', type: ApplicationCommandOptionType.Subcommand },
+            { name: '100', description: 'Roll a D100', type: ApplicationCommandOptionType.Subcommand }
         ]
     },
     {
