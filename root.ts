@@ -1,11 +1,14 @@
 import { usersCollection, guildconfigs, ws } from './Database';
 import { ObjectId, type Document, type WithId } from 'mongodb';
 import { appendFile } from 'node:fs/promises'
+import { ApiClient } from '@twurple/api'
+import { EventSubWsListener } from '@twurple/eventsub-ws'
 import { ChatClient } from '@twurple/chat';
 import { RefreshingAuthProvider } from '@twurple/auth';
 import { ComponentType, ButtonStyle, MessageType, ActivityType, PresenceUpdateStatus, Client, Options, Role, Routes, Partials, GatewayIntentBits, TextChannel, MessageFlags, type AnyComponentV2, subtext, GuildMember, GuildMemberFlags, Invite, type APIMessage } from 'discord.js'
 import { createHash } from 'crypto'
 interface xp { Id: string | GuildMember; channel?: TextChannel | string; guildId?: string };
+
 type DbInvite = Record<string, { uses: number; id: string; code: string }>;
 process.on("uncaughtException", async (err: any) => {
     const intpid = parseInt(await Bun.file("./interpid.txt").text())
@@ -23,9 +26,64 @@ process.on("unhandledRejection", async (reason: any) => {
     Bun.spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", "C:\\Users\\micha\\Desktop\\Bot\\restart.ps1", "-BotPid", `${process.pid}`, "-intpid", `${intpid}`], { stderr: "pipe", stdout: 'pipe', stdin: 'pipe' });
 });
 const authProvider = new RefreshingAuthProvider({ clientId: Bun.env.TWITCH_ID!, clientSecret: Bun.env.TWITCH_SECRET! });
-let massban = 0;
 const doc = await ws.findOne({}, { projection: { twitchbot: 1, twitchaccess: 1, twitchrefresh: 1, twitchexpires: 1, twitchobtained: 1 } }) as any;
 if (!doc?.twitchbot) throw new Error('No Twitch bot tokens found — run get-token.ts first.');
+authProvider.addUser(doc.twitchbot, { accessToken: doc.twitchaccess, scope: ['chat:read'], refreshToken: doc.twitchrefresh, expiresIn: doc.twitchexpires, obtainmentTimestamp: doc.twitchobtained, }, ['chat']);
+
+authProvider.onRefresh(async (userId, newTokenData) => {
+    await ws.updateOne({}, { $set: { twitchaccess: newTokenData.accessToken, twitchrefresh: newTokenData.refreshToken, twitchexpires: newTokenData.expiresIn, twitchobtained: Date.now() } });
+});
+
+const apiClient = new ApiClient({ authProvider });
+const BROADCASTER_ID = '901114331';
+
+let twitchChatClient: ChatClient | null = null;
+
+function connectTwitchChat() {
+    if (twitchChatClient) return;
+    twitchChatClient = new ChatClient({ authProvider, channels: ['saltytbsl'] });
+    twitchChatClient.connect();
+    twitchChatClient.onMessage((channel, user, text, msg) => { grantXp({ Id: user, guildId: "1231453115937587270" }) });
+    appendFile("./log.log", `[twitch] chat connected @ ${Date.now()}\n`);
+}
+
+async function disconnectTwitchChat() {
+    if (!twitchChatClient) return;
+    twitchChatClient.quit();
+    twitchChatClient = null;
+    appendFile("./log.log", `[twitch] chat disconnected @ ${Date.now()}\n`);
+}
+
+const eventSubListener = new EventSubWsListener({ apiClient });
+eventSubListener.start();
+
+eventSubListener.onStreamOnline(BROADCASTER_ID, () => connectTwitchChat());
+eventSubListener.onStreamOffline(BROADCASTER_ID, () => disconnectTwitchChat());
+const currentStream = await apiClient.streams.getStreamByUserId(BROADCASTER_ID);
+if (currentStream) connectTwitchChat();
+async function grantXp({ Id, channel, guildId }: xp) {
+    try {
+        const { baseMultiplier, exponent, flatOffset, roundToNearest } = await guildconfigs.findOne({ guildId: guildId }, { projection: { baseMultiplier: 1, exponent: 1, flatOffset: 1, roundToNearest: 1 } }
+        ) as any;
+        const { xp, level } = await usersCollection.findOneAndUpdate(
+            Id instanceof GuildMember ? { userId: Id.user.id, guildId: guildId } : { twitchChannelLogin: Id }, { $inc: { xp: 20 } }, { returnDocument: 'after', projection: { xp: 1, level: 1, } }) as any;
+        if (level < 100 && xp >= Math.round((level ** exponent * baseMultiplier + flatOffset) / roundToNearest)) {
+            await usersCollection.updateOne(Id instanceof GuildMember ? { userId: Id.user.id, guildId: guildId } : { twitchChannelLogin: Id }, { $inc: { level: 1 }, $set: { xp: 0 } });
+            const rank = await usersCollection.countDocuments({ guildId: guildId, $or: [{ level: { $gt: level + 1 } }, { level: level + 1, xp: { $gt: xp } }] });
+            if (Id instanceof GuildMember && channel instanceof TextChannel) {
+                if (parseInt(level) + 1 > 2 && !Id.roles.cache!.has("1334238580914131026") && guildId == '1231453115937587270')
+                    await client.rest.put(Routes.guildMemberRole(guildId, Id.id, '1334238580914131026'))
+                channel!.send({ embeds: [{ author: { name: Id?.user.username, icon_url: Id.user.avatarURL() ?? Id.user.defaultAvatarURL }, color: 0x00AE86, footer: { text: `${Id!.user.username} reached level ${level + 1}! You are now #${rank + 1} in the server` } }] })
+            }
+            else {
+                twitchChatClient!.say(channel! as string, `<@${Id}> reached level ${level + 1}! You are now #${rank + 1}!`)
+            }
+        }
+    } catch (err) {
+        console.log(err)
+    }
+}
+let massban = 0;
 const client = new Client({
     intents: GatewayIntentBits.Guilds | GatewayIntentBits.GuildMembers | GatewayIntentBits.GuildModeration | GatewayIntentBits.GuildExpressions | GatewayIntentBits.GuildIntegrations | GatewayIntentBits.GuildWebhooks | GatewayIntentBits.GuildVoiceStates | GatewayIntentBits.GuildMessages | GatewayIntentBits.GuildMessageReactions | GatewayIntentBits.MessageContent,
     partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.User],
@@ -33,14 +91,6 @@ const client = new Client({
     makeCache: Options.cacheWithLimits({ ...Options.DefaultMakeCacheSettings }),
     sweepers: { ...Options.DefaultSweeperSettings }
 });
-const TwitchClient = new ChatClient({ authProvider, channels: ['saltytbsl'] });
-authProvider.addUser(doc.twitchbot, { accessToken: doc.twitchaccess, scope: ['chat:read', 'chat:edit'], refreshToken: doc.twitchrefresh, expiresIn: doc.twitchexpires, obtainmentTimestamp: doc.twitchobtained, }, ['chat']);
-authProvider.onRefresh(async (userId, newTokenData) => {
-    await ws.updateOne({}, { $set: { twitchaccess: newTokenData.accessToken, twitchrefresh: newTokenData.refreshToken, twitchexpires: newTokenData.expiresIn, twitchobtained: Date.now(), } });
-});
-TwitchClient.connect();
-TwitchClient.onAuthenticationSuccess(() => { appendFile("./log.log", "Febot is listening on twitch!\n") })
-
 async function inactiveusers() {
     const list = await usersCollection.find({ level: 1, totalmessages: 0, guildId: '1231453115937587270' }, { projection: { userId: 1, _id: 0 } }).toArray()
     const userIds: string[] = list.map(doc => doc.userId);
@@ -49,7 +99,7 @@ async function inactiveusers() {
         try {
             member = await client.rest.get(Routes.guildMember('1231453115937587270', id)) as GuildMember;
             if (member?.roles.cache.size === 0)
-            await client.rest.delete(Routes.guildMember('1231453115937587270', id))
+                await client.rest.delete(Routes.guildMember('1231453115937587270', id))
         } catch {
             appendFile("./log.log", `${id} is no longer in guild.`)
         }
@@ -57,45 +107,9 @@ async function inactiveusers() {
     }
     await usersCollection.deleteMany({ guildId: '1231453115937587270', userId: { $in: userIds } });
 }
-async function grantXp({ Id, channel, guildId }: xp) {
-    const { baseMultiplier, exponent, flatOffset, roundToNearest } = await guildconfigs.findOne({ guildId: guildId }, { projection: { baseMultiplier: 1, exponent: 1, flatOffset: 1, roundToNearest: 1 } }
-    ) as any;
 
-    const { xp, level } = await usersCollection.findOneAndUpdate(
-        Id instanceof GuildMember ? { userId: Id.user.id, guildId: guildId } : { twitchId: Id }, { $inc: { xp: 20 } }, { returnDocument: 'after', projection: { xp: 1, level: 1, } }) as any;
-    if (level < 100 && xp >= Math.round((level ** exponent * baseMultiplier + flatOffset) / roundToNearest)) {
-        await usersCollection.updateOne(Id instanceof GuildMember ? { userId: Id.user.id, guildId: guildId } : { twitchId: Id }, { $inc: { level: 1 }, $set: { xp: 0 } });
-        const rank = await usersCollection.countDocuments({ guildId: guildId, $or: [{ level: { $gt: level + 1 } }, { level: level + 1, xp: { $gt: xp } }] });
-        if (Id instanceof GuildMember && channel instanceof TextChannel) {
-            if (parseInt(level) + 1 > 2 && !Id.roles.cache!.has("1334238580914131026") && guildId == '1231453115937587270')
-                await client.rest.put(Routes.guildMemberRole(guildId, Id.id, '1334238580914131026'))
-            channel!.send({ embeds: [{ author: { name: Id?.user.username, icon_url: Id.user.avatarURL() ?? Id.user.defaultAvatarURL }, color: 0x00AE86, footer: { text: `${Id!.user.username} reached level ${level + 1}! You are now #${rank + 1} in the server` } }] })
-        }
-        else {
-            TwitchClient.say(channel! as string, `<@${Id}> reached level ${level + 1}! You are now #${rank + 1}!`)
-        }
-    }
-}
 await Bun.write("./pid.txt", String(process.pid))
 Bun.cron("0 0 * * 0", async () => { await inactiveusers() })
-TwitchClient.onMessage(async (channel, user, text, msg) => {
-    const twitchId = msg.userInfo.userId;
-    if (text.startsWith('!verify ')) {
-        const code = text.split(' ')[1]?.toUpperCase();
-        const linkDoc = await usersCollection.findOne({ twitchLinkCode: code, twitchLinkExpires: { $gt: Date.now() } });
-        if (!linkDoc) return TwitchClient.say(channel, `@${user} that code is invalid or expired.`);
-        await usersCollection.updateOne({ _id: linkDoc._id }, { $set: { twitchId: twitchId }, $unset: { twitchLinkCode: '', twitchLinkExpires: '' } });
-        return TwitchClient.say(channel, `@${user} linked to Discord! ✅`);
-    }
-    if (text.startsWith('!discord ')) {
-        const code = text.split(' ')[1]?.toUpperCase();
-        const linkDoc = await usersCollection.findOne({ twitchLinkCode: code, twitchLinkExpires: { $gt: Date.now() } });
-        if (!linkDoc) return TwitchClient.say(channel, `@${user} that code is invalid or expired.`);
-        await usersCollection.updateOne({ _id: linkDoc._id }, { $set: { twitchId: twitchId }, $unset: { twitchLinkCode: '', twitchLinkExpires: '' } });
-        return TwitchClient.say(channel, `@${user} linked to Discord! ✅`);
-    }
-    await grantXp({ Id: msg.userInfo.userId, channel: channel });
-});
 const statusMap: Record<string, { cmd: string, log: string, dm: string, color: number }> = {
     Ban: { cmd: 'was banned', log: 'banned a member', dm: `you were banned from`, color: 0xd10000 },
     Kick: { cmd: 'was kicked', log: 'kicked a member', dm: `you were kicked from`, color: 0x838383 },
@@ -251,10 +265,62 @@ client.on('autoModerationActionExecution', async (action) => {
 });
 client.on('guildCreate', async (guild) => {
     const { id, name, ownerId } = guild
-    const existing = await guildconfigs.findOne({ guildId: id }, { projection: { _id: 1, Data: 1, messageConfigs: 1 } });
-    if (!existing) return;
+    const existing = await guildconfigs.findOne({ guildId: id });
+    if (!existing) {
+        await guildconfigs.insertOne(
+            {
+                guildId: id,
+                guildname: name,
+                icon: guild.iconURL(),
+                modChannels: {
+                    mutelogChannel: "",
+                    deletedlogChannel: "",
+                    welcomeChannel: "",
+                    updatedlogChannel: "",
+                    namelogChannel: "",
+                    banlogChannel: "",
+                    appealChannel: "",
+                    applicationChannel: "",
+                    adminChannel: "",
+                    applyChannel: "",
+                    voicelogChannel: ""
+                },
+                publicChannels: {},
+                generalchannels: [],
+                ownerId: ownerId,
+                reactions: {},
+                automodsettings: { messagereasonsandweights: {}, automodreasonsandweights: {}, Duplicatespamthreshold: 3, mediathreshold: 1, messagethreshold: 10, spamthreshold: 4, capsthreshold: 0.7 },
+                responses: {},
+                staffroles: [],
+                Invites: [],
+                count: 0,
+                lastuser: "",
+                appealInvite: "https://discord.gg/xpYnPrSXDG",
+                messageConfigs: {},
+                baseMultiplier: 0,
+                exponent: 0,
+                flatOffset: 0,
+                roundToNearest: 0,
+                Stages: [
+                    { "label": "15 min mute", "minutes": 0 },
+                    { "label": "30 min mute", "minutes": 15 },
+                    { "label": "45 min mute", "minutes": 30 },
+                    { "label": "1 hour mute", "minutes": 45 },
+                    { "label": "2 hour mute", "minutes": 60 },
+                    { "label": "4 hour mute", "minutes": 120 },
+                    { "label": "8 hour mute", "minutes": 240 },
+                    { "label": "16 hour mute", "minutes": 960 },
+                    { "label": "16 hour mute", "minutes": 960 }
+                ],
+                Ban: ""
+            });
+    };
     const guildinvites = await guild.invites.fetch();
     await guildconfigs.updateOne({ guildId: id }, { $set: { icon: guild.iconURL(), name: name, ownerId: ownerId, Invites: Object.fromEntries(guildinvites.map(i => [i.code, { uses: i.uses, inviter: i.inviter!.id, code: i.code }])) } })
+})
+client.on('guildDelete', async (guild) => {
+    await usersCollection.deleteMany({ guildId: guild.id })
+    await guildconfigs.findOneAndDelete({ guildId: guild.id })
 })
 client.on('guildMemberAdd', async (member) => {
     const { guild, user, joinedTimestamp, flags } = member;
@@ -448,26 +514,8 @@ client.on('guildBanAdd', async (ban) => {
     if (Ban === user.id) { await guildconfigs.updateOne({ guildId: guild.id }, { $set: { ban: '' } }); return; }
     else {
         massban += 1;
-        const result = await usersCollection.aggregate([
-            { $match: { guildId: guild.id, userId: user.id } },
-            {
-                $project: {
-                    punishments: {
-                        $sortArray: {
-                            input: {
-                                $filter: {
-                                    input: "$punishments",
-                                    as: "p",
-                                    cond: { $eq: ["$$p.type", "Ban"] } // swap for your actual filter condition
-                                }
-                            },
-                            sortBy: { timestamp: -1 }
-                        }
-                    }
-                }
-            }
-        ]).toArray();
-        const { punishments } = result[0] as Document;
+        const { punishments } = await usersCollection.findOne({ guildId: guild.id, userId: user.id }, { projection: { punishments: 1 } }) as Document
+        const sortedpunishments = punishments.filter((p: any) => p.type === "Ban").sort((a: any, b: any) => b.timestamp - a.timestamp)
         await Bun.sleep(massban * 1000)
         try {
             await user.send({
@@ -480,7 +528,7 @@ client.on('guildBanAdd', async (ban) => {
                         accessory: { type: ComponentType.Thumbnail, media: { url: guild.iconURL()! } },
                         components: [{
                             type: ComponentType.TextDisplay,
-                            content: `${user.username}, you were banned from [${guild.name}](https://discord.com/channels/${guild.id}).\n\n\nTo appeal this decision, please join our dedicated appeal server using the button below.\nReason: \`${punishments[0].reason}\``,
+                            content: `${user.username}, you were banned from [${guild.name}](https://discord.com/channels/${guild.id}).\n\n\nTo appeal this decision, please join our dedicated appeal server using the button below.\nReason: \`${sortedpunishments[0].reason}\``,
 
                         }]
                     },
@@ -515,7 +563,7 @@ client.on('guildBanAdd', async (ban) => {
                         },
                         components: [{
                             type: ComponentType.TextDisplay,
-                            content: `Mass Ban Detected\n**Moderator <@${punishments[0].moderatorId}> banned <@${user.id}>:\n\nID: <@${user.id}>\n\n**TAG:**${user.username}\n\n**Reason:**\`${punishments[0].reason}\`\n\n ${subtext(dmed ? 'User DMed ✅' : 'UserDmed ❌')}`,
+                            content: `Mass Ban Detected\n**Moderator <@${sortedpunishments[0].moderatorId}> banned <@${user.id}>:\n\nID: <@${user.id}>\n\n**TAG:**${user.username}\n\n**Reason:**\`${sortedpunishments[0].reason}\`\n\n ${subtext(dmed ? 'User DMed ✅' : 'UserDmed ❌')}`,
                         },]
                     }]
                 }]
@@ -633,6 +681,7 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
     const { modChannels: { updatedlogChannel } } = await guildconfigs.findOne({ guildId: newMessage.guildId }, { projection: { modChannels: 1 } }) as Document
     await client.rest.post(Routes.channelMessages(updatedlogChannel), {
         body: {
+            allowed_mentions: { parse: [] },
             flags: MessageFlags.IsComponentsV2,
             components: [{
                 type: ComponentType.Container,
@@ -641,7 +690,7 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
                     type: ComponentType.Section,
                     components: [{
                         type: ComponentType.TextDisplay,
-                        content: `${author!.username} edited a message in <#${channelId}>\n\n **Before:**\n${oldMessage.content || ''}\n\n **After:**\n${content || ''}`
+                        content: `<@${author!.id}> edited a message in <#${channelId}>\n\n **Before:**\n${oldMessage.content || ''}\n\n **After:**\n${content || ''}`
                     }],
                     accessory: { type: ComponentType.Thumbnail, media: { url: author.avatarURL() ?? author.defaultAvatarURL } }
                 },
@@ -662,14 +711,14 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
 client.on('messageCreate', async (message) => {
     const { author, member, content, attachments, type, mentions, guild, channel } = message;
     if (author.bot == true || !guild || type === MessageType.ChatInputCommand || type === MessageType.UserJoin) return;
-    const { publicChannels: { countingChannel }, responses, staffroles, generalchannels, automodsettings: { messagereasonsandweights, messagethreshold, Duplicatespamthreshold, mediathreshold, spamthreshold, capsthreshold }, count, lastuser, Stages, modChannels: { banlogChannel, mutelogChannel } } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { publicChannels: 1, responses: 1, staffroles: 1, mediaexclusions: 1, automodsettings: 1, count: 1, lastuser: 1, baseMultiplier: 1, exponent: 1, flatOffset: 1, roundToNearest: 1, generalchannels: 1, Stages: 1, modChannels: 1 } }) as Document
+    const { publicChannels: { countingChannel }, responses, staffroles, generalchannels, automodsettings: { messagereasonsandweights, messagethreshold, Duplicatespamthreshold, mediathreshold, spamthreshold, capsthreshold }, count, lastMessageId, lastuser, Stages, modChannels: { banlogChannel, mutelogChannel } } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { publicChannels: 1, responses: 1, staffroles: 1, mediaexclusions: 1, automodsettings: 1, count: 1, lastuser: 1, baseMultiplier: 1, lastMessageId: 1, exponent: 1, flatOffset: 1, roundToNearest: 1, generalchannels: 1, Stages: 1, modChannels: 1 } }) as Document
     const isstaff = member?.roles.cache.some((role: Role) => staffroles.includes(role.id)) || author.id === "521404063934447616"
     const hasMedia = (attachments.size > 0 || /https?:\/\/[^\s]+/i.test(content)) && generalchannels.includes(channel.id)
     let messageWords: string = '!';
     let changed: boolean = false
     if (channel.id == countingChannel) {
-        if (!/^\d+$/.test(content)) return;
-        await guildconfigs.findOneAndUpdate({ guildId: guild.id }, (count + 1 == parseInt(content) && lastuser !== author.id) ? { $inc: { count: 1 }, $set: { lastuser: author.id } } : { $set: { count: 0, lastuser: null } })
+        if (!/^\d+$/.test(content) || message.id === lastMessageId) return;
+        await guildconfigs.findOneAndUpdate({ guildId: guild.id }, (count + 1 == parseInt(content) && lastuser !== author.id) ? { $inc: { count: 1 }, $set: { lastuser: author.id, lastMessageId: message.id } } : { $set: { count: 0, lastuser: null, lastMessageId: null } })
         return (count + 1 == parseInt(content) && lastuser !== author.id) ?
             await message.react("%E2%9C%85") : await message.reply({ content: `<@${author.id}> missed or already counted!` })
     }
@@ -701,14 +750,31 @@ client.on('messageCreate', async (message) => {
                 markMessageThreshold: { $gte: [{ $add: ["$total", 1] }, messagethreshold] },
                 markInactive30: { $gte: [{ $subtract: [Date.now(), { $ifNull: ["$lastmessage", 0] }] }, 1800000] },
                 markMediaViolation: { $and: [hasMedia, { $gt: [{ $add: ["$mediaCount", hasMedia ? 1 : 0] }, mediathreshold] }, { $lt: [{ $add: ["$total", 1] }, messagethreshold] }] },
-                markGeneralSpam: { $gt: [{ $size: { $filter: { input: { $concatArrays: ["$timestamps", [Date.now().toString()]] }, cond: { $lt: [{ $subtract: [Date.now(), { $toLong: "$$this" }] }, 8000] } } } }, spamthreshold] }
+                markGeneralSpam: {
+                    $gt: [
+                        {
+                            $size: {
+                                $filter: {
+                                    input: {
+                                        $concatArrays: [
+                                            { $ifNull: ["$timestamps", []] },   // <-- fix
+                                            [Date.now().toString()]
+                                        ]
+                                    },
+                                    cond: { $lt: [{ $subtract: [Date.now(), { $toLong: "$$this" }] }, 8000] }
+                                }
+                            }
+                        },
+                        spamthreshold
+                    ]
+                }
                 }
             },
             { $set: { isModReset: { $or: ["$markDuplicateSpam", "$markMessageThreshold", "$markInactive30"] } } },
             {
                 $set: {
                     avatar: member!.user.avatarURL() ?? member!.user.defaultAvatarURL,
-                    totalmessages: { $add: ["$totalmessages", 1] },
+                    totalmessages: { $add: [{ $ifNull: ["$totalmessages", 0] }, 1] },
                     total: { $cond: ["$isModReset", 0, { $add: ["$total", 1] }] },
                     mediaCount: { $cond: ["$isModReset", 0, { $add: ["$mediaCount", hasMedia ? 1 : 0] }] },
                     duplicateCounts: { $cond: ["$isModReset", {}, changed ? { $mergeObjects: ["$duplicateCounts", { [key]: { $add: [{ $ifNull: [`$duplicateCounts.${key}`, 0] }, 1] } }] } : "$duplicateCounts"] },
@@ -721,7 +787,7 @@ client.on('messageCreate', async (message) => {
             $set: { automodMarks: { everyonePing: mentions.everyone, duplicateSpam: "$markDuplicateSpam", mediaViolation: "$markMediaViolation", generalspam: "$markGeneralSpam", capSpam: capsRatio > capsthreshold } }
         },
         { $unset: ["isModReset", "markDuplicateSpam", "markMessageThreshold", "markInactive30", "markMediaViolation", "markGeneralSpam"] }
-    ], { returnDocument: 'after', projection: { automodMarks: 1, punishments: 1, level: 1 } }) as Document;
+    ], { returnDocument: 'after', projection: { automodMarks: 1, punishments: 1, level: 1 }, upsert: true }) as Document;
     await grantXp({ Id: member!, guildId: guild.id, channel: channel as TextChannel });
     const isNewUser = Date.now() - member?.joinedTimestamp! < 2 * 24 * 60 * 60 * 1000 && level < 3
     if (isstaff) return;
