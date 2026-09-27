@@ -668,11 +668,11 @@ function getSectionValues(container, type) {
                     if (nameSpan && valueInput) {
                         name = nameSpan.dataset.automodName.trim();
                         id = valueInput.value.trim();
-                        if (name && id) {
+                        if (name) {
                             let parsedValue = id;
                             if (id === 'true') parsedValue = true;
                             else if (id === 'false') parsedValue = false;
-                            else if (!isNaN(Number(id))) parsedValue = Number(id);
+                            else if (id !== '' && !isNaN(Number(id))) parsedValue = Number(id);
                             values[name] = parsedValue;
                         }
                     }
@@ -684,7 +684,7 @@ function getSectionValues(container, type) {
                     if (nameSpanMod && idSelectMod) {
                         name = nameSpanMod.dataset.channelName.trim();
                         id = idSelectMod.value.trim();
-                        if (name && id) values[name] = id;
+                        if (name) values[name] = id;
                     }
                     break;
                 }
@@ -972,7 +972,7 @@ async function loadSelectedGuild() {
         try {
             // Always fetch fresh — a stale in-memory cache here previously meant
             // out-of-band DB edits (e.g. via Compass) wouldn't show up until a hard reload.
-            const res = await fetch(`/api/guilds/${encodeURIComponent(currentGuildId)}`, { headers: authHeaders(), credentials: 'include', cache: 'no-store' });
+            const res = await fetch(`/api/guilds/${encodeURIComponent(currentGuildId)}`, { method: 'GET', headers: authHeaders(), credentials: 'include', cache: 'no-store' });
             if (!res.ok) throw new Error(`Failed to load guild ${currentGuildId} (${res.status})`);
             const doc = await res.json();
             guilds.set(currentGuildId, doc)
@@ -1102,11 +1102,11 @@ function renderEmbedSection(container, messageConfigs) {
         <button type="button" id="createEmbedBtn" class="add-btn" style="max-width:200px">+ New Embed</button>
         <button type="button" id="pushEmbedBtn" class="action-btn bg-purple-500 hover:bg-purple-600" style="max-width:220px">Push to Discord</button>
     </div>
-    <p class="text-sm text-gray-400 mt-2">At least one of Title, Description, or Author Name is required.</p>
+    <p id="v1info" class="text-sm text-gray-400 mt-2">At least one of Title, Description, or Author Name is required.</p>
     <p class="text-xs text-yellow-400 mt-1 hidden" id="pushEmbedHint">Pushes the current form contents to Discord. This does not save your changes to the database — hit Save separately to persist them.</p>
     <div id="embedFormFields" class="space-y-4 mt-2"></div>
     `;
-
+    const v1info = container.querySelector('#v1info');
     const select = container.querySelector('#embedSelect');
     const deleteBtn = container.querySelector('#deleteEmbedBtn');
     const orSeparator = container.querySelector('#orSeparator');
@@ -1114,7 +1114,8 @@ function renderEmbedSection(container, messageConfigs) {
     const pushBtn = container.querySelector('#pushEmbedBtn');
     const pushHint = container.querySelector('#pushEmbedHint');
     const hasEmbeds = keys.length > 0;
-
+    const isV1 = !!activeEmbedKey && messageConfigsDraft[activeEmbedKey]?.format !== 'v2';
+    v1info.classList.toggle('hidden', !isV1);
     setDisabledState(select, !hasEmbeds);
     select.classList.toggle('hidden', !hasEmbeds);
     setDisabledState(deleteBtn, !hasEmbeds);
@@ -1182,6 +1183,7 @@ function renderEmbedSection(container, messageConfigs) {
             warning.id = 'newEmbedFormatWarning';
             warning.className = 'text-sm text-yellow-400 w-full mt-1';
             warning.textContent = "Format can't be changed after creation. Switching a message between Standard and Components V2 later means deleting the existing message on Discord and sending a new one — the bot can't convert it in place.";
+            warning.style.order = '99'
             formatSelect.insertAdjacentElement('afterend', warning);
             nameInput.focus();
             createBtn.textContent = 'Confirm';
@@ -1202,13 +1204,12 @@ function renderEmbedSection(container, messageConfigs) {
             ? { channelid: '', format: 'v2', components: [] }
             : { channelid: '', format: 'v1', embeds: [blankEmbed()] };
         activeEmbedKey = name;
-        v1info.classList.toggle('hidden', format === 'v2')
         renderEmbedSection(container, messageConfigsDraft);
     });
 
     deleteBtn.addEventListener('click', async () => {
         if (!activeEmbedKey) return;
-        else if (messageConfigsDraft[activeEmbedKey].channelid = '') {
+        else if (messageConfigsDraft[activeEmbedKey].channelid == '') {
             showMessage('Message not deleted, channelid is blank', 'bg-yellow-500')
         } else {
             await apiDeleteEmbed(activeEmbedKey)
@@ -1331,7 +1332,7 @@ function renderEmbedSection(container, messageConfigs) {
 }
 
 async function apiSendEmbed(guildId, embedName, config) {
-    const res = await fetch(`/api/sendembed/${encodeURIComponent(embedName)}`, {
+    const res = await fetch(`/api/sendembed`, {
         method: 'POST',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
         credentials: 'include',

@@ -210,10 +210,10 @@ const commands: RESTPostAPIChatInputApplicationCommandsJSONBody[] = [
     },
     {
         name: 'rank',
-        description: 'See your xp and Level',
+        description: 'view a users xp and Level',
         contexts: [InteractionContextType.Guild],
         type: ApplicationCommandType.ChatInput,
-        options: [{ name: 'member', description: 'The Member', type: ApplicationCommandOptionType.User }]
+        options: [{ name: 'target', description: 'The Member', type: ApplicationCommandOptionType.User }]
     },
     {
         name: 'restart',
@@ -223,8 +223,10 @@ const commands: RESTPostAPIChatInputApplicationCommandsJSONBody[] = [
     },
     {
         name: 'link',
+        type: ApplicationCommandType.ChatInput,
         description: 'Link your twitch',
-        contexts: [InteractionContextType.Guild]
+        contexts: [InteractionContextType.Guild],
+        options: [{ name: 'channel', description: 'Twitch channel to link', type: ApplicationCommandOptionType.String }]
     }
 ];
 const rest = new REST().setToken(`${Bun.env.TOKEN}`)
