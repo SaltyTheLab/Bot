@@ -36,37 +36,39 @@ authProvider.onRefresh(async (userId, newTokenData) => {
 
 const apiClient = new ApiClient({ authProvider });
 const BROADCASTER_ID = '901114331';
-
-let twitchChatClient: ChatClient | null = null;
-
+const twitchChatClient = new ChatClient({ authProvider, channels: ['saltytbsl'] });
+twitchChatClient.onMessage(async (channel, user, text) => {
+    if (text.includes('!lvl')) {
+        const doc = await usersCollection.findOne({ twitchChannelLogin: user }, { projection: { xp: 1, level: 1, } }) as any;
+        if (!doc) { twitchChatClient!.say(channel!, "Your Twitch channel is not linked, please link it using /link in my server"); return; }
+        const { level, xp } = doc as any
+        twitchChatClient!.say(channel!, `<@${user}>, your level is currently ${level}, with ${xp} xp.`)
+        return;
+    }
+    if (text.includes("!discord")) {
+        twitchChatClient!.say(channel!, "I have a discord at https://discord.gg/f7ru3KcPy5")
+        return;
+    }
+    grantXp({ Id: user, guildId: "1231453115937587270" })
+});
 function connectTwitchChat() {
-    if (twitchChatClient) return;
-    twitchChatClient = new ChatClient({ authProvider, channels: ['saltytbsl'] });
-    twitchChatClient.connect();
-    twitchChatClient.onMessage((channel, user, text, msg) => { grantXp({ Id: user, guildId: "1231453115937587270" }) });
+    if (!twitchChatClient.isConnected) { twitchChatClient.connect(); }
     appendFile("./log.log", `[twitch] chat connected @ ${Date.now()}\n`);
 }
-
-async function disconnectTwitchChat() {
-    if (!twitchChatClient) return;
-    twitchChatClient.quit();
-    twitchChatClient = null;
-    appendFile("./log.log", `[twitch] chat disconnected @ ${Date.now()}\n`);
-}
-
 const eventSubListener = new EventSubWsListener({ apiClient });
 eventSubListener.start();
-
 eventSubListener.onStreamOnline(BROADCASTER_ID, () => connectTwitchChat());
-eventSubListener.onStreamOffline(BROADCASTER_ID, () => disconnectTwitchChat());
-const currentStream = await apiClient.streams.getStreamByUserId(BROADCASTER_ID);
-if (currentStream) connectTwitchChat();
+eventSubListener.onStreamOffline(BROADCASTER_ID, () => {
+    twitchChatClient.quit(); appendFile("./log.log", `[twitch] chat disconnected @ ${Date.now()}\n`);
+});
+if (await apiClient.streams.getStreamByUserId(BROADCASTER_ID)) connectTwitchChat();
 async function grantXp({ Id, channel, guildId }: xp) {
-    try {
         const { baseMultiplier, exponent, flatOffset, roundToNearest } = await guildconfigs.findOne({ guildId: guildId }, { projection: { baseMultiplier: 1, exponent: 1, flatOffset: 1, roundToNearest: 1 } }
         ) as any;
-        const { xp, level } = await usersCollection.findOneAndUpdate(
+    const doc = await usersCollection.findOneAndUpdate(
             Id instanceof GuildMember ? { userId: Id.user.id, guildId: guildId } : { twitchChannelLogin: Id }, { $inc: { xp: 20 } }, { returnDocument: 'after', projection: { xp: 1, level: 1, } }) as any;
+    if (!doc) return;
+    const { level, xp } = doc
         if (level < 100 && xp >= Math.round((level ** exponent * baseMultiplier + flatOffset) / roundToNearest)) {
             await usersCollection.updateOne(Id instanceof GuildMember ? { userId: Id.user.id, guildId: guildId } : { twitchChannelLogin: Id }, { $inc: { level: 1 }, $set: { xp: 0 } });
             const rank = await usersCollection.countDocuments({ guildId: guildId, $or: [{ level: { $gt: level + 1 } }, { level: level + 1, xp: { $gt: xp } }] });
@@ -79,9 +81,6 @@ async function grantXp({ Id, channel, guildId }: xp) {
                 twitchChatClient!.say(channel! as string, `<@${Id}> reached level ${level + 1}! You are now #${rank + 1}!`)
             }
         }
-    } catch (err) {
-        console.log(err)
-    }
 }
 let massban = 0;
 const client = new Client({
@@ -107,7 +106,6 @@ async function inactiveusers() {
     }
     await usersCollection.deleteMany({ guildId: '1231453115937587270', userId: { $in: userIds } });
 }
-
 await Bun.write("./pid.txt", String(process.pid))
 Bun.cron("0 0 * * 0", async () => { await inactiveusers() })
 const statusMap: Record<string, { cmd: string, log: string, dm: string, color: number }> = {
