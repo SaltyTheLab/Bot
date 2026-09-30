@@ -1,71 +1,143 @@
-const userCache = new Map();
-let currentConfig = null;// the config currently loaded/rendered
-let currentGuildId = '';
-let currentUser = null;            // { userId, username } | null
-let currentRole = null;// 'admin' | 'mod' | null
-let messageConfigsDraft = {};// working copy of ALL embeds; only the selected one is shown in the form at a time
+import type { APIEmbed, APIEmbedField, APIRole, ComponentType as DiscordComponentType } from 'discord-api-types/v10';
+
+// Only a handful of ids are needed at runtime. Importing the real enum would bundle all of
+// discord-api-types (~200 KB) into the browser script. `satisfies` makes tsc verify every
+// number below is a genuine ComponentType value, so this can't silently drift.
+const ComponentType = {
+    Section: 9, TextDisplay: 10, Thumbnail: 11, MediaGallery: 12, Separator: 14, Container: 17,
+} as const satisfies Record<string, DiscordComponentType>;
+
+// --- Types -------------------------------------------------------------------
+// These mirror what the Bun endpoints in interactions.ts actually return.
+type Role = 'owner' | 'admin' | 'mod'; // roleFromStaffroles() in interactions.ts
+type SectionType = 'mod' | 'public' | 'reaction' | 'response' | 'automod';
+type V2Kind = 'container' | 'section' | 'textDisplay' | 'separator' | 'mediaGallery';
+
+interface GuildSummary { guildId: string; name: string | null; role: Role } // GET /api/guilds
+// GET /api/guilds/:guildId returns raw Discord channels (text/announcement only).
+// categoryName is NOT sent by the server today, see buildChannelOptionsHtml.
+interface GuildChannel { id: string; name: string; type: number; position?: number; parent_id?: string | null; categoryName?: string }
+interface AutomodRule { id: string; name: string }
+interface ReasonWeight { reason: string; weight: number }
+interface ReactionRole { emoji: string; roleId: string }
+interface V2ApiComponent {
+    type: number;
+    accent_color?: number;
+    spacing?: number;
+    components?: V2ApiComponent[];
+    items?: { media?: { url?: string } }[];
+    accessory?: { type: number; media?: { url?: string } };
+    [key: string]: unknown;
+}
+interface MessageConfig {
+    channelid: string;
+    format: 'v1' | 'v2';
+    embeds?: APIEmbed[];
+    components?: V2ApiComponent[];
+    reactions?: ReactionRole[];
+    single?: boolean;
+    messageId?: string; // written by syncEmbed on the server
+}
+type AutomodSettings = {
+    messagereasonsandweights?: Record<string, ReasonWeight>;
+    automodreasonsandweights?: Record<string, ReasonWeight>;
+} & Record<string, unknown>; // the rest are flat thresholds
+interface GuildConfigDoc {
+    guildId: string;
+    name?: string | null;
+    ownerId?: string;
+    staffroles?: string[];
+    modChannels?: Record<string, string>;
+    publicChannels?: Record<string, string>;
+    generalchannels?: string[];
+    reactions?: Record<string, string | string[]>;
+    responses?: Record<string, string>;
+    automodsettings?: AutomodSettings;
+    messageConfigs?: Record<string, MessageConfig>;
+    // added by GET /api/guilds/:guildId
+    _viewerRole: Role;
+    guildRoles: APIRole[];
+    guildChannels: GuildChannel[];
+    rules: AutomodRule[];
+}
+type SyncResult = { status: 'sent' | 'updated'; messageId: string; changed?: boolean }; // syncEmbed()
+type GuildFormValues = ReturnType<typeof getFormValues>; // body for PUT /api/guilds/:guildId
+
+// --- State -------------------------------------------------------------------
+let currentConfig: GuildConfigDoc | null = null; // the config currently loaded/rendered
+let currentGuildId: string | null = null;
+let currentUser: { userId: string; username: string } | null = null;
+let currentRole: Role | null = null;
+let messageConfigsDraft: Record<string, MessageConfig> = {}; // working copy of ALL embeds; only the selected one is shown in the form at a time
 let activeEmbedKey = '';
-let guildRoles = new Map();// guildId -> 'admin' | 'mod'
-let currentAutomodRules = [];
-let currentGuildRoles = [];
-let currentGuildChannels = [];
-const guilds = new Map()
+let guildRoles = new Map<string, Role>(); // guildId -> role
+let currentAutomodRules: AutomodRule[] = [];
+let currentGuildRoles: APIRole[] = [];
+let currentGuildChannels: GuildChannel[] = [];
+const guilds = new Map<string, GuildConfigDoc>();
+
+function el<T extends HTMLElement = HTMLElement>(id: string): T {
+    const node = document.getElementById(id);
+    if (!node) throw new Error(`#${id} not found in index.html`);
+    return node as T;
+}
+const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
 const elements = {
-        guildSelect: document.getElementById('guildSelect'),
-        loginBtn: document.getElementById('loginBtn'),
-        logoutBtn: document.getElementById('logoutBtn'),
-        authStatus: document.getElementById('authStatus'),
-        modChannelsSection: document.getElementById('modChannelsSection'),
-        publicChannelsSection: document.getElementById('publicChannelsSection'),
-        GeneralChannelsSection: document.getElementById('GeneralChannelsSection'),
-        reactionsSection: document.getElementById('reactionSection'),
-        Responses: document.getElementById('stringSection'),
-        adminRoleInput: document.getElementById('adminRoleInput'),
-        modRoleInput: document.getElementById('modRoleInput'),
-        jrRoleInput: document.getElementById('jrRoleInput'),
-        automodSection: document.getElementById('AutomodSection'),
-        addPublicChannelBtn: document.getElementById('addPublicChannelBtn'),
-        EmbedSection: document.getElementById('embedContentSection'),
-        addMediaBtn: document.getElementById('addMediaBtn'),
-        addReactionBtn: document.getElementById('addReactionBtn'),
-        addStringBtn: document.getElementById('addStringBtn'),
-        saveConfigBtn: document.getElementById('saveConfigBtn'),
-        addGuildBtn: document.getElementById('createGuildBtn'),
-        deleteConfigBtn: document.getElementById('deleteConfigBtn'),
-        exportConfigBtn: document.getElementById('downloadConfigBtn'),
-        messageBox: document.getElementById('messageBox'),
-        reasonsWeightsSection: document.getElementById('reasonsWeightsSection'),
-        addReasonWeightBtn: document.getElementById('addReasonWeightBtn'),
-    messageReasonsWeightsSection: document.getElementById('messageReasonsWeightsSection'),
-    addMessageReasonButtons: document.getElementById('addMessageReasonButtons'),
-        addServerBtn: document.getElementById('addToServerBtn'),
-        orText: document.getElementById('orText'),
-    buttonColumnText: document.getElementById('buttoncolumnMessage'),
-    channelsContainer: document.getElementById('channelsContainer')
-    };
+    guildSelect: el<HTMLSelectElement>('guildSelect'),
+    loginBtn: el<HTMLButtonElement>('loginBtn'),
+    logoutBtn: el<HTMLButtonElement>('logoutBtn'),
+    authStatus: el('authStatus'),
+    modChannelsSection: el('modChannelsSection'),
+    publicChannelsSection: el('publicChannelsSection'),
+    GeneralChannelsSection: el('GeneralChannelsSection'),
+    reactionsSection: el('reactionSection'),
+    Responses: el('stringSection'),
+    adminRoleInput: el<HTMLInputElement>('adminRoleInput'),
+    modRoleInput: el<HTMLInputElement>('modRoleInput'),
+    jrRoleInput: el<HTMLInputElement>('jrRoleInput'),
+    automodSection: el('AutomodSection'),
+    addPublicChannelBtn: el('addPublicChannelBtn'),
+    EmbedSection: el('embedContentSection'),
+    addMediaBtn: el<HTMLButtonElement>('addMediaBtn'),
+    addReactionBtn: el<HTMLButtonElement>('addReactionBtn'),
+    addStringBtn: el<HTMLButtonElement>('addStringBtn'),
+    saveConfigBtn: el<HTMLButtonElement>('saveConfigBtn'),
+    deleteConfigBtn: el<HTMLButtonElement>('deleteConfigBtn'),
+    exportConfigBtn: el<HTMLButtonElement>('downloadConfigBtn'),
+    messageBox: el('messageBox'),
+    reasonsWeightsSection: el('reasonsWeightsSection'),
+    addReasonWeightBtn: el<HTMLButtonElement>('addReasonWeightBtn'),
+    messageReasonsWeightsSection: el('messageReasonsWeightsSection'),
+    addMessageReasonButtons: el('addMessageReasonButtons'),
+    addServerBtn: el<HTMLButtonElement>('addToServerBtn'),
+    orText: el('orText'),
+    buttonColumnText: el('buttoncolumnMessage'),
+    channelsContainer: el('channelsContainer'),
+};
 const rolePickers = {
     admin: makeRolePicker(elements.adminRoleInput),
     mod: makeRolePicker(elements.modRoleInput),
     jr: makeRolePicker(elements.jrRoleInput),
 };
 const PERMISSIONS = { Administrator: 1n << 3n, ModerateMembers: 1n << 40n, };
-function hasPermission(permissions, flag) {
+function hasPermission(permissions: string, flag: bigint) {
     const bits = BigInt(permissions);
     return (bits & flag) === flag || (bits & PERMISSIONS.Administrator) === PERMISSIONS.Administrator;
 }
-function setDisabledState(el, isDisabled) {
+function setDisabledState(el: HTMLButtonElement | HTMLSelectElement, isDisabled: boolean) {
     el.disabled = isDisabled;
     el.classList.toggle('cursor-not-allowed', isDisabled);
     el.classList.toggle('opacity-50', isDisabled);
 }
-function buildChannelOptionsHtml(selectedId) {
-    const grouped = new Map();
-    const uncategorized = [];
+function buildChannelOptionsHtml(selectedId: string) {
+    const grouped = new Map<string, GuildChannel[]>();
+    const uncategorized: GuildChannel[] = [];
 
     currentGuildChannels.forEach(ch => {
         if (!ch.categoryName) { uncategorized.push(ch); return; }
         if (!grouped.has(ch.categoryName)) grouped.set(ch.categoryName, []);
-        grouped.get(ch.categoryName).push(ch);
+        grouped.get(ch.categoryName)!.push(ch);
     });
 
     let html = '<option value="">-- Select a channel --</option>';
@@ -93,7 +165,7 @@ function renderAuthUI() {
         authStatus.textContent = 'Not logged in';
     }
 }
-function addReactionRow(list, reaction = { emoji: '', roleId: '' }) {
+function addReactionRow(list: HTMLElement, reaction: ReactionRole = { emoji: '', roleId: '' }) {
     if (list.children.length >= 20) {
         showMessage('Discord messages can only track up to 20 distinct reactions.', 'bg-yellow-500');
         return;
@@ -110,25 +182,30 @@ function addReactionRow(list, reaction = { emoji: '', roleId: '' }) {
             ${optionsHtml}
         </select>
         <button type="button" class="remove-btn self-start" data-remove-reaction-row>&times;</button>`;
-    row.querySelector('[data-remove-reaction-row]').addEventListener('click', () => row.remove());
+    row.querySelector('[data-remove-reaction-row]')!.addEventListener('click', () => row.remove());
     list.appendChild(row);
 }
 async function refreshAuthStatus() {
     const response = await fetch(`/api/auth/me`, { credentials: 'include' });
-    const res = await response.json();
-    currentUser = res.loggedIn ? { userId: res.userId, username: null } : null;
-    const userRes = res.userId ? await fetch(`/api/discord/users/${res.userId}`, { method: "GET", credentials: 'include' }) : null
-    const user = userRes ? await userRes.json() : null
-    if (currentUser) currentUser.username = user.username
+    const res: { loggedIn: boolean; userId?: string } = await response.json();
+    if (res.loggedIn && res.userId) {
+        // Fall back to the id if the user lookup fails (the endpoint 404s with { error } when it can't resolve them).
+        const user = { userId: res.userId, username: res.userId };
+        currentUser = user;
+        try {
+            const userRes = await fetch(`/api/discord/users/${res.userId}`, { method: 'GET', credentials: 'include' });
+            if (userRes.ok) user.username = (await userRes.json()).username ?? res.userId;
+        } catch { /* keep the id fallback */ }
+    } else {
+        currentUser = null;
+    }
     renderAuthUI();
     return currentUser;
 }
 // --- API helpers ---------------------------------------------------------
 
-function authHeaders(extra = {}) {
-        return { ...extra };
-}
-async function apiSaveGuild(guildId, config) {
+function authHeaders(extra: Record<string, string> = {}) {  return { ...extra };}
+async function apiSaveGuild(guildId: string, config: GuildFormValues) {
     const res = await fetch(`/api/guilds/${encodeURIComponent(guildId)}`, {
             method: 'PUT',
             headers: authHeaders({ 'Content-Type': 'application/json' }),
@@ -141,7 +218,7 @@ async function apiSaveGuild(guildId, config) {
         }
         return res.json();
 }
-async function apiDeleteGuild(guildId) {
+async function apiDeleteGuild(guildId: string) {
     const res = await fetch(`/api/guilds/${encodeURIComponent(guildId)}`, {
             method: 'DELETE',
             headers: authHeaders(),
@@ -153,15 +230,19 @@ async function apiDeleteGuild(guildId) {
         }
         return res.json();
 }
-async function apiDeleteEmbed() {
-    const res = await fetch(`/api/deleteembed/${currentGuildId}/${encodeURIComponent(activeEmbedKey)}`, {
+async function apiDeleteEmbed(embedKey: string) {
+    const res = await fetch(`/api/deleteembed/${encodeURIComponent(currentGuildId ?? '')}/${encodeURIComponent(embedKey)}`, {
         method: 'DELETE',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
         credentials: 'include',
-    })
-    return { status: 200 }
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Failed to delete embed "${embedKey}" (${res.status})`);
+    }
+    return res.json();
 }
-function roleColorHex(colorInt) {
+function roleColorHex(colorInt: number) {
     if (!colorInt) return '#b9bbbe';
     return `#${colorInt.toString(16).padStart(6, '0')}`;
 }
@@ -169,14 +250,14 @@ function roleColorHex(colorInt) {
 // Wraps a hidden <input id="..."> with a Discord-style colored dropdown button/menu.
 // Overrides .value on the input so all your existing loadSelectedGuild/getFormValues
 // code (which just reads/writes .value) keeps working with zero changes elsewhere.
-function makeRolePicker(hiddenInput) {
-    const wrapper = hiddenInput.closest('[data-role-picker]');
-    const button = wrapper.querySelector('.role-picker-btn');
-    const label = wrapper.querySelector('.role-picker-label');
-    const menu = wrapper.querySelector('.role-picker-menu');
+function makeRolePicker(hiddenInput: HTMLInputElement) {
+    const wrapper = hiddenInput.closest<HTMLElement>('[data-role-picker]')!;
+    const button = wrapper.querySelector<HTMLElement>('.role-picker-btn')!;
+    const label = wrapper.querySelector<HTMLElement>('.role-picker-label')!;
+    const menu = wrapper.querySelector<HTMLElement>('.role-picker-menu')!;
 
     let backingValue = hiddenInput.value || '';
-    let roleLookup = new Map(); // roleId -> { name, color }
+    let roleLookup = new Map<string, APIRole>(); // roleId -> role
 
     function renderLabel() {
         const role = roleLookup.get(backingValue);
@@ -186,7 +267,7 @@ function makeRolePicker(hiddenInput) {
 
     Object.defineProperty(hiddenInput, 'value', {
         get() { return backingValue; },
-        set(v) { backingValue = v || ''; renderLabel(); },
+        set(v: string) { backingValue = v || ''; renderLabel(); },
         configurable: true,
     });
 
@@ -201,10 +282,10 @@ function makeRolePicker(hiddenInput) {
         menu.classList.contains('hidden') ? openMenu() : closeMenu();
     });
     document.addEventListener('click', (e) => {
-        if (!wrapper.contains(e.target)) closeMenu();
+        if (!wrapper.contains(e.target as Node)) closeMenu();
     });
 
-    function setRoles(roles) {
+    function setRoles(roles: APIRole[]) {
         roleLookup = new Map(roles.map(r => [r.id, r]));
         menu.innerHTML = '';
 
@@ -233,29 +314,30 @@ function makeRolePicker(hiddenInput) {
 // and hidden behind a toggle button until the user asks for it, so the form isn't
 // overwhelming for a simple "just post some text" embed.
 
-const OPTIONAL_EMBED_FIELDS = [
+type OptionalEmbedKey = 'color' | 'url' | 'image' | 'thumbnail' | 'footer' | 'timestamp' | 'fields' | 'reactions';
+const OPTIONAL_EMBED_FIELDS: { key: OptionalEmbedKey; label: string; render: (embed: APIEmbed) => string }[] = [
         {
-            key: 'color', label: 'Color', render: (embed) => `
+            key: 'color', label: 'Color', render: (embed: APIEmbed) => `
             <span class="field-label">Color (hex, e.g. #5865F2)</span>
-            <input type="text" class="field" data-embed-field="color" value="${embed.color || ''}" placeholder="#5865F2">`,
+            <input type="text" class="field" data-embed-field="color" value="${intColorToHex(embed.color)}" placeholder="#5865F2">`,
         },
         {
-            key: 'url', label: 'URL', render: (embed) => `
+            key: 'url', label: 'URL', render: (embed: APIEmbed) => `
             <span class="field-label">Title Link URL</span>
             <input type="text" class="field" data-embed-field="url" value="${embed.url || ''}" placeholder="https://...">`,
         },
         {
-            key: 'image', label: 'Image', render: (embed) => `
+            key: 'image', label: 'Image', render: (embed: APIEmbed) => `
             <span class="field-label">Image URL</span>
             <input type="text" class="field" data-embed-field="image" value="${embed.image?.url || ''}" placeholder="https://...">`,
         },
         {
-            key: 'thumbnail', label: 'Thumbnail', render: (embed) => `
+            key: 'thumbnail', label: 'Thumbnail', render: (embed: APIEmbed) => `
             <span class="field-label">Thumbnail URL</span>
             <input type="text" class="field" data-embed-field="thumbnail" value="${embed.thumbnail?.url || ''}" placeholder="https://...">`,
         },
         {
-            key: 'footer', label: 'Footer', render: (embed) => `
+            key: 'footer', label: 'Footer', render: (embed: APIEmbed) => `
             <span class="field-label">Footer Text</span>
             <input type="text" class="field" data-embed-field="footerText" value="${embed.footer?.text || ''}">
             <div></div>
@@ -263,7 +345,7 @@ const OPTIONAL_EMBED_FIELDS = [
             <input type="text" class="field" data-embed-field="footerIcon" value="${embed.footer?.icon_url || ''}" placeholder="https://...">`,
         },
         {
-            key: 'timestamp', label: 'Timestamp', render: (embed) => `
+            key: 'timestamp', label: 'Timestamp', render: (embed: APIEmbed) => `
             <span class="flex items-center gap-2 text-gray-300">
                 <input type="checkbox" data-embed-field="timestamp" ${embed.timestamp ? 'checked' : ''}>
                 Stamp with the time this embed is saved
@@ -287,37 +369,49 @@ const OPTIONAL_EMBED_FIELDS = [
     }
 ];
 
-function blankEmbed() {
+function blankEmbed(): APIEmbed {
         return { title: '', description: '', author: { name: '' } };
 }
 
 // --- Components V2 Builder ---------------------------------------------------
-// Discord component type ids (matches discord.js's ComponentType enum).
-const V2_TYPE = { Section: 9, TextDisplay: 10, Thumbnail: 11, MediaGallery: 12, Separator: 14, Container: 17 };
 
 // Each entry describes one node kind: its Discord type id, what it's allowed to
 // contain (drives which "+ Add" buttons show up inside it), and its own editable
 // fields. This is the "typing" the tree editor is built around — adding a new
 // component kind later means adding one entry here plus its render/serialize
 // handling below, not touching the tree-walking logic itself.
-const V2_NODE_KINDS = {
+interface V2FieldDef {
+    key: string; label: string; input: 'text' | 'textarea' | 'checkbox' | 'select';
+    placeholder?: string; options?: { value: string; label: string }[];
+}
+interface V2NodeDef {
+    label: string; type: number; canContain: V2Kind[]; fields: V2FieldDef[];
+    maxChildren?: number; hasThumbnailAccessory?: boolean; hasItemsList?: boolean;
+}
+// Editor-side tree node. Converted to/from the Discord API shape (V2ApiComponent) on commit/load.
+interface V2Node {
+    id: string; kind: V2Kind; fields: Record<string, string | boolean>;
+    children: V2Node[]; accessory: { url: string } | null; items: string[];
+}
+// Keyed by node *kind name* ('container', ...): V2_ROOT_KINDS, canContain and createV2Node all look it up by name.
+const V2_NODE_KINDS: Record<V2Kind, V2NodeDef> = {
     container: {
-        label: 'Container', discordType: V2_TYPE.Container,
+        label: 'Container', type: ComponentType.Container,
         canContain: ['textDisplay', 'separator', 'mediaGallery', 'section'],
         fields: [{ key: 'accent_color', label: 'Accent Color (hex)', input: 'text', placeholder: '#5865F2' }],
     },
     section: {
-        label: 'Section', discordType: V2_TYPE.Section,
+        label: 'Section', type: ComponentType.Section,
         canContain: ['textDisplay'], maxChildren: 3, hasThumbnailAccessory: true,
         fields: [],
     },
     textDisplay: {
-        label: 'Text', discordType: V2_TYPE.TextDisplay,
+        label: 'Text', type: ComponentType.TextDisplay,
         canContain: [],
         fields: [{ key: 'content', label: 'Content (markdown)', input: 'textarea', placeholder: 'Type text...' }],
     },
     separator: {
-        label: 'Separator', discordType: V2_TYPE.Separator,
+        label: 'Separator', type: ComponentType.Separator,
         canContain: [],
         fields: [
             { key: 'divider', label: 'Show divider line', input: 'checkbox' },
@@ -325,47 +419,47 @@ const V2_NODE_KINDS = {
         ],
     },
     mediaGallery: {
-        label: 'Media Gallery', discordType: V2_TYPE.MediaGallery,
+        label: 'Media Gallery', type: ComponentType.MediaGallery,
         canContain: [], hasItemsList: true,
         fields: [],
     },
 };
-const V2_ROOT_KINDS = ['container', 'textDisplay', 'separator', 'mediaGallery', 'section'];
+const V2_ROOT_KINDS: V2Kind[] = ['container', 'textDisplay', 'separator', 'mediaGallery', 'section'];
 
-function hexColorToInt(hex) {
+function hexColorToInt(hex: string) {
     const n = parseInt(String(hex || '').trim().replace(/^#/, ''), 16);
     return Number.isNaN(n) ? undefined : n;
 }
-function intColorToHex(n) {
+function intColorToHex(n?: number | null) {
     return typeof n === 'number' ? '#' + n.toString(16).padStart(6, '0') : '';
 }
-function createV2Node(kind) {
+function createV2Node(kind: V2Kind): V2Node {
     return { id: crypto.randomUUID(), kind, fields: {}, children: [], accessory: null, items: [] };
 }
-function v2NodeToApi(node) {
+function v2NodeToApi(node: V2Node): V2ApiComponent {
     const def = V2_NODE_KINDS[node.kind];
-    const api = { type: def.discordType };
+    const api: V2ApiComponent = { type: def.type };
     for (const f of def.fields) {
         const val = node.fields[f.key];
         if (f.input === 'checkbox') { if (val) api[f.key] = true; continue; }
         if (val === undefined || val === '') continue;
-        if (f.key === 'accent_color') { const c = hexColorToInt(val); if (c !== undefined) api.accent_color = c; }
-        else if (f.key === 'spacing') api.spacing = parseInt(val, 10);
+        if (f.key === 'accent_color') { const c = hexColorToInt(String(val)); if (c !== undefined) api.accent_color = c; }
+        else if (f.key === 'spacing') api.spacing = parseInt(String(val), 10);
         else api[f.key] = val;
     }
     if (def.hasItemsList) {
-        api.items = (node.items || []).filter(u => u.trim()).map(u => ({ media: { url: u.trim() } }));
+        api.items = node.items.filter(u => u.trim()).map(u => ({ media: { url: u.trim() } }));
     }
     if (def.canContain.length) {
-        api.components = (node.children || []).map(v2NodeToApi);
+        api.components = node.children.map(v2NodeToApi);
     }
     if (def.hasThumbnailAccessory && node.accessory?.url?.trim()) {
-        api.accessory = { type: V2_TYPE.Thumbnail, media: { url: node.accessory.url.trim() } };
+        api.accessory = { type: ComponentType.Thumbnail, media: { url: node.accessory.url.trim() } };
     }
     return api;
 }
-function v2ApiToNode(api) {
-    const kind = Object.keys(V2_NODE_KINDS).find(k => V2_NODE_KINDS[k].discordType === api.type);
+function v2ApiToNode(api: V2ApiComponent): V2Node | null {
+    const kind = (Object.keys(V2_NODE_KINDS) as V2Kind[]).find(k => V2_NODE_KINDS[k].type === api.type);
     if (!kind) return null; // unknown/unsupported component type (e.g. ActionRow) — dropped rather than guessed at
     const def = V2_NODE_KINDS[kind];
     const node = createV2Node(kind);
@@ -376,14 +470,15 @@ function v2ApiToNode(api) {
     }
     if (def.hasItemsList) node.items = (api.items || []).map(it => it.media?.url || '');
     if (def.canContain.length && Array.isArray(api.components)) {
-        node.children = api.components.map(v2ApiToNode).filter(Boolean);
+        node.children = api.components.map(v2ApiToNode).filter((n): n is V2Node => n !== null);
     }
     if (def.hasThumbnailAccessory && api.accessory?.media?.url) node.accessory = { url: api.accessory.media.url };
     return node;
 }
 
-function renderV2Builder(formContainer, entry) {
-    const tree = (entry.components || []).map(v2ApiToNode);
+function renderV2Builder(formContainer: HTMLFormElement, entry: MessageConfig) {
+    // v2ApiToNode returns null for component types the builder can't edit; drop them instead of crashing the render
+    const tree = (entry.components || []).map(v2ApiToNode).filter((n): n is V2Node => n !== null);
     const commit = () => {
         messageConfigsDraft[activeEmbedKey] = { ...messageConfigsDraft[activeEmbedKey], components: tree.map(v2NodeToApi) };
     };
@@ -397,27 +492,27 @@ function renderV2Builder(formContainer, entry) {
             <div id="v2RootAddButtons" class="flex gap-2 flex-wrap"></div>
         </div>
     `;
-    formContainer.querySelector('[data-embed-field="channelid"]').addEventListener('input', (e) => {
-        messageConfigsDraft[activeEmbedKey] = { ...messageConfigsDraft[activeEmbedKey], channelid: e.target.value.trim() };
+    formContainer.querySelector('[data-embed-field="channelid"]')!.addEventListener('input', (e) => {
+        messageConfigsDraft[activeEmbedKey] = { ...messageConfigsDraft[activeEmbedKey], channelid: (e.target as HTMLInputElement).value.trim() };
     });
 
-    const treeRoot = formContainer.querySelector('#v2TreeRoot');
-    const rootAddButtons = formContainer.querySelector('#v2RootAddButtons');
+    const treeRoot = formContainer.querySelector('#v2TreeRoot') as HTMLElement;
+    const rootAddButtons = formContainer.querySelector('#v2RootAddButtons') as HTMLElement;
 
     function rerender() {
         treeRoot.innerHTML = '';
         tree.forEach((node, idx) => treeRoot.appendChild(renderNode(node, tree, idx)));
         rootAddButtons.innerHTML = V2_ROOT_KINDS.map(k => `<button type="button" class="add-btn" data-add-root="${k}">+ ${V2_NODE_KINDS[k].label}</button>`).join('');
-        rootAddButtons.querySelectorAll('[data-add-root]').forEach(btn => {
+        rootAddButtons.querySelectorAll<HTMLElement>('[data-add-root]').forEach(btn => {
             btn.addEventListener('click', () => {
-                tree.push(createV2Node(btn.dataset.addRoot));
+                tree.push(createV2Node(btn.dataset.addRoot as V2Kind));
                 commit(); rerender();
             });
         });
     }
 
     // Renders one node (its own fields + accessory/items + nested children), and returns the wrapping element.
-    function renderNode(node, parentArray, index) {
+    function renderNode(node: V2Node, parentArray: V2Node[], index: number): HTMLElement {
         const def = V2_NODE_KINDS[node.kind];
         const wrap = document.createElement('div');
         wrap.className = 'border border-gray-600 rounded-lg p-3 space-y-2 bg-gray-800';
@@ -438,20 +533,20 @@ function renderV2Builder(formContainer, entry) {
             fieldWrap.className = 'flex flex-col';
             if (f.input === 'textarea') {
                 fieldWrap.innerHTML = `<span class="field-label">${f.label}</span><textarea class="field">${node.fields[f.key] || ''}</textarea>`;
-                const el = fieldWrap.querySelector('textarea');
+                const el = fieldWrap.querySelector<HTMLTextAreaElement>('textarea')!;
                 el.addEventListener('input', () => { node.fields[f.key] = el.value; commit(); });
             } else if (f.input === 'checkbox') {
                 fieldWrap.innerHTML = `<span class="flex items-center gap-2 text-gray-300"><input type="checkbox" ${node.fields[f.key] ? 'checked' : ''}>${f.label}</span>`;
-                const el = fieldWrap.querySelector('input');
+                const el = fieldWrap.querySelector<HTMLInputElement>('input')!;
                 el.addEventListener('change', () => { node.fields[f.key] = el.checked; commit(); });
             } else if (f.input === 'select') {
-                const optionsHtml = f.options.map(o => `<option value="${o.value}" ${node.fields[f.key] === o.value ? 'selected' : ''}>${o.label}</option>`).join('');
+                const optionsHtml = (f.options ?? []).map(o => `<option value="${o.value}" ${node.fields[f.key] === o.value ? 'selected' : ''}>${o.label}</option>`).join('');
                 fieldWrap.innerHTML = `<span class="field-label">${f.label}</span><select class="field">${optionsHtml}</select>`;
-                const el = fieldWrap.querySelector('select');
+                const el = fieldWrap.querySelector<HTMLSelectElement>('select')!;
                 el.addEventListener('change', () => { node.fields[f.key] = el.value; commit(); });
             } else {
                 fieldWrap.innerHTML = `<span class="field-label">${f.label}</span><input type="text" class="field" placeholder="${f.placeholder || ''}" value="${node.fields[f.key] || ''}">`;
-                const el = fieldWrap.querySelector('input');
+                const el = fieldWrap.querySelector<HTMLInputElement>('input')!;
                 el.addEventListener('input', () => { node.fields[f.key] = el.value; commit(); });
             }
             wrap.appendChild(fieldWrap);
@@ -464,8 +559,8 @@ function renderV2Builder(formContainer, entry) {
                 const row = document.createElement('div');
                 row.className = 'row gap-2';
                 row.innerHTML = `<input type="text" class="field" placeholder="https://..." value="${url}"><button type="button" class="remove-btn self-start">&times;</button>`;
-                row.querySelector('input').addEventListener('input', (e) => { node.items[i] = e.target.value; commit(); });
-                row.querySelector('button').addEventListener('click', () => { node.items.splice(i, 1); commit(); rerender(); });
+                row.querySelector('input')!.addEventListener('input', (e) => { node.items[i] = (e.target as HTMLInputElement).value; commit(); });
+                row.querySelector('button')!.addEventListener('click', () => { node.items.splice(i, 1); commit(); rerender(); });
                 listWrap.appendChild(row);
             });
             wrap.appendChild(listWrap);
@@ -482,7 +577,7 @@ function renderV2Builder(formContainer, entry) {
                 const accWrap = document.createElement('div');
                 accWrap.className = 'flex flex-col border-t border-gray-700 pt-2';
                 accWrap.innerHTML = `<span class="field-label">Thumbnail URL</span><input type="text" class="field" value="${node.accessory.url || ''}" placeholder="https://...">`;
-                accWrap.querySelector('input').addEventListener('input', (e) => { node.accessory.url = e.target.value; commit(); });
+                accWrap.querySelector('input')!.addEventListener('input', (e) => { if (node.accessory) node.accessory.url = (e.target as HTMLInputElement).value; commit(); });
                 const removeAcc = document.createElement('button');
                 removeAcc.type = 'button';
                 removeAcc.className = 'remove-btn mt-1';
@@ -528,7 +623,7 @@ function renderV2Builder(formContainer, entry) {
     rerender();
     commit();
 }
-function addEmbedFieldRow(list, field = { name: '', value: '', inline: false }) {
+function addEmbedFieldRow(list: HTMLElement, field: APIEmbedField = { name: '', value: '', inline: false }) {
         if (list.children.length >= 25) {
             showMessage('Discord embeds allow a maximum of 25 fields.', 'bg-yellow-500');
             return;
@@ -540,14 +635,14 @@ function addEmbedFieldRow(list, field = { name: '', value: '', inline: false }) 
         <textarea placeholder="Field Value" class="field-value" data-field-value>${field.value || ''}</textarea>
         <span class="flex items-center gap-1 text-gray-300 text-sm self-start"><input type="checkbox" data-field-inline ${field.inline ? 'checked' : ''}>Inline</span>
         <button type="button" class="remove-btn self-start" data-remove-field-row>&times;</button>`;
-        row.querySelector('[data-remove-field-row]').addEventListener('click', () => row.remove());
+        row.querySelector('[data-remove-field-row]')!.addEventListener('click', () => row.remove());
         list.appendChild(row);
 }
-function syncActiveEmbedFromForm(formContainer) {
+function syncActiveEmbedFromForm(formContainer: HTMLFormElement) {
         if (!activeEmbedKey) return;
 
-        const get = (name) => formContainer.querySelector(`[data-embed-field="${name}"]`);
-        const embed = {};
+        const get = (name: string) => formContainer.querySelector<HTMLInputElement>(`[data-embed-field="${name}"]`);
+        const embed: APIEmbed = {};
 
         const title = get('title')?.value.trim();
         const description = get('description')?.value.trim();
@@ -556,8 +651,8 @@ function syncActiveEmbedFromForm(formContainer) {
         if (description) embed.description = description;
         if (authorName) embed.author = { name: authorName };
 
-        const color = get('color')?.value.trim();
-        if (color) embed.color = color;
+        const color = hexColorToInt(get('color')?.value ?? '');
+        if (color !== undefined) embed.color = color; // Discord wants an int, not "#5865F2"
 
         const url = get('url')?.value.trim();
         if (url) embed.url = url;
@@ -577,31 +672,31 @@ function syncActiveEmbedFromForm(formContainer) {
 
         const fieldsList = formContainer.querySelector('[data-embed-fields-list]');
         if (fieldsList) {
-            const fields = [...fieldsList.querySelectorAll('.row')]
+            const fields = [...fieldsList.querySelectorAll<HTMLElement>('.row')]
                 .map(row => ({
-                    name: row.querySelector('[data-field-name]').value.trim(),
-                    value: row.querySelector('[data-field-value]').value.trim(),
-                    inline: row.querySelector('[data-field-inline]').checked,
+                    name: row.querySelector<HTMLInputElement>('[data-field-name]')!.value.trim(),
+                    value: row.querySelector<HTMLTextAreaElement>('[data-field-value]')!.value.trim(),
+                    inline: row.querySelector<HTMLInputElement>('[data-field-inline]')!.checked,
                 }))
                 .filter(f => f.name || f.value);
             if (fields.length) embed.fields = fields;
         }
 
     const reactionsList = formContainer.querySelector('[data-reactions-list]');
-    let reactionsPatch = {};
+    let reactionsPatch: { reactions?: ReactionRole[]; single?: boolean } = {};
     if (reactionsList) {
-        const reactions = [...reactionsList.querySelectorAll('.row')]
+        const reactions = [...reactionsList.querySelectorAll<HTMLElement>('.row')]
             .map(row => ({
-                emoji: row.querySelector('[data-reaction-emoji]').value.trim(),
-                roleId: row.querySelector('[data-reaction-role]').value,
+                emoji: row.querySelector<HTMLInputElement>('[data-reaction-emoji]')!.value.trim(),
+                roleId: row.querySelector<HTMLSelectElement>('[data-reaction-role]')!.value,
             }))
             .filter(r => r.emoji && r.roleId);
         reactionsPatch = { reactions, single: !!get('single')?.checked };
     }
 
-        const channelid = formContainer.querySelector('[data-embed-field="channelid"]')?.value.trim() || '';
-        const existing = messageConfigsDraft[activeEmbedKey] || {};
-    messageConfigsDraft[activeEmbedKey] = { ...existing, channelid, embeds: [embed], ...reactionsPatch };
+        const channelid = formContainer.querySelector<HTMLInputElement>('[data-embed-field="channelid"]')?.value.trim() || '';
+        const existing: MessageConfig = messageConfigsDraft[activeEmbedKey] || { channelid: '', format: 'v1' };
+    messageConfigsDraft[activeEmbedKey] = { ...existing, channelid, embeds: [embed], ...reactionsPatch, format: 'v1'  };
 }
 function validateEmbedsDraft() {
         for (const [key, entry] of Object.entries(messageConfigsDraft)) {
@@ -612,7 +707,7 @@ function validateEmbedsDraft() {
                 if (!entry.components?.length) return `Embed "${key}": add at least one component before saving.`;
                 continue;
             }
-            const embed = entry.embeds?.[0] || {};
+            const embed = entry.embeds?.[0] ?? blankEmbed();
             const hasTitle = !!embed.title?.trim();
             const hasDescription = !!embed.description?.trim();
             const hasAuthor = !!embed.author?.name?.trim();
@@ -620,7 +715,7 @@ function validateEmbedsDraft() {
                 return `Embed "${key}": at least one of Title, Description, or Author Name is required.`;
             }
             if (entry.reactions?.length) {
-                const seenEmojis = new Set();
+                const seenEmojis = new Set<string>();
                 for (const r of entry.reactions) {
                     if (!r.emoji || !r.roleId) {
                         return `Embed "${key}": every reaction row needs both an emoji and a role.`;
@@ -634,7 +729,7 @@ function validateEmbedsDraft() {
         }
         return null;
 }
-const MESSAGE_REASON_CATEGORIES = [
+const MESSAGE_REASON_CATEGORIES: {key: string, label: string}[] = [
     { key: 'hasInvite', label: 'Discord Invite Link' },
     { key: 'everyonePing', label: '@everyone / @here Ping' },
     { key: 'generalspam', label: 'General Spam' },
@@ -645,66 +740,64 @@ const MESSAGE_REASON_CATEGORIES = [
     { key: 'capSpam', label: 'Excessive Caps' },
     { key: 'maskedLinks', label: 'Masked Links' },
 ];
-function getMessageReasonsWeightsValues(container) {
-    const result = {};
-    container.querySelectorAll('[data-mrw-key]').forEach(row => {
+function getMessageReasonsWeightsValues(container: HTMLElement) {
+    const result: Record<string, ReasonWeight> = {};
+    container.querySelectorAll<HTMLElement>('[data-mrw-key]').forEach(row => {
         const key = row.dataset.mrwKey;
-        const reason = row.querySelector('[data-mrw-reason]').value.trim();
-        const weight = Number(row.querySelector('[data-mrw-weight]').value);
+        const reason = row.querySelector<HTMLInputElement>('[data-mrw-reason]')!.value.trim();
+        const weight = Number(row.querySelector<HTMLInputElement>('[data-mrw-weight]')!.value);
         if (key && reason && !Number.isNaN(weight)) result[key] = { reason, weight };
     });
     return result;
 }
-function getSectionValues(container, type) {
-        const values = {};
+type SectionValue = string | number | boolean | string[];
+function getSectionValues(container: HTMLElement, type: SectionType) {
+        const values: Record<string, SectionValue> = {};
         const divs = container.querySelectorAll('div');
 
         divs.forEach(div => {
-            let name, id;
             switch (type) {
                 case 'automod': {
-                    const nameSpan = div.querySelector('span[data-automod-name]');
-                    const valueInput = div.querySelector('input[data-automod-value]');
+                    const nameSpan = div.querySelector<HTMLElement>('span[data-automod-name]');
+                    const valueInput = div.querySelector<HTMLInputElement>('input[data-automod-value]');
                     if (nameSpan && valueInput) {
-                        name = nameSpan.dataset.automodName.trim();
-                        id = valueInput.value.trim();
+                        const name = nameSpan.dataset.automodName?.trim();
+                        const raw = valueInput.value.trim();
                         if (name) {
-                            let parsedValue = id;
-                            if (id === 'true') parsedValue = true;
-                            else if (id === 'false') parsedValue = false;
-                            else if (id !== '' && !isNaN(Number(id))) parsedValue = Number(id);
+                            let parsedValue: string | number | boolean = raw;
+                            if (raw === 'true') parsedValue = true;
+                            else if (raw === 'false') parsedValue = false;
+                            else if (raw !== '' && !isNaN(Number(raw))) parsedValue = Number(raw);
                             values[name] = parsedValue;
                         }
                     }
                     break;
                 }
                 case 'mod': {
-                    const nameSpanMod = div.querySelector('span[data-channel-name]');
-                    const idSelectMod = div.querySelector('select[data-channel-id]');
+                    const nameSpanMod = div.querySelector<HTMLElement>('span[data-channel-name]');
+                    const idSelectMod = div.querySelector<HTMLSelectElement>('select[data-channel-id]');
                     if (nameSpanMod && idSelectMod) {
-                        name = nameSpanMod.dataset.channelName.trim();
-                        id = idSelectMod.value.trim();
-                        if (name) values[name] = id;
+                        const name = nameSpanMod.dataset.channelName?.trim();
+                        if (name) values[name] = idSelectMod.value.trim();
                     }
                     break;
                 }
                 case 'reaction': {
-                    const nameInput = div.querySelector('input[data-channel-name]');
-                    const idSelect = div.querySelector('select[data-channel-id]');
+                    const nameInput = div.querySelector<HTMLInputElement>('input[data-channel-name]');
+                    const idSelect = div.querySelector<HTMLSelectElement>('select[data-channel-id]');
                     if (nameInput && idSelect) {
-                        name = nameInput.value.trim();
+                        const name = nameInput.value.trim();
                         const selected = Array.from(idSelect.selectedOptions).map(opt => opt.value);
                         if (name) values[name] = selected.length > 1 ? selected : (selected[0] || '');
                     }
                     break;
                 }
-                default: { // 'public', 'media', 'role'
-                    const nameInput = div.querySelector('input[data-channel-name]');
-                    const idField = div.querySelector('[data-channel-id]'); // select for 'public', input otherwise
+                default: { // 'public', 'response'
+                    const nameInput = div.querySelector<HTMLInputElement>('input[data-channel-name]');
+                    const idField = div.querySelector<HTMLInputElement | HTMLSelectElement>('[data-channel-id]'); // select for 'public', input otherwise
                     if (nameInput && idField) {
-                        name = nameInput.value.trim();
-                        id = idField.value.trim();
-                        if (name) values[name] = id;
+                        const name = nameInput.value.trim();
+                        if (name) values[name] = idField.value.trim();
                     }
                     break;
                 }
@@ -713,10 +806,11 @@ function getSectionValues(container, type) {
 
         return values;
 }
-function createChannelInput(container, name = '', value = '', type) {
+function createChannelInput(container: HTMLElement, name = '', value: string | string[] = '', type: SectionType) {
         const div = document.createElement('div');
         div.classList.add('row');
 
+        const scalarValue = Array.isArray(value) ? value.join(',') : value;
         const isReaction = type === 'reaction';
         const isResponse = type === 'response';
         const namePlaceholder = isReaction ? 'Reaction' : isResponse ? 'Trigger' : 'Channel Name';
@@ -734,24 +828,24 @@ function createChannelInput(container, name = '', value = '', type) {
     } else {
         const idPlaceholder = isResponse ? 'Response text' : 'Channel ID';
         const idField = type === 'public'
-            ? `<select class="field" data-channel-id="${type}">${buildChannelOptionsHtml(value)}</select>`
-            : `<input type="text" placeholder="${idPlaceholder}" value="${value}" class="field" data-channel-id="${type}">`;
+            ? `<select class="field" data-channel-id="${type}">${buildChannelOptionsHtml(scalarValue)}</select>`
+            : `<input type="text" placeholder="${idPlaceholder}" value="${scalarValue}" class="field" data-channel-id="${type}">`;
         div.innerHTML = `
                     <input type="text" placeholder="${namePlaceholder}" value="${name}" class="channel-row" data-channel-name="${type}">
                     ${idField}
                         <button class="remove-btn">&times;</button>`;
     }
 
-        div.querySelector('.remove-btn').onclick = () => div.remove();
+        div.querySelector<HTMLElement>('.remove-btn')!.onclick = () => div.remove();
         container.appendChild(div);
 }
-function createReasonWeightInput(container, ruleOptions, key = '', reason = '', weight = 1) {
+function createReasonWeightInput(container: HTMLElement, ruleOptions: AutomodRule[], key = '', reason = '', weight = 1) {
         const div = document.createElement('div');
         div.classList.add('flex', 'items-center', 'gap-2');
         div.dataset.rwKey = key;
 
         const usedIds = new Set(
-            [...container.querySelectorAll('[data-rw-key]')].map(el => el.dataset.rwKey)
+            [...container.querySelectorAll<HTMLElement>('[data-rw-key]')].map(node => node.dataset.rwKey)
         );
         const optionsHtml = ruleOptions
             .filter(r => r.id === key || !usedIds.has(r.id))
@@ -767,45 +861,45 @@ function createReasonWeightInput(container, ruleOptions, key = '', reason = '', 
         <input type="number" step="1" placeholder="Weight" value="${weight}" class="field" data-rw-weight>
         <button class="remove-btn">&times;</button>`;
 
-        div.querySelector('select').addEventListener('change', (e) => { div.dataset.rwKey = e.target.value; });
-        div.querySelector('.remove-btn').onclick = () => div.remove();
+        div.querySelector('select')!.addEventListener('change', (e) => { div.dataset.rwKey = (e.target as HTMLSelectElement).value; });
+        div.querySelector<HTMLElement>('.remove-btn')!.onclick = () => div.remove();
         container.appendChild(div);
 }
 // General Channels is a flat array of channel IDs in Mongo (no key:value pairs).
-function renderArraySection(container, items) {
+function renderArraySection(container: HTMLElement, items: string[]) {
         container.innerHTML = '';
-    (items || []).forEach(value => createArrayInput(container, value));
+    (items || []).forEach((value: string) => createArrayInput(container, value));
 }
-function createArrayInput(container, value = '') {
+function createArrayInput(container: HTMLElement, value: string = '') {
         const div = document.createElement('div');
         div.classList.add('flex', 'items-center', 'gap-2');
         div.innerHTML = `
     <select class="field" data-array-value="channel">${buildChannelOptionsHtml(value)}</select>
     <button class="remove-btn">&times;</button>`;
-        div.querySelector('.remove-btn').onclick = () => div.remove();
+        div.querySelector<HTMLElement>('.remove-btn')!.onclick = () => div.remove();
         container.appendChild(div);
 }
-function getArraySectionValues(container) {
-        const values = [];
-    container.querySelectorAll('[data-array-value]').forEach(el => {
-        const v = el.value.trim();
+function getArraySectionValues(container: HTMLElement) {
+        const values: string[] = [];
+    container.querySelectorAll<HTMLSelectElement>('[data-array-value]').forEach(node => {
+        const v = node.value.trim();
             if (v) values.push(v);
         });
         return values;
 }
-function getReasonsAndWeightsValues(container) {
-        const result = {};
-        container.querySelectorAll('[data-rw-ruleid]').forEach(select => {
-            const row = select.closest('div');
+function getReasonsAndWeightsValues(container: HTMLElement) {
+        const result: Record<string,{reason: string, weight: number}> = {};
+        container.querySelectorAll<HTMLSelectElement>('[data-rw-ruleid]').forEach(select => {
+            const row = select.closest('div')!;
             const ruleId = select.value;
-            const reason = row.querySelector('[data-rw-reason]').value.trim();
-            const weight = Number(row.querySelector('[data-rw-weight]').value);
+            const reason = row.querySelector<HTMLInputElement>('[data-rw-reason]')!.value.trim();
+            const weight = Number(row.querySelector<HTMLInputElement>('[data-rw-weight]')!.value);
             if (ruleId && reason && !Number.isNaN(weight)) result[ruleId] = { reason, weight };
         });
         return result;
 }
-function confirmModal(message) {
-    return new Promise((resolve) => {
+function confirmModal(message: string) {
+    return new Promise<boolean>((resolve) => {
         const modal = document.createElement('div');
         modal.className = 'fixed inset-0 bg-black flex items-center justify-center z-50 p-4';
         modal.innerHTML = `
@@ -817,15 +911,15 @@ function confirmModal(message) {
                 </div>
             </div>`;
         document.body.appendChild(modal);
-        document.getElementById('confirmYes').addEventListener('click', () => { modal.remove(); resolve(true); });
-        document.getElementById('confirmNo').addEventListener('click', () => { modal.remove(); resolve(false); });
+        document.getElementById('confirmYes')!.addEventListener('click', () => { modal.remove(); resolve(true); });
+        document.getElementById('confirmNo')!.addEventListener('click', () => { modal.remove(); resolve(false); });
     });
 }
 // --- Actions -----------------------------------------------------------------
 async function handleSaveConfig() {
         if (!currentGuildId) { showMessage('Select a guild to save.', 'bg-red-500'); return; }
     if (currentRole !== 'admin' && currentRole !== 'owner') { showMessage('Admin role/owner required to save.', 'bg-red-500'); return; }
-        if (!elements.adminRoleInput.value.trim() || !elements.modRoleInput.value.trim()) {
+        if (!elements.adminRoleInput!.value.trim() || !elements.modRoleInput!.value.trim()) {
             showMessage('Admin Role ID and Mod Role ID are both required (Staff Roles tab).', 'bg-red-500');
             return;
         }
@@ -839,7 +933,7 @@ async function handleSaveConfig() {
             showMessage('Saved to database!', 'bg-green-500');
             await loadSelectedGuild();
         } catch (error) {
-            showMessage(`Save failed: ${error.message}`, 'bg-red-500');
+            showMessage(`Save failed: ${errMsg(error)}`, 'bg-red-500');
         }
 }
 async function handleDeleteConfig() {
@@ -852,10 +946,10 @@ async function handleDeleteConfig() {
         try {
             await apiDeleteGuild(currentGuildId);
             showMessage('Configuration deleted from database.', 'bg-green-500');
-            elements.guildSelect.value = '';
+            elements.guildSelect!.value = '';
             await refreshGuildSelect();
         } catch (error) {
-            showMessage(`Delete failed: ${error.message}`, 'bg-red-500');
+            showMessage(`Delete failed: ${errMsg(error)}`, 'bg-red-500');
         }
 }
 // Downloads whatever is currently on screen as a local JSON backup (not an API call).
@@ -887,7 +981,7 @@ function getFormValues() {
 
     return { modChannels, publicChannels, generalchannels, reactions, automodsettings: { ...automodThresholds, messagereasonsandweights, automodreasonsandweights, }, responses, staffroles, messageConfigs: messageConfigsDraft };
 }
-function showMessage(message, colorClass) {
+function showMessage(message: string, colorClass: string) {
     const { messageBox } = elements;
     messageBox.textContent = message;
     messageBox.className = `text-center p-3 rounded-lg hidden opacity-transition duration-150 ${colorClass}`;
@@ -921,9 +1015,9 @@ async function refreshGuildSelect() {
     try {
         const resGuilds = await fetch(`/api/guilds`, { headers: authHeaders(), credentials: 'include' });
         if (!resGuilds.ok) throw new Error(`Failed to list guilds (${resGuilds.status})`);
-        const guilds = await resGuilds.json(); // [{ guildId, name, role }]
-        guildRoles = new Map(guilds.map(g => [g.guildId, g.role]));
-        guilds
+        const summaries: GuildSummary[] = await resGuilds.json();
+        guildRoles = new Map(summaries.map((g): [string, Role] => [g.guildId, g.role]));
+        summaries
             .sort((a, b) => a.guildId.localeCompare(b.guildId))
             .forEach(g => {
                 const option = document.createElement('option');
@@ -932,33 +1026,34 @@ async function refreshGuildSelect() {
                 guildSelect.appendChild(option);
             });
 
-        guildSelect.value = guilds.some(g => g.guildId === selectedValue) ? selectedValue : '';
-        if (guilds.length === 0) showMessage('No guilds found where you hold the admin or mod role.', 'bg-yellow-500');
+        guildSelect.value = summaries.some(g => g.guildId === selectedValue) ? selectedValue : '';
+        if (summaries.length === 0) showMessage('No guilds found where you hold the admin or mod role.', 'bg-yellow-500');
         addServerBtn.classList.remove('hidden');
     } catch (error) {
-        showMessage(`Could not reach the config API: ${error.message}`, 'bg-red-500');
+        showMessage(`Could not reach the config API: ${errMsg(error)}`, 'bg-red-500');
     }
     await loadSelectedGuild();
 }
-function setGuildRoles(guildRoles) {
-    currentGuildRoles = (guildRoles || []).slice().sort((a, b) => b.position - a.position);
+function setGuildRoles(roles: APIRole[]) {
+    currentGuildRoles = (roles || []).slice().sort((a, b) => b.position - a.position);
     const staffEligible = currentGuildRoles.filter(role => hasPermission(role.permissions, PERMISSIONS.ModerateMembers));
     rolePickers.admin.setRoles(staffEligible);
     rolePickers.mod.setRoles(staffEligible);
     rolePickers.jr.setRoles(staffEligible);
 }
 async function loadSelectedGuild() {
-    const { guildSelect, deleteConfigBtn, addServerBtn, orText, saveConfigBtn, exportConfigBtn, buttonColumnText, channelsContainer, adminRoleInput, modRoleInput, jrRoleInput, publicChannelsSection, GeneralChannelsSection, reactionsSection, Responses, automodSection, reasonsWeightsSection, messageReasonsWeightsSection, addMessageReasonButtons, modChannelsSection } = elements;
-
-    currentGuildId = guildSelect.value;
+    const { guildSelect, deleteConfigBtn, addServerBtn, orText, saveConfigBtn, exportConfigBtn, buttonColumnText, channelsContainer, adminRoleInput, modRoleInput, jrRoleInput } = elements;
+    currentGuildId = guildSelect.value || null;
     deleteConfigBtn.classList.toggle('hidden', !currentGuildId);
     saveConfigBtn.classList.toggle('hidden', !currentGuildId);
     exportConfigBtn.classList.toggle('hidden', !currentGuildId);
-    addServerBtn.classList.toggle('hidden', currentGuildId)
-    orText.classList.toggle('hidden', currentGuildId)
+    addServerBtn.classList.toggle('hidden', !!currentGuildId)
+    orText.classList.toggle('hidden', !!currentGuildId)
     channelsContainer.classList.toggle('hidden', !currentGuildId)
     if (!currentGuildId) {
-        currentConfig = currentRole = currentGuildChannels = currentGuildRoles = null;
+        currentConfig = currentRole = null;
+        currentGuildChannels = [];
+        currentGuildRoles = [];
         currentAutomodRules = [];
         buttonColumnText.textContent = 'Please select a guild or invite the bot';
         return;
@@ -974,7 +1069,7 @@ async function loadSelectedGuild() {
             // out-of-band DB edits (e.g. via Compass) wouldn't show up until a hard reload.
             const res = await fetch(`/api/guilds/${encodeURIComponent(currentGuildId)}`, { method: 'GET', headers: authHeaders(), credentials: 'include', cache: 'no-store' });
             if (!res.ok) throw new Error(`Failed to load guild ${currentGuildId} (${res.status})`);
-            const doc = await res.json();
+            const doc: GuildConfigDoc = await res.json();
             guilds.set(currentGuildId, doc)
             currentConfig = doc;
 
@@ -988,15 +1083,15 @@ async function loadSelectedGuild() {
             modRoleInput.value = modRole;
             jrRoleInput.value = jrRole;
         } catch (error) {
-            showMessage(`Failed to load config: ${error.message}`, 'bg-red-500');
+            showMessage(`Failed to load config: ${errMsg(error)}`, 'bg-red-500');
         }
     }
     applyRolePermissions();
 }
 // --- Config rendering ------------------------------------------------------
 
-function renderConfig(config) {
-    const sections = [
+function renderConfig(config: GuildConfigDoc) {
+    const sections: Array<{ key: 'modChannels' | 'publicChannels' | 'reactions' | 'responses', elementKey: keyof typeof elements, type: SectionType }> = [
         { key: 'modChannels', elementKey: 'modChannelsSection', type: 'mod' },
         { key: 'publicChannels', elementKey: 'publicChannelsSection', type: 'public' },
         { key: 'reactions', elementKey: 'reactionsSection', type: 'reaction' },
@@ -1007,14 +1102,14 @@ function renderConfig(config) {
     }
 
     // automodsettings is now consolidated: flat thresholds + two nested reason/weight maps.
-    const { messagereasonsandweights, automodreasonsandweights, ...automodThresholds } = config.automodsettings || {};
+    const { messagereasonsandweights, automodreasonsandweights, ...automodThresholds } = config.automodsettings ?? ({} as AutomodSettings);
     renderSection(elements.automodSection, automodThresholds, 'automod');
     renderMessageReasonsWeightsSection(elements.messageReasonsWeightsSection, elements.addMessageReasonButtons, messagereasonsandweights || {});
     renderReasonsAndWeightsSection(elements.reasonsWeightsSection, automodreasonsandweights, currentAutomodRules);
     renderArraySection(elements.GeneralChannelsSection, config.generalchannels || []);
     renderEmbedSection(elements.EmbedSection, config.messageConfigs || {});
 }
-function renderSection(container, data, type) {
+function renderSection(container: HTMLElement, data: Record<string, unknown>, type: SectionType) {
     container.innerHTML = '';
     for (const key in data) {
         if (!Object.hasOwnProperty.call(data, key)) continue;
@@ -1024,9 +1119,9 @@ function renderSection(container, data, type) {
             div.classList.add('row', 'relative');
             div.innerHTML = `
                     <span class="field-label" data-channel-name="${key}">${key}</span>
-                    <select class="field" data-channel-id="${key}">${buildChannelOptionsHtml(data[key])}</select>
+                    <select class="field" data-channel-id="${key}">${buildChannelOptionsHtml(data[key] as string)}</select>
                 `;
-            div.querySelector('span').dataset.channelName = key;
+            div.querySelector('span')!.dataset.channelName = key;
             container.appendChild(div);
         } else if (type === 'automod') {
             const div = document.createElement('div');
@@ -1037,21 +1132,21 @@ function renderSection(container, data, type) {
                 `;
             container.appendChild(div);
         } else {
-            createChannelInput(container, key, data[key], type);
+            createChannelInput(container, key, data[key] as string | string[], type);
         }
     }
 }
-function renderReasonsAndWeightsSection(container, reasonsandweights, ruleOptions) {
+function renderReasonsAndWeightsSection(container: HTMLElement, reasonsandweights: Record<string, ReasonWeight> | undefined, ruleOptions: AutomodRule[]) {
     container.innerHTML = '';
     Object.entries(reasonsandweights || {}).forEach(([key, obj]) =>
         createReasonWeightInput(container, ruleOptions, key, obj.reason, obj.weight)
     );
 }
-function renderMessageReasonsWeightsSection(container, buttonsContainer, data) {
+function renderMessageReasonsWeightsSection(container: HTMLElement, buttonsContainer: HTMLElement, data: Record<string, ReasonWeight>) {
     container.innerHTML = '';
     const active = new Set(Object.keys(data || {}));
 
-    function addRow(key, reason = '', weight = 1) {
+    function addRow(key: string, reason = '', weight = 1) {
         const cat = MESSAGE_REASON_CATEGORIES.find(c => c.key === key);
         const div = document.createElement('div');
         div.classList.add('flex', 'items-center', 'gap-2');
@@ -1061,7 +1156,7 @@ function renderMessageReasonsWeightsSection(container, buttonsContainer, data) {
             <input type="text" placeholder="Reason" value="${reason}" class="field" data-mrw-reason>
             <input type="number" step="1" placeholder="Weight" value="${weight}" class="field" data-mrw-weight>
             <button class="remove-btn">&times;</button>`;
-        div.querySelector('.remove-btn').onclick = () => {
+        div.querySelector<HTMLElement>('.remove-btn')!.onclick = () => {
             div.remove();
             active.delete(key);
             drawButtons();
@@ -1074,9 +1169,9 @@ function renderMessageReasonsWeightsSection(container, buttonsContainer, data) {
             .filter(c => !active.has(c.key))
             .map(c => `<button type="button" class="add-btn" data-add-message-reason="${c.key}">+ ${c.label}</button>`)
             .join('');
-        buttonsContainer.querySelectorAll('[data-add-message-reason]').forEach(btn => {
+        buttonsContainer.querySelectorAll<HTMLElement>('[data-add-message-reason]').forEach(btn => {
             btn.addEventListener('click', () => {
-                const key = btn.dataset.addMessageReason;
+                const key = btn.dataset.addMessageReason!;
                 active.add(key);
                 addRow(key);
                 drawButtons();
@@ -1089,7 +1184,7 @@ function renderMessageReasonsWeightsSection(container, buttonsContainer, data) {
     });
     drawButtons();
 }
-function renderEmbedSection(container, messageConfigs) {
+function renderEmbedSection(container: HTMLElement, messageConfigs: Record<string, MessageConfig>) {
     messageConfigsDraft = structuredClone(messageConfigs || {});
     const keys = Object.keys(messageConfigsDraft);
     activeEmbedKey = keys.includes(activeEmbedKey) ? activeEmbedKey : (keys[0] || '');
@@ -1106,13 +1201,13 @@ function renderEmbedSection(container, messageConfigs) {
     <p class="text-xs text-yellow-400 mt-1 hidden" id="pushEmbedHint">Pushes the current form contents to Discord. This does not save your changes to the database — hit Save separately to persist them.</p>
     <div id="embedFormFields" class="space-y-4 mt-2"></div>
     `;
-    const v1info = container.querySelector('#v1info');
-    const select = container.querySelector('#embedSelect');
-    const deleteBtn = container.querySelector('#deleteEmbedBtn');
-    const orSeparator = container.querySelector('#orSeparator');
-    const createBtn = container.querySelector('#createEmbedBtn');
-    const pushBtn = container.querySelector('#pushEmbedBtn');
-    const pushHint = container.querySelector('#pushEmbedHint');
+    const v1info = container.querySelector('#v1info')!;
+    const select = container.querySelector<HTMLSelectElement>('#embedSelect')!;
+    const deleteBtn = container.querySelector('#deleteEmbedBtn')as HTMLButtonElement ;
+    const orSeparator = container.querySelector('#orSeparator')!;
+    const createBtn = container.querySelector('#createEmbedBtn')as HTMLButtonElement;
+    const pushBtn = container.querySelector('#pushEmbedBtn')as HTMLButtonElement;
+    const pushHint = container.querySelector('#pushEmbedHint')!;
     const hasEmbeds = keys.length > 0;
     const isV1 = !!activeEmbedKey && messageConfigsDraft[activeEmbedKey]?.format !== 'v2';
     v1info.classList.toggle('hidden', !isV1);
@@ -1147,9 +1242,9 @@ function renderEmbedSection(container, messageConfigs) {
         setDisabledState(pushBtn, true);
         pushHint.classList.remove('hidden');
         try {
-            const result = await apiSendEmbed(currentGuildId, activeEmbedKey, config);
+            const result = await apiSendEmbed(currentGuildId as string, activeEmbedKey, config);
             showMessage(result.status === 'sent' ? 'Sent new message to Discord!' : 'Updated existing Discord message.', 'bg-green-500');
-        } catch (error) {
+        } catch (error: any) {
             showMessage(`Push failed: ${error.message}`, 'bg-red-500');
         } finally {
             setDisabledState(pushBtn, false);
@@ -1157,7 +1252,7 @@ function renderEmbedSection(container, messageConfigs) {
         }
     });
     createBtn.addEventListener('click', () => {
-        let nameInput = container.querySelector('#newEmbedNameInput');
+        let nameInput = container.querySelector('#newEmbedNameInput') as HTMLInputElement;
 
         // First click: reveal the name input, format switch, and warning; switch the button into "confirm" mode.
         if (!nameInput) {
@@ -1198,9 +1293,8 @@ function renderEmbedSection(container, messageConfigs) {
         if (!name) { showMessage('Enter a key name for the new embed.', 'bg-yellow-500'); return; }
         if (messageConfigsDraft[name]) { showMessage(`"${name}" already exists.`, 'bg-yellow-500'); return; }
 
-        const format = container.querySelector('#newEmbedFormatSelect')?.value === 'v2' ? 'v2' : 'v1';
-
-        messageConfigsDraft[name] = format === 'v2'
+        const format = container.querySelector('#newEmbedFormatSelect') as HTMLSelectElement
+        messageConfigsDraft[name] = format.value === 'v2'
             ? { channelid: '', format: 'v2', components: [] }
             : { channelid: '', format: 'v1', embeds: [blankEmbed()] };
         activeEmbedKey = name;
@@ -1209,10 +1303,16 @@ function renderEmbedSection(container, messageConfigs) {
 
     deleteBtn.addEventListener('click', async () => {
         if (!activeEmbedKey) return;
-        else if (messageConfigsDraft[activeEmbedKey].channelid == '') {
+        if (!messageConfigsDraft[activeEmbedKey]?.channelid) {
             showMessage('Message not deleted, channelid is blank', 'bg-yellow-500')
         } else {
-            await apiDeleteEmbed(activeEmbedKey)
+            try {
+                await apiDeleteEmbed(activeEmbedKey);
+            } catch (error) {
+                // Don't drop the local draft if Discord/the DB delete failed. Otherwise the UI and the real message drift apart.
+                showMessage(`Delete failed: ${errMsg(error)}`, 'bg-red-500');
+                return;
+            }
         }
         delete messageConfigsDraft[activeEmbedKey];
         activeEmbedKey = '';
@@ -1222,13 +1322,13 @@ function renderEmbedSection(container, messageConfigs) {
     renderEmbedForm();
 
     function renderEmbedForm() {
-        const formContainer = container.querySelector('#embedFormFields');
+        const formContainer = container.querySelector('#embedFormFields') as HTMLFormElement;
         if (!activeEmbedKey || !messageConfigsDraft[activeEmbedKey]) {
             formContainer.innerHTML = '';
             return;
         }
 
-        const entry = messageConfigsDraft[activeEmbedKey];
+        const entry = messageConfigsDraft[activeEmbedKey]!;
 
         // v2 entries get the component tree builder; v1 keeps the classic embed form below.
         if (entry.format === 'v2') {
@@ -1237,14 +1337,14 @@ function renderEmbedSection(container, messageConfigs) {
         }
 
         const embed = entry.embeds?.[0] || blankEmbed();
-        const visibleOptional = new Set(
+        const visibleOptional = new Set<OptionalEmbedKey>(
             OPTIONAL_EMBED_FIELDS.filter(f => {
                 if (f.key === 'fields') return (embed.fields?.length || 0) > 0;
                 if (f.key === 'reactions') return (entry.reactions?.length || 0) > 0;
                 if (f.key === 'footer') return !!(embed.footer?.text || embed.footer?.icon_url);
                 if (f.key === 'image') return !!embed.image?.url;
                 if (f.key === 'thumbnail') return !!embed.thumbnail?.url;
-                return !!embed[f.key];
+                return !!embed[f.key as keyof APIEmbed];
             }).map(f => f.key)
         );
 
@@ -1263,8 +1363,8 @@ function renderEmbedSection(container, messageConfigs) {
                 </div>
             `;
 
-        const buttonsEl = formContainer.querySelector('#optionalFieldButtons');
-        const groupsEl = formContainer.querySelector('#optionalFieldGroups');
+        const buttonsEl = formContainer.querySelector('#optionalFieldButtons') as HTMLElement;
+        const groupsEl = formContainer.querySelector('#optionalFieldGroups') as HTMLDivElement;
 
         const drawButtons = () => {
             buttonsEl.innerHTML = OPTIONAL_EMBED_FIELDS
@@ -1272,9 +1372,9 @@ function renderEmbedSection(container, messageConfigs) {
                 .map(f => `<button type="button" class="add-btn" data-show-optional="${f.key}">+ ${f.label}</button>`)
                 .join('');
 
-            buttonsEl.querySelectorAll('[data-show-optional]').forEach(btn => {
+            buttonsEl.querySelectorAll<HTMLElement>('[data-show-optional]').forEach(btn => {
                 btn.addEventListener('click', () => {
-                    visibleOptional.add(btn.dataset.showOptional);
+                    visibleOptional.add(btn.dataset.showOptional as OptionalEmbedKey);
                     drawButtons();
                     drawGroups();
                 });
@@ -1293,29 +1393,30 @@ function renderEmbedSection(container, messageConfigs) {
                         `;
                 groupsEl.appendChild(wrap);
 
-                wrap.querySelector('[data-hide-optional]').addEventListener('click', () => {
+                wrap.querySelector('[data-hide-optional]')!.addEventListener('click', () => {
                     visibleOptional.delete(f.key);
                     drawButtons();
                     drawGroups();
                 });
 
                 if (f.key === 'fields') {
-                    const list = wrap.querySelector('[data-embed-fields-list]');
+                    const list = wrap.querySelector<HTMLElement>('[data-embed-fields-list]')!;
                     (embed.fields || []).forEach(field => addEmbedFieldRow(list, field));
-                    wrap.querySelector('[data-add-embed-field]').disabled = list.children.length >= 25;
-                    wrap.querySelector('[data-add-embed-field]').classList.toggle('hidden', list.children.length >= 25);
-                    wrap.querySelector('[data-add-embed-field]').addEventListener('click', () => {
+                    const addFieldBtn = wrap.querySelector<HTMLButtonElement>('[data-add-embed-field]')!;
+                    addFieldBtn.disabled = list.children.length >= 25;
+                    addFieldBtn.classList.toggle('hidden', list.children.length >= 25);
+                    addFieldBtn.addEventListener('click', () => {
                         addEmbedFieldRow(list)
 
                     });
                 }
 
                 if (f.key === 'reactions') {
-                    const list = wrap.querySelector('[data-reactions-list]');
-                    const singleCheckbox = wrap.querySelector('[data-embed-field="single"]');
+                    const list = wrap.querySelector<HTMLElement>('[data-reactions-list]')!;
+                    const singleCheckbox = wrap.querySelector<HTMLInputElement>('[data-embed-field="single"]');
                     if (singleCheckbox) singleCheckbox.checked = !!entry.single;
                     (entry.reactions || []).forEach(r => addReactionRow(list, r));
-                    wrap.querySelector('[data-add-reaction]').addEventListener('click', () => {
+                    wrap.querySelector('[data-add-reaction]')!.addEventListener('click', () => {
                         addReactionRow(list);
                     });
                 }
@@ -1331,7 +1432,7 @@ function renderEmbedSection(container, messageConfigs) {
     }
 }
 
-async function apiSendEmbed(guildId, embedName, config) {
+async function apiSendEmbed(guildId: string, embedName: string, config: MessageConfig): Promise<SyncResult> {
     const res = await fetch(`/api/sendembed`, {
         method: 'POST',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
@@ -1348,16 +1449,16 @@ async function apiSendEmbed(guildId, embedName, config) {
 function initTabs() {
     const tabs = document.querySelectorAll('.tab-btn:not(.subtab-btn)');
     const tabContents = document.querySelectorAll('.tab-content');
-    const tabBar = document.getElementById('tabBar');
-    const hamburgerBtn = document.getElementById('hamburgerBtn');
+    const tabBar = document.getElementById('tabBar')!;
+    const hamburgerBtn = document.getElementById('hamburgerBtn')!;
 
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
             tabs.forEach(item => item.classList.remove('tab-btn-active'));
             tabContents.forEach(content => content.classList.add('hidden'));
 
-            const targetId = tab.getAttribute('data-target');
-            document.getElementById(targetId).classList.remove('hidden');
+            const targetId = tab.getAttribute('data-target')!;
+            document.getElementById(targetId)!.classList.remove('hidden');
             tab.classList.add('tab-btn-active');
 
             // Close the mobile dropdown after picking a tab. No-op on desktop —
@@ -1372,7 +1473,7 @@ function initTabs() {
         hamburgerBtn.setAttribute('aria-expanded', String(isOpen));
     });
 
-    document.getElementById('modChannelsTab').click();
+    document.getElementById('modChannelsTab')!.click();
 }
 
 function initSubtabs() {
@@ -1385,15 +1486,15 @@ function initSubtabs() {
             subtabContents.forEach(content => content.classList.add('hidden'));
 
             const targetId = tab.getAttribute('data-subtarget');
-            document.getElementById(targetId).classList.remove('hidden');
+            document.getElementById(targetId!)!.classList.remove('hidden');
             tab.classList.add('tab-btn-active');
         });
     });
 }
 // --- Wiring --------------------------------------------------------------------
-elements.guildSelect.addEventListener('change', async () => { await loadSelectedGuild() });
-elements.loginBtn.addEventListener('click', () => { window.location.href = `/api/auth/discord/login`; });
-elements.logoutBtn.addEventListener('click', async () => {
+elements.guildSelect!.addEventListener('change', async () => { await loadSelectedGuild() });
+elements.loginBtn!.addEventListener('click', () => { window.location.href = `/api/auth/discord/login`; });
+elements.logoutBtn!.addEventListener('click', async () => {
     await fetch(`/api/auth/logout`, { method: 'POST', credentials: 'include' });
     currentUser = null;
     currentRole = null;
