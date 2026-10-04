@@ -26,6 +26,6 @@
   },
   "scripts": {
     "dev:css": "bunx @tailwindcss/cli -i ./input.css -o ./dist/output.css --watch=always --minify",
-    "get-token": "bun run twitch/gettoken.ts"
+    "get-token": "bun run gettoken.ts"
   }
 }
