@@ -1,4 +1,4 @@
-import type { APIEmbed, APIEmbedField, APIRole, ComponentType as DiscordComponentType } from 'discord-api-types/v10';
+import type { APIEmbed, APIEmbedField, APIRole, APIRoleColors, APIUser, ComponentType as DiscordComponentType } from 'discord-api-types/v10';
 
 // Only a handful of ids are needed at runtime. Importing the real enum would bundle all of
 // discord-api-types (~200 KB) into the browser script. `satisfies` makes tsc verify every
@@ -30,7 +30,7 @@ interface V2ApiComponent {
     [key: string]: unknown;
 }
 interface MessageConfig {
-    channelid: string;
+    channelid?: string;
     format: 'v1' | 'v2';
     embeds?: APIEmbed[];
     components?: V2ApiComponent[];
@@ -51,30 +51,29 @@ interface GuildConfigDoc {
     publicChannels?: Record<string, string>;
     generalchannels?: string[];
     reactions?: Record<string, string | string[]>;
+    guildRoles?: APIRole[]
     responses?: Record<string, string>;
     automodsettings?: AutomodSettings;
     messageConfigs?: Record<string, MessageConfig>;
     // added by GET /api/guilds/:guildId
     _viewerRole: Role;
-    guildRoles: APIRole[];
     guildChannels: GuildChannel[];
     rules: AutomodRule[];
+    staffRoles: APIRole[]
 }
 type SyncResult = { status: 'sent' | 'updated'; messageId: string; changed?: boolean }; // syncEmbed()
 type GuildFormValues = ReturnType<typeof getFormValues>; // body for PUT /api/guilds/:guildId
 
 // --- State -------------------------------------------------------------------
-let currentConfig: GuildConfigDoc | null = null; // the config currently loaded/rendered
 let currentGuildId: string | null = null;
-let currentUser: { userId: string; username: string } | null = null;
+let currentUser: string | null = null;
 let currentRole: Role | null = null;
 let messageConfigsDraft: Record<string, MessageConfig> = {}; // working copy of ALL embeds; only the selected one is shown in the form at a time
 let activeEmbedKey = '';
-let guildRoles = new Map<string, Role>(); // guildId -> role
 let currentAutomodRules: AutomodRule[] = [];
-let currentGuildRoles: APIRole[] = [];
+let currentGuildRoles: APIRole[] = []
 let currentGuildChannels: GuildChannel[] = [];
-const guilds = new Map<string, GuildConfigDoc>();
+let staffRoles: APIRole[] = []
 
 function el<T extends HTMLElement = HTMLElement>(id: string): T {
     const node = document.getElementById(id);
@@ -120,11 +119,8 @@ const rolePickers = {
     mod: makeRolePicker(elements.modRoleInput),
     jr: makeRolePicker(elements.jrRoleInput),
 };
-const PERMISSIONS = { Administrator: 1n << 3n, ModerateMembers: 1n << 40n, };
-function hasPermission(permissions: string, flag: bigint) {
-    const bits = BigInt(permissions);
-    return (bits & flag) === flag || (bits & PERMISSIONS.Administrator) === PERMISSIONS.Administrator;
-}
+
+
 function setDisabledState(el: HTMLButtonElement | HTMLSelectElement, isDisabled: boolean) {
     el.disabled = isDisabled;
     el.classList.toggle('cursor-not-allowed', isDisabled);
@@ -153,26 +149,13 @@ function buildChannelOptionsHtml(selectedId: string) {
     }
     return html;
 }
-function renderAuthUI() {
-    const { loginBtn, logoutBtn, authStatus } = elements;
-    if (currentUser) {
-        loginBtn.classList.add('hidden');
-        logoutBtn.classList.remove('hidden');
-        authStatus.textContent = `Logged in as ${currentUser.username}`;
-    } else {
-        loginBtn.classList.remove('hidden');
-        logoutBtn.classList.add('hidden');
-        authStatus.textContent = 'Not logged in';
-    }
-}
 function addReactionRow(list: HTMLElement, reaction: ReactionRole = { emoji: '', roleId: '' }) {
     if (list.children.length >= 20) {
         showMessage('Discord messages can only track up to 20 distinct reactions.', 'bg-yellow-500');
         return;
     }
-    const optionsHtml = currentGuildRoles
-        .map(role => `<option value="${role.id}" style="color:${roleColorHex(role.color)}" ${role.id === reaction.roleId ? 'selected' : ''}>@${role.name}</option>`)
-        .join('');
+    const optionsHtml = currentGuildRoles!
+        .map(role => `<option value="${role.id}" style="color:${roleColorHex(role.colors)}" ${role.id === reaction.roleId ? 'selected' : ''}>@${role.name}</option>`).join('');
     const row = document.createElement('div');
     row.classList.add('row', 'gap-2');
     row.innerHTML = `
@@ -186,21 +169,19 @@ function addReactionRow(list: HTMLElement, reaction: ReactionRole = { emoji: '',
     list.appendChild(row);
 }
 async function refreshAuthStatus() {
+    const { loginBtn, logoutBtn, authStatus } = elements;
     const response = await fetch(`/api/auth/me`, { credentials: 'include' });
-    const res: { loggedIn: boolean; userId?: string } = await response.json();
-    if (res.loggedIn && res.userId) {
-        // Fall back to the id if the user lookup fails (the endpoint 404s with { error } when it can't resolve them).
-        const user = { userId: res.userId, username: res.userId };
-        currentUser = user;
-        try {
-            const userRes = await fetch(`/api/discord/users/${res.userId}`, { method: 'GET', credentials: 'include' });
-            if (userRes.ok) user.username = (await userRes.json()).username ?? res.userId;
-        } catch { /* keep the id fallback */ }
+    const res: { user: APIUser, loggedIn: boolean; } = await response.json();
+    if (res.loggedIn && res.user) {
+        currentUser = res.user.username;
+        loginBtn.classList.add('hidden');
+        logoutBtn.classList.remove('hidden');
+        authStatus.textContent = `Logged in as ${currentUser}`;
     } else {
-        currentUser = null;
+        loginBtn.classList.remove('hidden');
+        logoutBtn.classList.add('hidden');
+        authStatus.textContent = 'Not logged in';
     }
-    renderAuthUI();
-    return currentUser;
 }
 // --- API helpers ---------------------------------------------------------
 
@@ -242,9 +223,9 @@ async function apiDeleteEmbed(embedKey: string) {
     }
     return res.json();
 }
-function roleColorHex(colorInt: number) {
+function roleColorHex(colorInt: APIRoleColors) {
     if (!colorInt) return '#b9bbbe';
-    return `#${colorInt.toString(16).padStart(6, '0')}`;
+    return `#${colorInt.primary_color.toString(16).padStart(6, '0')}`;
 }
 
 // Wraps a hidden <input id="..."> with a Discord-style colored dropdown button/menu.
@@ -262,7 +243,7 @@ function makeRolePicker(hiddenInput: HTMLInputElement) {
     function renderLabel() {
         const role = roleLookup.get(backingValue);
         label.textContent = role ? `@${role.name}` : '-- Select a role --';
-        label.style.color = role ? roleColorHex(role.color) : '';
+        label.style.color = role ? roleColorHex(role.colors) : '';
     }
 
     Object.defineProperty(hiddenInput, 'value', {
@@ -288,7 +269,6 @@ function makeRolePicker(hiddenInput: HTMLInputElement) {
     function setRoles(roles: APIRole[]) {
         roleLookup = new Map(roles.map(r => [r.id, r]));
         menu.innerHTML = '';
-
         const blank = document.createElement('div');
         blank.className = 'px-3 py-2 cursor-pointer hover:bg-gray-700 text-gray-400';
         blank.textContent = '-- Select a role --';
@@ -299,7 +279,7 @@ function makeRolePicker(hiddenInput: HTMLInputElement) {
             const item = document.createElement('div');
             item.className = 'px-3 py-2 cursor-pointer hover:bg-gray-700';
             item.textContent = `@${role.name}`;
-            item.style.color = roleColorHex(role.color);
+            item.style.color = roleColorHex(role.colors);
             item.addEventListener('click', () => { hiddenInput.value = role.id; closeMenu(); });
             menu.appendChild(item);
         });
@@ -368,10 +348,7 @@ const OPTIONAL_EMBED_FIELDS: { key: OptionalEmbedKey; label: string; render: (em
             <button type="button" class="add-btn" data-add-reaction>Add Reaction</button>`,
     }
 ];
-
-function blankEmbed(): APIEmbed {
-        return { title: '', description: '', author: { name: '' } };
-}
+function blankEmbed(): APIEmbed { return { title: '', description: '', author: { name: '' } }; }
 
 // --- Components V2 Builder ---------------------------------------------------
 
@@ -480,7 +457,7 @@ function renderV2Builder(formContainer: HTMLFormElement, entry: MessageConfig) {
     // v2ApiToNode returns null for component types the builder can't edit; drop them instead of crashing the render
     const tree = (entry.components || []).map(v2ApiToNode).filter((n): n is V2Node => n !== null);
     const commit = () => {
-        messageConfigsDraft[activeEmbedKey] = { ...messageConfigsDraft[activeEmbedKey], components: tree.map(v2NodeToApi) };
+        messageConfigsDraft[activeEmbedKey] = { ...messageConfigsDraft[activeEmbedKey], components: tree.map(v2NodeToApi), format: "v2" };
     };
 
     formContainer.innerHTML = `
@@ -493,7 +470,7 @@ function renderV2Builder(formContainer: HTMLFormElement, entry: MessageConfig) {
         </div>
     `;
     formContainer.querySelector('[data-embed-field="channelid"]')!.addEventListener('input', (e) => {
-        messageConfigsDraft[activeEmbedKey] = { ...messageConfigsDraft[activeEmbedKey], channelid: (e.target as HTMLInputElement).value.trim() };
+        messageConfigsDraft[activeEmbedKey] = { ...messageConfigsDraft[activeEmbedKey], channelid: (e.target as HTMLInputElement).value.trim(), format: 'v2' };
     });
 
     const treeRoot = formContainer.querySelector('#v2TreeRoot') as HTMLElement;
@@ -806,7 +783,8 @@ function getSectionValues(container: HTMLElement, type: SectionType) {
 
         return values;
 }
-function createChannelInput(container: HTMLElement, name = '', value: string | string[] = '', type: SectionType) {
+function
+    createChannelInput(container: HTMLElement, name = '', value: string | string[] = '', type: SectionType) {
         const div = document.createElement('div');
         div.classList.add('row');
 
@@ -818,8 +796,7 @@ function createChannelInput(container: HTMLElement, name = '', value: string | s
     if (isReaction) {
         const selectedIds = Array.isArray(value) ? value : (value ? value.split(',').map(v => v.trim()) : []);
         const optionsHtml = currentGuildRoles
-            .map(role => `<option value="${role.id}" style="color:${roleColorHex(role.color)}" ${selectedIds.includes(role.id) ? 'selected' : ''}>@${role.name}</option>`)
-            .join('');
+            .map(role => `<option value="${role.id}" style="color:${roleColorHex(role.colors)}" ${selectedIds.includes(role.id) ? 'selected' : ''}>@${role.name}</option>`).join('');
 
         div.innerHTML = `
         <input type="text" placeholder="${namePlaceholder}" value="${name}" class="channel-row" data-channel-name="${type}">
@@ -1015,19 +992,24 @@ async function refreshGuildSelect() {
     try {
         const resGuilds = await fetch(`/api/guilds`, { headers: authHeaders(), credentials: 'include' });
         if (!resGuilds.ok) throw new Error(`Failed to list guilds (${resGuilds.status})`);
+        if (resGuilds.status === 401) {
+            currentUser = null;
+            elements.loginBtn.classList.remove('hidden');
+            elements.logoutBtn.classList.add('hidden');
+            elements.authStatus.textContent = 'Not logged in'; return;
+        }
         const summaries: GuildSummary[] = await resGuilds.json();
-        guildRoles = new Map(summaries.map((g): [string, Role] => [g.guildId, g.role]));
         summaries
             .sort((a, b) => a.guildId.localeCompare(b.guildId))
             .forEach(g => {
                 const option = document.createElement('option');
                 option.value = g.guildId;
-                option.textContent = `${g.name || g.guildId} (${g.role})`;
+                option.textContent = `${g.name} (${g.role})`;
                 guildSelect.appendChild(option);
             });
 
         guildSelect.value = summaries.some(g => g.guildId === selectedValue) ? selectedValue : '';
-        if (summaries.length === 0) showMessage('No guilds found where you hold the admin or mod role.', 'bg-yellow-500');
+        if (summaries.length === 0) { showMessage('No guilds found where you hold the admin or mod role.', 'bg-yellow-500'); return; }
         addServerBtn.classList.remove('hidden');
     } catch (error) {
         showMessage(`Could not reach the config API: ${errMsg(error)}`, 'bg-red-500');
@@ -1035,11 +1017,9 @@ async function refreshGuildSelect() {
     await loadSelectedGuild();
 }
 function setGuildRoles(roles: APIRole[]) {
-    currentGuildRoles = (roles || []).slice().sort((a, b) => b.position - a.position);
-    const staffEligible = currentGuildRoles.filter(role => hasPermission(role.permissions, PERMISSIONS.ModerateMembers));
-    rolePickers.admin.setRoles(staffEligible);
-    rolePickers.mod.setRoles(staffEligible);
-    rolePickers.jr.setRoles(staffEligible);
+    rolePickers.admin.setRoles(roles);
+    rolePickers.mod.setRoles(roles);
+    rolePickers.jr.setRoles(roles);
 }
 async function loadSelectedGuild() {
     const { guildSelect, deleteConfigBtn, addServerBtn, orText, saveConfigBtn, exportConfigBtn, buttonColumnText, channelsContainer, adminRoleInput, modRoleInput, jrRoleInput } = elements;
@@ -1051,7 +1031,7 @@ async function loadSelectedGuild() {
     orText.classList.toggle('hidden', !!currentGuildId)
     channelsContainer.classList.toggle('hidden', !currentGuildId)
     if (!currentGuildId) {
-        currentConfig = currentRole = null;
+        currentRole = null;
         currentGuildChannels = [];
         currentGuildRoles = [];
         currentAutomodRules = [];
@@ -1065,23 +1045,19 @@ async function loadSelectedGuild() {
             exportConfigBtn.classList.remove('hidden');
             buttonColumnText.textContent = '';
         try {
-            // Always fetch fresh — a stale in-memory cache here previously meant
-            // out-of-band DB edits (e.g. via Compass) wouldn't show up until a hard reload.
             const res = await fetch(`/api/guilds/${encodeURIComponent(currentGuildId)}`, { method: 'GET', headers: authHeaders(), credentials: 'include', cache: 'no-store' });
             if (!res.ok) throw new Error(`Failed to load guild ${currentGuildId} (${res.status})`);
             const doc: GuildConfigDoc = await res.json();
-            guilds.set(currentGuildId, doc)
-            currentConfig = doc;
-
-            currentAutomodRules = currentConfig.rules
-            currentRole = currentConfig._viewerRole || guildRoles.get(currentGuildId) || null;
-            currentGuildChannels = currentConfig.guildChannels || [];
-            setGuildRoles(currentConfig.guildRoles)
-            renderConfig(currentConfig);
-            const [adminRole = '', modRole = '', jrRole = ''] = currentConfig.staffroles || [];
-            adminRoleInput.value = adminRole;
-            modRoleInput.value = modRole;
-            jrRoleInput.value = jrRole;
+            currentAutomodRules = doc.rules
+            currentRole = doc._viewerRole || null;
+            currentGuildChannels = doc.guildChannels || [];
+            staffRoles = doc.staffRoles
+            currentGuildRoles = doc.guildRoles!
+            setGuildRoles(staffRoles)
+            renderConfig(doc);
+            adminRoleInput.value = doc.staffroles![0] ?? '';
+            modRoleInput.value = doc.staffroles![1] ?? '';
+            jrRoleInput.value = doc.staffroles![2] ?? '';
         } catch (error) {
             showMessage(`Failed to load config: ${errMsg(error)}`, 'bg-red-500');
         }
@@ -1498,9 +1474,11 @@ elements.logoutBtn!.addEventListener('click', async () => {
     await fetch(`/api/auth/logout`, { method: 'POST', credentials: 'include' });
     currentUser = null;
     currentRole = null;
-    currentConfig = null;
     currentGuildId = null;
-    renderAuthUI();
+    const { loginBtn, logoutBtn, authStatus } = elements;
+    loginBtn.classList.remove('hidden');
+    logoutBtn.classList.add('hidden');
+    authStatus.textContent = 'Not logged in';
     await refreshGuildSelect();
     await loadSelectedGuild();
     applyRolePermissions();
