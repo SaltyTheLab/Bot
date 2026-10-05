@@ -5,10 +5,9 @@ import { ApiClient } from '@twurple/api'
 import { EventSubWsListener } from '@twurple/eventsub-ws'
 import { ChatClient } from '@twurple/chat';
 import { RefreshingAuthProvider } from '@twurple/auth';
-import { ComponentType, ButtonStyle, MessageType, ActivityType, PresenceUpdateStatus, Client, Options, Role, Routes, Partials, GatewayIntentBits, TextChannel, MessageFlags, type AnyComponentV2, subtext, GuildMember, GuildMemberFlags, Invite, type APIMessage } from 'discord.js'
+import { ComponentType, ButtonStyle, MessageType, ActivityType, PresenceUpdateStatus, Client, Options, Role, Routes, Partials, GatewayIntentBits, TextChannel, MessageFlags, type AnyComponentV2, subtext, GuildMember, GuildMemberFlags, Invite, type APIMessage, SectionBuilder, TextDisplayBuilder, ContainerBuilder, ButtonBuilder, ThumbnailBuilder } from 'discord.js'
 import { createHash } from 'crypto'
 interface xp { Id: string | GuildMember; channel?: TextChannel | string; guildId?: string };
-
 type DbInvite = Record<string, { uses: number; id: string; code: string }>;
 process.on("uncaughtException", async (err: any) => {
     const intpid = parseInt(await Bun.file("./interpid.txt").text())
@@ -26,41 +25,39 @@ process.on("unhandledRejection", async (reason: any) => {
     Bun.spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", "C:\\Users\\micha\\Desktop\\Bot\\restart.ps1", "-BotPid", `${process.pid}`, "-intpid", `${intpid}`], { stderr: "pipe", stdout: 'pipe', stdin: 'pipe' });
 });
 const authProvider = new RefreshingAuthProvider({ clientId: Bun.env.TWITCH_ID!, clientSecret: Bun.env.TWITCH_SECRET! });
-const doc = await ws.findOne({}, { projection: { twitchbot: 1, twitchaccess: 1, twitchrefresh: 1, twitchexpires: 1, twitchobtained: 1 } }) as any;
-if (!doc?.twitchbot) throw new Error('No Twitch bot tokens found — run get-token.ts first.');
-authProvider.addUser(doc.twitchbot, { accessToken: doc.twitchaccess, scope: ['chat:read'], refreshToken: doc.twitchrefresh, expiresIn: doc.twitchexpires, obtainmentTimestamp: doc.twitchobtained, }, ['chat']);
-
+const doc = await ws.findOne({}, { projection: { twitchaccess: 1, twitchrefresh: 1, twitchexpires: 1, twitchobtained: 1 } }) as any;
+if (!doc?.twitchaccess) throw new Error('No Twitch bot tokens found — run get-token.ts first.');
+authProvider.addUser("901114331", { accessToken: doc.twitchaccess, scope: ['chat:read', 'chat:edit'], refreshToken: doc.twitchrefresh, expiresIn: doc.twitchexpires, obtainmentTimestamp: doc.twitchobtained, }, ['chat']);
 authProvider.onRefresh(async (userId, newTokenData) => {
-    await ws.updateOne({}, { $set: { twitchaccess: newTokenData.accessToken, twitchrefresh: newTokenData.refreshToken, twitchexpires: newTokenData.expiresIn, twitchobtained: Date.now() } });
+    await ws.updateOne({}, { $set: { twitchaccess: newTokenData.accessToken, twitchrefresh: newTokenData.refreshToken, twitchexpires: newTokenData.expiresIn, twitchobtained: newTokenData.obtainmentTimestamp } });
 });
+authProvider.onRefreshFailure((userId, error) => { appendFile("./log.log", `[twitch] token refresh failed for ${userId}: ${error.message} @ ${Date.now()}\n`) })
 
-const apiClient = new ApiClient({ authProvider });
+const apiClient = new ApiClient({ authProvider: authProvider });
 const BROADCASTER_ID = '901114331';
-const twitchChatClient = new ChatClient({ authProvider, channels: ['saltytbsl'] });
+const twitchChatClient = new ChatClient({ authProvider: authProvider, channels: ['saltytbsl'] });
 twitchChatClient.onMessage(async (channel, user, text) => {
-    if (text.includes('!lvl')) {
+    if (text.startsWith('!lvl')) {
         const doc = await usersCollection.findOne({ twitchChannelLogin: user }, { projection: { xp: 1, level: 1, } }) as any;
-        if (!doc) { twitchChatClient!.say(channel!, "Your Twitch channel is not linked, please link it using /link in my server"); return; }
+        if (!doc) { twitchChatClient!.say(channel, "Your Twitch channel is not linked, please link it using /link in my server"); return; }
         const { level, xp } = doc as any
-        twitchChatClient!.say(channel!, `<@${user}>, your level is currently ${level}, with ${xp} xp.`)
-        return;
+        await twitchChatClient!.say(channel, `@${user}, your level is currently ${level}, with ${xp} xp.`)
     }
-    if (text.includes("!discord")) {
-        twitchChatClient!.say(channel!, "I have a discord at https://discord.gg/f7ru3KcPy5")
-        return;
-    }
+    else if (text.startsWith("!discord")) {
+        await twitchChatClient!.say(channel, "I have a discord at https://discord.gg/f7ru3KcPy5")
+    } else
     grantXp({ Id: user, guildId: "1231453115937587270" })
 });
+twitchChatClient.onMessageFailed((channel, reason) => console.log('[twitch] message failed', channel, reason));
+twitchChatClient.onMessageRatelimit((channel, msg) => console.log('[twitch] ratelimited', channel, msg));
 function connectTwitchChat() {
     if (!twitchChatClient.isConnected) { twitchChatClient.connect(); }
     appendFile("./log.log", `[twitch] chat connected @ ${Date.now()}\n`);
 }
-const eventSubListener = new EventSubWsListener({ apiClient });
+const eventSubListener = new EventSubWsListener({ apiClient: apiClient });
 eventSubListener.start();
 eventSubListener.onStreamOnline(BROADCASTER_ID, () => connectTwitchChat());
-eventSubListener.onStreamOffline(BROADCASTER_ID, () => {
-    twitchChatClient.quit(); appendFile("./log.log", `[twitch] chat disconnected @ ${Date.now()}\n`);
-});
+eventSubListener.onStreamOffline(BROADCASTER_ID, () => { twitchChatClient.quit(); appendFile("./log.log", `[twitch] chat disconnected @ ${Date.now()}\n`); });
 if (await apiClient.streams.getStreamByUserId(BROADCASTER_ID)) connectTwitchChat();
 async function grantXp({ Id, channel, guildId }: xp) {
         const { baseMultiplier, exponent, flatOffset, roundToNearest } = await guildconfigs.findOne({ guildId: guildId }, { projection: { baseMultiplier: 1, exponent: 1, flatOffset: 1, roundToNearest: 1 } }
@@ -78,7 +75,7 @@ async function grantXp({ Id, channel, guildId }: xp) {
                 channel!.send({ embeds: [{ author: { name: Id?.user.username, icon_url: Id.user.avatarURL() ?? Id.user.defaultAvatarURL }, color: 0x00AE86, footer: { text: `${Id!.user.username} reached level ${level + 1}! You are now #${rank + 1} in the server` } }] })
             }
             else {
-                twitchChatClient!.say(channel! as string, `<@${Id}> reached level ${level + 1}! You are now #${rank + 1}!`)
+                twitchChatClient!.say(channel! as string, `@${Id} reached level ${level + 1}! You are now #${rank + 1}!`)
             }
         }
 }
@@ -91,20 +88,19 @@ const client = new Client({
     sweepers: { ...Options.DefaultSweeperSettings }
 });
 async function inactiveusers() {
-    const list = await usersCollection.find({ level: 1, totalmessages: 0, guildId: '1231453115937587270' }, { projection: { userId: 1, _id: 0 } }).toArray()
-    const userIds: string[] = list.map(doc => doc.userId);
-    for (const id of userIds) {
-        let member: null | GuildMember = null
+    const list = await usersCollection.find({ level: 1, totalmessages: 0, guildId: '1231453115937587270' }, { projection: { userId: 1, _id: 0, verified: 1, totalmessages: 1 } }).toArray()
+    const entries: Array<{ userId: string, verified: boolean, totalmessages: number }> = list.map(doc => { return { userId: doc.userId, verified: doc.verified, totalmessages: doc.totalmessages } });
+    for (const { verified, userId, totalmessages } of entries) {
         try {
-            member = await client.rest.get(Routes.guildMember('1231453115937587270', id)) as GuildMember;
-            if (member?.roles.cache.size === 0)
-                await client.rest.delete(Routes.guildMember('1231453115937587270', id))
+            if (!verified || totalmessages == 0) {
+                await client.rest.delete(Routes.guildMember('1231453115937587270', userId))
+                usersCollection.deleteOne({ userId: userId })
+                await Bun.sleep(750);
+            }
         } catch {
-            appendFile("./log.log", `${id} is no longer in guild.`)
+            appendFile("./log.log", `${userId} is no longer in guild.`)
         }
-        await Bun.sleep(750);
     }
-    await usersCollection.deleteMany({ guildId: '1231453115937587270', userId: { $in: userIds } });
 }
 await Bun.write("./pid.txt", String(process.pid))
 Bun.cron("0 0 * * 0", async () => { await inactiveusers() })
@@ -185,46 +181,26 @@ client.on('autoModerationActionExecution', async (action) => {
         .map((p: any, idx: number) => p.refrence ? `[Case ${idx + 1}](${p.refrence})` : null)
         .filter(Boolean);
     let dm = true
-    try {
-        user!.send({
-            flags: MessageFlags.IsComponentsV2,
-            components: [
-                {
-                    type: ComponentType.Container,
-                    accent_color: statusMap[warnType]!.color,
-                    components: [
-                        {
-                            type: ComponentType.Section,
-                            components: [
-                                {
-                                    type: ComponentType.TextDisplay,
-                                    content: `<@${user!.id}>,${statusMap[warnType]!.dm} ${warnType === 'Ban' ? ` [${guild.name}](https://discord.com/channels/${guild.id}). To appeal this decision, please join our dedicated appeal server using the button below.` : warnType === 'Mute' ? `\`${durationStr}\` in ${guild.name}` : `in ${guild.name}`}`
-                                }
-                            ],
-                            accessory: { type: ComponentType.Thumbnail, media: { url: guild.iconURL()! } }
-                        },
-                        {
-                            type: ComponentType.TextDisplay,
-                            content: `Reason: \`${reason}\` ${(['Ban', 'Kick'].includes(warnType)) ? '' : `Punishment: \`${!bannable ? totalWeight : 1} warn\`${durationStr ? `, \`${durationStr}\`` : ''}\nActive Warnings:\`${totalWarns}\`\nWarn expires: <t:${Math.floor((Date.now() + 86400000) / 1000)}:F>`}`
-                        },
-                        ...(warnType == 'Ban' ? [{
-                            type: ComponentType.Section as const,
-                            components: [{
-                                type: ComponentType.TextDisplay as const,
-                                content: 'Click on the right side/below to go to the server:'
-                            }],
-                            accessory: {
-                                type: ComponentType.Button as const,
-                                style: ButtonStyle.Link as const,
-                                label: "Appeal",
-                                url: 'https://discord.gg/qMjjyXyYbr'
-                            }
-                        }] : [])],
-                }]
-        })
-    } catch {
-        dm = false;
-    }
+    const section = new SectionBuilder()
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(`<@${user!.id}>,${statusMap[warnType]!.dm} ${warnType === 'Ban' ? ` [${guild.name}](https://discord.com/channels/${guild.id}). To appeal this decision, please join our dedicated appeal server using the button below.` : warnType === 'Mute' ? `\`${durationStr}\` in ${guild.name}` : `in ${guild.name}`}`))
+        .setThumbnailAccessory(new ThumbnailBuilder({ media: { url: guild.iconURL()! } }))
+
+    const section2 = new SectionBuilder()
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent('Click on the right side/below to go to the server:'))
+        .setButtonAccessory(new ButtonBuilder({
+            type: ComponentType.Button as const,
+            style: ButtonStyle.Link,
+            label: "Appeal",
+            url: 'https://discord.gg/qMjjyXyYbr'
+        }))
+    const container = new ContainerBuilder()
+        .setAccentColor(statusMap[warnType]!.color)
+        .addSectionComponents(section)
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(`Reason: \`${reason}\` ${(['Ban', 'Kick'].includes(warnType)) ? '' : `Punishment: \`${!bannable ? totalWeight : 1} warn\`${durationStr ? `, \`${durationStr}\`` : ''}\nActive Warnings:\`${totalWarns}\`\nWarn expires: <t:${Math.floor((Date.now() + 86400000) / 1000)}:F>`}`))
+    warnType == 'Ban' ? container.addSectionComponents(section2) : null
+
+    try { user!.send({ flags: MessageFlags.IsComponentsV2, components: [container.toJSON()] }) }
+    catch { dm = false; }
     switch (warnType) {
         case 'Ban':
             await guildconfigs.updateOne({ guildId: guild.id }, { $set: { Ban: user!.id } });
@@ -328,6 +304,7 @@ client.on('guildMemberAdd', async (member) => {
     const inviter: string | undefined | { uses: number; id: string; code: string } = invite instanceof Invite ? invite?.inviter?.id : invite && invite satisfies DbInvite ? invite!.id : undefined;
     const originalMessage = await client.rest.post(Routes.channelMessages(welcomeChannel), {
         body: {
+            allowed_mentions: { "parse": [] },
             flags: MessageFlags.IsComponentsV2,
             components: [{
                 type: ComponentType.Container, accent_color: 0x00FF99,
@@ -382,7 +359,7 @@ client.on('guildMemberAdd', async (member) => {
         await appendFile("./log.log", `[Member Add] Error: ${user.id} does not have dms open/channel cannot be created.`)
     }
     if (!flags.has(GuildMemberFlags.DidRejoin) && !user.bot) {
-        await usersCollection.insertOne({ userId: user.id, guildId: guild.id, level: 1, coins: 100, xp: 0, totalmessages: 0, punishments: [], notes: [], blacklist: [], avatar: user.avatarURL() ?? user.defaultAvatarURL, total: 0, mediaCount: 0, duplicateCounts: {}, timestamps: [], nick: user.username, lastmessage: null, joinedTime: joinedTimestamp })
+        await usersCollection.insertOne({ userId: user.id, guildId: guild.id, level: 1, coins: 100, xp: 0, totalmessages: 0, punishments: [], notes: [], blacklist: [], avatar: user.avatarURL() ?? user.defaultAvatarURL, total: 0, mediaCount: 0, duplicateCounts: {}, timestamps: [], nick: user.username, lastmessage: null, joinedTime: joinedTimestamp, verified: false })
     } else {
             if (guild.id == "1231453115937587270")
                 await client.rest.put(Routes.guildMemberRole(guild.id, user.id, `1463354464747524136`))
@@ -442,7 +419,8 @@ client.on('guildMemberAdd', async (member) => {
                                     type: ComponentType.Button,
                                     style: ButtonStyle.Danger,
                                     custom_id: `ban_${user.id}_${invite && inviter ? invite?.code : 'none'}`,
-                                    label: `🔨 ${invite ? `Ban & Delete Invite` : 'Ban'}`
+                                    label: `🔨 ${invite ? `Ban & Delete Invite` : 'Ban'}`,
+                                    disabled: true
                                 }
                             }]
                     }]
@@ -508,8 +486,9 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
 client.on('guildBanAdd', async (ban) => {
     const { user, guild } = ban;
     let dmed = true;
+    await Bun.sleep(250);
     const { Ban, modChannels: { banlogChannel } } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { Ban: 1, modChannels: 1 } }) as Document
-    if (Ban === user.id) { await guildconfigs.updateOne({ guildId: guild.id }, { $set: { ban: '' } }); return; }
+    if (Ban === user.id) { await guildconfigs.updateOne({ guildId: guild.id }, { $set: { Ban: '' } }); return; }
     else {
         massban += 1;
         const { punishments } = await usersCollection.findOne({ guildId: guild.id, userId: user.id }, { projection: { punishments: 1 } }) as Document
@@ -561,7 +540,7 @@ client.on('guildBanAdd', async (ban) => {
                         },
                         components: [{
                             type: ComponentType.TextDisplay,
-                            content: `Mass Ban Detected\n**Moderator <@${sortedpunishments[0].moderatorId}> banned <@${user.id}>:\n\nID: <@${user.id}>\n\n**TAG:**${user.username}\n\n**Reason:**\`${sortedpunishments[0].reason}\`\n\n ${subtext(dmed ? 'User DMed ✅' : 'UserDmed ❌')}`,
+                            content: `Mass Ban Detected\n**Moderator <@${sortedpunishments[0].moderatorId}> banned <@${user.id}>:\n\nID: <@${user.id}>\n\n**TAG:**${user.username}\n\n**Reason:**\`${sortedpunishments[0].reason}\`\n\n-# ${dmed ? 'User DMed ✅' : 'User Dmed ❌'}`,
                         },]
                     }]
                 }]
@@ -852,7 +831,7 @@ client.on('messageCreate', async (message) => {
     } catch { dm = false; }
     switch (warnType) {
         case 'Ban':
-            await guildconfigs.updateOne({ guildId: guild.id }, { $set: { ban: author.id } });
+            await guildconfigs.updateOne({ guildId: guild.id }, { $set: { Ban: author.id } });
             await guild?.bans.create(author.id, { deleteMessageSeconds: 604800, reason: `Ban Command: ${reasonText}` })
             break;
         case 'Mute':
