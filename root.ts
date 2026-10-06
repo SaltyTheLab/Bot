@@ -581,40 +581,38 @@ client.on('inviteDelete', async (invite) => {
     await guildconfigs.updateOne({ guildId: invite.guild!.id }, { $unset: { [`Invites.${invite.code}`]: "" } });
 })
 client.on('messageReactionAdd', async (reaction, user) => {
-    const { message, emoji } = reaction;
-    if (!message.guild || user.bot) return;
-    const { messageConfigs } = await guildconfigs.findOne({ guildId: message.guild!.id }, { projection: { messageConfigs: 1 } }) as Document;
-    const config = Object.values(messageConfigs).find((info: any) => info?.messageId === message.id
-    ) as { reactions: { emoji: string; roleId: string | string[] }[]; single: boolean } | undefined;
+    if (user.bot) return;
+    if (reaction.partial) reaction = await reaction.fetch();
+    const { message: { guild, id, }, emoji } = reaction;
+    if (!guild) return;
+    const doc = await guildconfigs.findOne({ guildId: guild.id }, { projection: { messageConfigs: 1 } });
+    const config = Object.values(doc?.messageConfigs ?? {}).find((info: any) => info?.messageId === id) as { reactions: { emoji: string; roleId: string | string[] }[]; } | undefined;
     if (!config) return;
-
-    const { reactions, single } = config;
-    const entry = reactions.find(e => e.emoji === (emoji.id ?? emoji.name));
+    const { reactions } = config;
+    const entry = reactions.find(e => e.emoji === emoji.id || e.emoji == emoji.name);
     if (!entry) return;
-    const { blacklist } = await usersCollection.findOne({ userId: user.id, guildId: message.guild!.id }, { projection: { blacklist: 1 } }) as WithId<Document>;
-
     const roleIds = Array.isArray(entry.roleId) ? entry.roleId : [entry.roleId];
-    if (blacklist?.length && roleIds.some(id => blacklist.includes(id))) return;
-    const member = await message.guild.members.fetch(user.id);
-    if (single) {
-        const groupRoleIds = reactions.flatMap(r => Array.isArray(r.roleId) ? r.roleId : [r.roleId]);
-        const staleRoleIds = groupRoleIds.filter(id => !roleIds.includes(id) && member.roles.cache.get(id));
-        await Promise.all(staleRoleIds.map(id => message.member?.roles.add(id)));
+    const userDoc = await usersCollection.findOne({ userId: user.id, guildId: guild.id }, { projection: { blacklist: 1 } });
+    if (userDoc?.blacklist?.length && roleIds.some(id => userDoc.blacklist.includes(id))) {
+        await reaction.users.remove(user.id).catch(() => { }); // optional: un-react so it doesn't look like it worked
+        return;
     }
-    await Promise.all(roleIds.map(id => message.member?.roles.add(id)));
+    const member = await guild.members.fetch(user.id);
+    await member.roles.add(roleIds);
 });
 client.on('messageReactionRemove', async (reaction, user) => {
-    const { message, emoji } = reaction;
-    if (!message.guild || user.bot) return;
-    const { messageConfigs } = await guildconfigs.findOne({ guildId: message.guild!.id }, { projection: { messageConfigs: 1 } }) as Document
-    const config = Object.values(messageConfigs).find((info: any) => info.messageId === message.id) as { reactions: { emoji: string; roleId: string | string[] }[]; } ?? undefined;
+    const { message: { guild, id }, emoji } = reaction;
+    if (!guild || user.bot) return;
+    const { messageConfigs } = await guildconfigs.findOne({ guildId: guild!.id }, { projection: { messageConfigs: 1 } }) as Document
+    const config = Object.values(messageConfigs).find((info: any) => info.messageId === id) as { reactions: { emoji: string; roleId: string | string[] }[]; } ?? undefined;
     if (!config) return;
     else {
     const { reactions } = config
     const entry = reactions.find((entry: { emoji: string }) => entry.emoji === (emoji.id! ?? emoji.name!));
     if (!entry) return;
         const roleIds = Array.isArray(entry.roleId) ? entry.roleId : [entry.roleId];
-        await Promise.all(roleIds.map((id: string) => message.member?.roles.remove(id)));
+        const member = await guild.members.fetch(user.id);
+        await Promise.all(roleIds.map((id: string) => member?.roles.remove(id)));
     }
 })
 client.on('messageDelete', async (deletedData) => {
