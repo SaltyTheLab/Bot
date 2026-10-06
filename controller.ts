@@ -35,7 +35,6 @@ interface MessageConfig {
     embeds?: APIEmbed[];
     components?: V2ApiComponent[];
     reactions?: ReactionRole[];
-    single?: boolean;
     messageId?: string; // written by syncEmbed on the server
 }
 type AutomodSettings = {
@@ -340,10 +339,6 @@ const OPTIONAL_EMBED_FIELDS: { key: OptionalEmbedKey; label: string; render: (em
     {
         key: 'reactions', label: 'Reaction Roles', render: () => `
             <span class="field-label">Reaction Roles</span>
-            <span class="flex items-center gap-2 text-gray-300 text-sm mb-1">
-                <input type="checkbox" data-embed-field="single">
-                Single select (picking one removes the others)
-            </span>
             <div data-reactions-list class="space-y-2"></div>
             <button type="button" class="add-btn" data-add-reaction>Add Reaction</button>`,
     }
@@ -660,7 +655,7 @@ function syncActiveEmbedFromForm(formContainer: HTMLFormElement) {
         }
 
     const reactionsList = formContainer.querySelector('[data-reactions-list]');
-    let reactionsPatch: { reactions?: ReactionRole[]; single?: boolean } = {};
+    let reactionsPatch: { reactions?: ReactionRole[]; } = {};
     if (reactionsList) {
         const reactions = [...reactionsList.querySelectorAll<HTMLElement>('.row')]
             .map(row => ({
@@ -668,7 +663,7 @@ function syncActiveEmbedFromForm(formContainer: HTMLFormElement) {
                 roleId: row.querySelector<HTMLSelectElement>('[data-reaction-role]')!.value,
             }))
             .filter(r => r.emoji && r.roleId);
-        reactionsPatch = { reactions, single: !!get('single')?.checked };
+        reactionsPatch = { reactions };
     }
 
         const channelid = formContainer.querySelector<HTMLInputElement>('[data-embed-field="channelid"]')?.value.trim() || '';
@@ -1389,8 +1384,6 @@ function renderEmbedSection(container: HTMLElement, messageConfigs: Record<strin
 
                 if (f.key === 'reactions') {
                     const list = wrap.querySelector<HTMLElement>('[data-reactions-list]')!;
-                    const singleCheckbox = wrap.querySelector<HTMLInputElement>('[data-embed-field="single"]');
-                    if (singleCheckbox) singleCheckbox.checked = !!entry.single;
                     (entry.reactions || []).forEach(r => addReactionRow(list, r));
                     wrap.querySelector('[data-add-reaction]')!.addEventListener('click', () => {
                         addReactionRow(list);
