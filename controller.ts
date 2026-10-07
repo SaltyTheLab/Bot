@@ -391,8 +391,8 @@ function validateV2Components(components: V2ApiComponent[]) {
         if (!allowedTypes.includes(component.type)) return 'A component is in a position Discord does not allow.';
 
         if (component.type === ComponentType.TextDisplay) {
-            const content = component.content;
-            if (typeof content !== 'string' || !content.trim()) return 'Text components need non-empty content.';
+            const content = component.content as string;
+            if (!content.trim()) return 'Text components need non-empty content.';
             if (content.length > 4000) return 'Text components cannot exceed 4,000 characters.';
         } else if (component.type === ComponentType.Section) {
             if (!Array.isArray(component.components) || component.components.length < 1 || component.components.length > 3) {
@@ -416,17 +416,9 @@ function validateV2Components(components: V2ApiComponent[]) {
                 return 'Media galleries need 1 to 10 images.';
             }
             if (component.items.some(item => !item.media?.url?.trim())) return 'Every gallery item needs an image URL.';
-        } else if (component.type === ComponentType.Separator) {
-            if (component.spacing !== undefined && component.spacing !== 1 && component.spacing !== 2) {
-                return 'Separator spacing must be Small or Large.';
-            }
-            if (component.divider !== undefined && typeof component.divider !== 'boolean') {
-                return 'Separator divider must be enabled or disabled.';
-            }
-        }
+        } 
         return null;
     };
-
     for (const component of components) {
         const error = inspect(component, null);
         if (error) return error;
