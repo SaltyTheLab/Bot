@@ -1,6 +1,7 @@
 import { guildconfigs, usersCollection, logos } from "./Database";
 import { type Document, type WithId, ObjectId } from "mongodb";
 import sharp from 'sharp'
+import { SignJWT, jwtVerify } from 'jose'
 import { ed25519 } from '@noble/curves/ed25519.js'
 import { StatusCodes } from "http-status-codes";
 import { appendFile } from "node:fs/promises";
@@ -161,15 +162,7 @@ const statusMap: Record<string, { cmd: string, log: string, dm: string, color: n
     Mute: { cmd: 'was issued a mute', log: 'muted a member', dm: `you were given a`, color: 0xff4444 },
     Warn: { cmd: 'was issued a warning', log: 'warned a member', dm: `you were given a warning`, color: 0xffcc00 }
 };
-const SECRET = Bun.env.SESSION_SECRET!; // long random string in .env
-const sign = (v: string) => new Bun.CryptoHasher("sha256", SECRET).update(v).digest("base64url");
-
-function makeSessionValue(userId: string) {
-    const payload = `${userId}.${Date.now() + 24 * 60 * 60 * 1000}`;
-    return `${payload}.${sign(payload)}`;
-}
-
-
+const key = crypto.getRandomValues(new Uint8Array(32));
 function flattenLeafOptions(options: APIApplicationCommandInteractionDataOption[] | undefined): { path: string[]; leaves: APIApplicationCommandInteractionDataBasicOption[] } {
     const path: string[] = [];
     let level = options;
@@ -276,24 +269,18 @@ function highlowRow(start: number, secret: number, streak: number, pot: number, 
     return row;
 }
 const ephemeral = (content: string) => Response.json({ type: InteractionResponseType.ChannelMessageWithSource, data: { content, flags: MessageFlags.Ephemeral } });
-
-const v2 = (...parts: { toJSON(): any }[]) =>
-({ flags: MessageFlags.IsComponentsV2 as const, components: parts.map(p => p.toJSON()) });
-
+const v2 = (...parts: { toJSON(): any }[]) => ({ flags: MessageFlags.IsComponentsV2 as const, components: parts.map(p => p.toJSON()) });
 const section = (text: string, thumb: string) =>
     new SectionBuilder()
         .addTextDisplayComponents(new TextDisplayBuilder().setContent(text))
         .setThumbnailAccessory(new ThumbnailBuilder().setURL(thumb));
-
 const LOG_COLORS: Record<string, number> = { Warn: 0xffcc00, Mute: 0xff4444, Ban: 0xd10000, Kick: 0x838383 };
 const fmtDate = (ts: number) => new Date(ts).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Chicago' });
 const avatarOf = (u: { id: string; avatar: string | null }) =>
     u.avatar
         ? rest.cdn.avatar(u.id, u.avatar)
         : rest.cdn.defaultAvatar(Number((BigInt(u.id) >> 22n) % 6n));
-
-const notice = (description: string, color?: number) =>
-    new EmbedBuilder().setDescription(description).setColor(color ?? null).toJSON();
+const notice = (description: string, color?: number) => new EmbedBuilder().setDescription(description).setColor(color ?? null).toJSON();
 
 function generateButtons(board: string[], p1: string, p2: string, current: string, disabled: boolean) {
     return [0, 1, 2].map(i =>
@@ -426,34 +413,32 @@ async function runPunishment({ body, res, guildConfig }: CommandContext): Promis
     }
     return Response.json(res);
 }
-async function syncEmbed(guildId: string, embedName: string, config: { channelid: string, embeds: APIEmbed[], components: APIMessageTopLevelComponent[], reactions: string[], format: string, messageId: string }) {
+async function syncEmbed(guildId: string, embedName: string, config: { channelid: string, embeds: APIEmbed[], components: APIMessageTopLevelComponent[], reactions?: { emoji: string; roleId: string }[], format: string, messageId?: string }) {
     const { channelid, embeds, components, reactions, format, messageId: existingMessageId } = config;
     const isV2 = format === 'v2';
     const body = isV2 ? { flags: MessageFlags.IsComponentsV2, components: components } as APIMessage : { embeds: embeds, components: components } as APIMessage;
-    if (existingMessageId) {
-        try {
-            const message = await rest.get(Routes.channelMessage(channelid, existingMessageId)) as APIMessage;
-            const different = isV2 ? JSON.stringify(message.components) !== JSON.stringify(components ?? [])
-                : message.embeds.map((e) => getComparableEmbed(e)).join('|||') !== embeds.map((e) => getComparableEmbed(e)).join('|||');
-            if (different) { await rest.patch(Routes.channelMessage(channelid, message.id), { body }) }
-            await guildconfigs.updateOne({ guildId }, { $set: { [`messageConfigs.${embedName}.messageId`]: message.id } });
-            return { status: 'updated', messageId: message.id, changed: different };
-        } catch (err) {
-            let msg: APIMessage;
-            try { msg = await rest.post(Routes.channelMessages(channelid), { body }) as APIMessage }
-            catch (err) { throw err; }
-            if (reactions) {
-        for (const reaction of reactions) {
-            await rest.put(Routes.channelMessageOwnReaction(channelid, msg.id, reaction));
-            await Bun.sleep(750);
-                }
-            }
-            await guildconfigs.updateOne({ guildId }, { $set: { [`messageConfigs.${embedName}.messageId`]: msg.id } });
-            await appendFile("./log.log", `📝 Sent '${embedName}'. Message ID: ${msg.id}\n`);
-            return { status: 'sent', messageId: msg.id };
+    const sendNewMessage = async () => {
+        const message = await rest.post(Routes.channelMessages(channelid), { body }) as APIMessage;
+        await guildconfigs.updateOne({ guildId }, { $set: { [`messageConfigs.${embedName}.messageId`]: message.id } });
+        for (const reaction of reactions || []) {
+            await rest.put(Routes.channelMessageOwnReaction(channelid, message.id, reaction.emoji));
         }
-    }
+        await appendFile("./log.log", `📝 Sent '${embedName}'. Message ID: ${message.id}\n`);
+        return { status: 'sent', messageId: message.id };
+    };
+    if (!existingMessageId) return sendNewMessage();
 
+    let message: APIMessage;
+    try {
+        message = await rest.get(Routes.channelMessage(channelid, existingMessageId)) as APIMessage;
+    } catch {
+        return sendNewMessage();
+    }
+    const different = isV2 ? JSON.stringify(message.components) !== JSON.stringify(components ?? [])
+        : message.embeds.map((e) => getComparableEmbed(e)).join('|||') !== embeds.map((e) => getComparableEmbed(e)).join('|||');
+    if (different) await rest.patch(Routes.channelMessage(channelid, message.id), { body });
+    await guildconfigs.updateOne({ guildId }, { $set: { [`messageConfigs.${embedName}.messageId`]: message.id } });
+    return { status: 'updated', messageId: message.id, changed: different };
 }
 async function withGuards({ body, res, guildConfig, restrictedToFullMod = false }: CommandContext): Promise<Response | void> {
     const { member, data: { options, resolved } } = body;
@@ -1240,24 +1225,21 @@ const corsHeaders = {
     "Access-Control-Allow-Origin": Bun.env.CONFIGURATOR_ORIGIN!, "Access-Control-Allow-Methods": "GET, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type", "Access-Control-Allow-Credentials": "true",
 };
-const oauthStates = new Map<string, number>();
-function getSession(req: Bun.BunRequest) {
-    const [userId, expires, sig] = (req.cookies.get("session") ?? "").split(".");
-    if (!userId || !expires || !sig) return null;
-    const expected = sign(`${userId}.${expires}`);
-    if (sig.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
-    if (Number(expires) < Date.now()) return null;
-    return { userId };
+async function getSession(req: Bun.BunRequest) {
+    const token = req.cookies.get('session')
+    if (!token) return null
+    try {
+        const { payload } = await jwtVerify(token, key, { algorithms: ["HS256"] },)
+        return payload.sub ? { userId: payload.sub } : null;
+    } catch { return null; }
 }
-function randomToken() {
-    return crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
-}
-function roleFromStaffroles(userId: string, memberRoles: string[] | null, staffroles?: string[], ownerId?: string): "owner" | "admin" | "mod" | null {
+async function roleFromStaffroles(userId: string, guildId: string, staffroles: string[], ownerId: string): Promise<"owner" | "admin" | "mod" | null> {
     if (ownerId && userId === ownerId) return "owner"; // guild owner always has admin access, even before staffroles are configured
-    if (!memberRoles || !staffroles || staffroles.length < 2) return null;
+    if (staffroles.length < 2) return null;
     const [adminRoleId, modRoleId] = staffroles;
-    if (memberRoles.includes(adminRoleId!)) return "admin";
-    if (memberRoles.includes(modRoleId!)) return "mod";
+    const member = await rest.get(Routes.guildMember(guildId, userId)) as APIGuildMember
+    if (member.roles.includes(adminRoleId!)) return "admin";
+    if (member.roles.includes(modRoleId!)) return "mod";
     return null;
 }
 Bun.serve({
@@ -1268,18 +1250,19 @@ Bun.serve({
         "/controller.js": () => new Response(Bun.file("./dist/controller.js"), { headers: { "Content-Type": "application/javascript" } }),
         "/favicon.ico": () => new Response(null, { status: 204 }),
         "/output.css": () => new Response(Bun.file("./dist/output.css"), { headers: { "Content-Type": "text/css" } }),
-        "/api/auth/discord/login": () => {
-            const state = randomToken();
-            oauthStates.set(state, Date.now() + 5 * 60 * 1000);
+        "/api/auth/discord/login": (req) => {
+            const state = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
+            req.cookies.set("oauth_state", state, { httpOnly: true, secure: true, sameSite: "lax", path: "/", maxAge: 300, });
             const params = new URLSearchParams({ client_id: Bun.env.CLIENT_ID!, redirect_uri: Bun.env.DISCORD_REDIRECT_URI!, response_type: "code", scope: "identify", state: state });
             return new Response(null, { status: StatusCodes.MOVED_TEMPORARILY, headers: { Location: `${OAuth2Routes.authorizationURL}?${params}` } });
         },
         "/api/auth/discord/redirect": async (req) => {
             const url = new URL(req.url);
             const code = url.searchParams.get("code");
-            const state = url.searchParams.get("state");
-            if (!code || !state || !oauthStates.has(state)) return new Response("Invalid or expired OAuth state", { status: StatusCodes.BAD_REQUEST });
-            oauthStates.delete(state);
+            const state = url.searchParams.get("state")
+            const expected = req.cookies.get("oauth_state")
+            if (!code || !state || !expected || state !== expected) return new Response("Invalid OAuth state", { status: StatusCodes.BAD_REQUEST })
+            req.cookies.delete("oauth_state");
             const tokenRes = await rest.post(Routes.oauth2TokenExchange(), {
                 headers: { "Content-Type": "application/x-www-form-urlencoded" },
                 passThroughBody: true,
@@ -1291,19 +1274,15 @@ Bun.serve({
                     redirect_uri: Bun.env.DISCORD_REDIRECT_URI!,
                 })
             }) as RESTPostOAuth2AccessTokenResult;
-            const discordUser = await rest.get(Routes.user(), { auth: false, headers: { Authorization: `Bearer ${tokenRes.access_token}` } }) as APIUser | null
-            if (!discordUser) return new Response("")
-            req.cookies.set("session", makeSessionValue(discordUser.id), { httpOnly: true, secure: true, sameSite: "lax", path: "/", maxAge: 86400, });
+            const discordUser = await rest.get(Routes.user(), { auth: false, headers: { Authorization: `Bearer ${tokenRes.access_token}` } }) as APIUser
+            if (!discordUser) return new Response(null, { status: StatusCodes.GATEWAY_TIMEOUT })
+            req.cookies.set("session", await new SignJWT({}).setProtectedHeader({ alg: "HS256" }).setSubject(discordUser.id).setIssuedAt().setExpirationTime("24H").sign(key), { httpOnly: true, secure: true, sameSite: "lax", path: "/", maxAge: 86400, });
             return new Response(null, { status: StatusCodes.MOVED_TEMPORARILY, headers: { Location: "/", } });
         },
         "/api/sendembed": {
             OPTIONS: () => new Response(null, { headers: corsHeaders }),
             POST: async (req) => {
                 const { guildId, embedName, config } = await req.json();
-                const hasContent = config?.format === 'v2' ? !!config?.components : !!config?.embeds;
-                if (!config?.channelid || !hasContent) {
-                    return new Response(JSON.stringify({ error: 'Invalid embed config' }), { status: StatusCodes.BAD_REQUEST, headers: corsHeaders });
-                }
                 try {
                     const result = await syncEmbed(guildId, embedName, config);
                     return new Response(JSON.stringify(result), { headers: corsHeaders });
@@ -1318,28 +1297,20 @@ Bun.serve({
                 const { guildId, key } = req.params
                 const doc = await guildconfigs.findOne({ guildId: guildId }, { projection: { [`messageConfigs.${key}`]: 1 } }) as any;
                 const { channelid, messageId } = doc?.messageConfigs?.[key] || {};
-                if (channelid && messageId) {
-                    try {
-                        await rest.delete(Routes.channelMessage(channelid, messageId));
-                    } catch (err) {
-                        throw err; // already gone is fine; anything else should surface
-                    }
-                }
+                try { await rest.delete(Routes.channelMessage(channelid, messageId)); }
+                catch (err) { throw err; }
                 await guildconfigs.findOneAndUpdate({ guildId: guildId }, { $unset: { [`messageConfigs.${key}`]: '' } })
                 return Response.json({ status: 200 })
             }
         },
         "/api/auth/me": {
             GET: async (req) => {
-                const session = getSession(req)
+                const session = await getSession(req)
                 const headers = { ...corsHeaders, "Cache-Control": "no-store" };
                 if (!session) return Response.json({ loggedIn: false }, { headers });
                 try {
                     const user = await rest.get(Routes.user(session.userId)) as APIUser;
-                    return Response.json(
-                        { user: { ...user }, loggedIn: true },
-                        { headers }
-                    );
+                    return Response.json({ user: { ...user }, loggedIn: true }, { headers });
                 } catch {
                     return Response.json({ error: "Could not resolve user" }, { status: StatusCodes.NOT_FOUND, headers });
                 }
@@ -1354,30 +1325,26 @@ Bun.serve({
         "/api/guilds": {
             OPTIONS: () => new Response(null, { headers: corsHeaders }),
             GET: async (req) => {
-                const session = getSession(req);
+                const session = await getSession(req);
                 if (!session) return Response.json({ error: "Not logged in" }, { status: StatusCodes.UNAUTHORIZED, headers: corsHeaders });
                 const docs = await guildconfigs.find({}, { projection: { guildId: 1, name: 1, staffroles: 1, _id: 0, ownerId: 1 } }).toArray();
                 const results = await Promise.all(docs.map(async (doc) => {
-                    const memberRoles = await rest.get(Routes.guildMember(doc.guildId, session.userId)) as APIGuildMember
-                    if (!memberRoles) return null;
-                    const role = roleFromStaffroles(session.userId, memberRoles.roles, doc.staffroles as string[] | undefined, doc.ownerId as string | undefined);
-                    if (!role) return null;
+                    const role = await roleFromStaffroles(session.userId, doc.guildId, doc.staffroles as string[], doc.ownerId as string)
                     return { guildId: doc.guildId as string, name: (doc.name as string) ?? null, role: role };
                 }));
-                const authorized = results.filter((r) => r!.role !== null);
+                const authorized = results.filter((r) => r!.role !== null)
                 return Response.json(authorized, { headers: corsHeaders });
             }
         },
         "/api/guilds/:guildId": {
             OPTIONS: () => new Response(null, { headers: corsHeaders }),
             GET: async (req) => {
-                const session = getSession(req);
+                const session = await getSession(req);
                 if (!session) return Response.json({ error: "Not logged in" }, { status: StatusCodes.UNAUTHORIZED, headers: corsHeaders });
                 const { guildId } = req.params;
                 const doc = await guildconfigs.findOne({ guildId: guildId });
                 if (!doc) return Response.json({ error: "Not found" }, { status: StatusCodes.NOT_FOUND, headers: corsHeaders });
-                const [memberRoles, guildRoles, guildChannels, rules] = await Promise.all([
-                    rest.get(Routes.guildMember(guildId, session.userId,)) as Promise<APIGuildMember>,
+                const [guildRoles, guildChannels, rules] = await Promise.all([
                     rest.get(Routes.guildRoles(guildId)) as Promise<APIRole[]>,
                     rest.get(Routes.guildChannels(guildId)) as Promise<APIChannel[]>,
                     rest.get(Routes.guildAutoModerationRules(guildId)) as Promise<APIAutoModerationRule[]>,
@@ -1385,11 +1352,9 @@ Bun.serve({
                 const selectableChannels = guildChannels
                     .filter((c) => [ChannelType.GuildText, ChannelType.GuildAnnouncement].includes(c.type))
                     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-                const role = roleFromStaffroles(session.userId, memberRoles!.roles, doc.staffroles as string[] | undefined, doc.ownerId as string | undefined);
-                if (!role) return Response.json({ error: "Forbidden" }, { status: StatusCodes.FORBIDDEN, headers: corsHeaders });
                 return Response.json({
                     ...doc,
-                    _viewerRole: role,
+                    _viewerRole: await roleFromStaffroles(session.userId, guildId, doc.staffroles as string[], doc.ownerId as string),
                     guildRoles: guildRoles,
                     guildChannels: selectableChannels,
                     staffRoles: guildRoles.filter((role: APIRole) => (BigInt(role.permissions) & (PermissionFlagsBits.ModerateMembers | PermissionFlagsBits.Administrator)) !== 0n && !role.managed),
@@ -1397,41 +1362,16 @@ Bun.serve({
                 }, { headers: corsHeaders });
             },
             PUT: async (req) => {
-                const session = getSession(req);
+                const session = await getSession(req);
                 if (!session) return Response.json({ error: "Not logged in" }, { status: StatusCodes.UNAUTHORIZED, headers: corsHeaders });
                 const { guildId } = req.params;
-                const existing = await guildconfigs.findOne({ guildId: guildId }, { projection: { staffroles: 1, ownerId: 1 } }) as Document;
-                const memberRoles = await rest.get(Routes.guildMember(session.userId, guildId)) as APIGuildMember;
-                const role = roleFromStaffroles(session.userId, memberRoles.roles, existing.staffroles as string[] | undefined, existing.ownerId as string | undefined);
-                if (role !== "admin" && role !== "owner") return Response.json({ error: "Forbidden — admin role required to save" }, { status: StatusCodes.FORBIDDEN, headers: corsHeaders });
-
-                let body: Record<string, unknown>;
-                try { body = await req.json(); }
-                catch { return Response.json({ error: "Invalid JSON body" }, { status: StatusCodes.BAD_REQUEST, headers: corsHeaders }); }
-                const setDoc: Record<string, unknown> = {};
-                for (const key of ["modChannels", "publicChannels", "generalchannels", "reactions", "automodsettings", "responses", "staffroles", "Stages", "messageConfigs"]) {
-                    if (key in body) setDoc[key] = body[key];
-                }
-                if (Object.keys(setDoc).length === 0) {
-                    return Response.json({ error: "No recognized fields in body" }, { status: StatusCodes.BAD_REQUEST, headers: corsHeaders });
-                }
-                const { messageConfigs } = await guildconfigs.findOneAndUpdate({ guildId: guildId }, { $set: setDoc }, { projection: { messageConfigs: 1 }, returnDocument: "after" }) as Document;
-                for (const [embedName, config] of Object.entries(messageConfigs as Document)) {
-                    await syncEmbed(guildId, embedName, config);
-                }
+                await guildconfigs.findOneAndUpdate({ guildId: guildId }, { $set: { ...await req.json() } }, { projection: { messageConfigs: 1 }, returnDocument: "after" }) as Document;
                 return Response.json({ ok: true }, { headers: corsHeaders });
             },
             DELETE: async (req) => {
-                const session = getSession(req);
+                const session = await getSession(req);
                 if (!session) return Response.json({ error: "Not logged in" }, { status: StatusCodes.UNAUTHORIZED, headers: corsHeaders });
                 const { guildId } = req.params;
-                const existing = await guildconfigs.findOne({ guildId }, { projection: { staffroles: 1, ownerId: 1 } });
-                if (!existing) return Response.json({ error: "Not found" }, { status: StatusCodes.NOT_FOUND, headers: corsHeaders });
-                const member = await rest.get(Routes.guildMember(session.userId, guildId)) as APIGuildMember
-                const role = roleFromStaffroles(session.userId, member.roles, existing.staffroles as string[] | undefined, existing.ownerId as string | undefined);
-                if (role !== "admin") {
-                    return Response.json({ error: "Forbidden — admin role required to delete" }, { status: StatusCodes.FORBIDDEN, headers: corsHeaders });
-                }
                 await rest.delete(Routes.guildMember(guildId, '1420927654701301951'))
                 await guildconfigs.deleteOne({ guildId: guildId });
                 await usersCollection.deleteMany({ guildId: guildId });

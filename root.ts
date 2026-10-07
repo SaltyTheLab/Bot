@@ -898,9 +898,9 @@ client.on('shardError', async (err, shardId) => {
     await appendFile("./log.log", `[root] errror on shard ${shardId} @ ${Date.now()}: ${err}\n`)
 })
 client.on('shardDisconnect', async (event, shardId) => {
-    appendFile("./log.log", `Shard ${shardId} disconnected. Code: ${event.code}`)
+    appendFile("./log.log", `Shard ${shardId} disconnected @ ${Date.now()}. Code: ${event.code}\n`)
 })
 client.on('shardResume', async (shardId, replayedEvents) => {
-    appendFile("./log.log", `Shard ${shardId} resumed, replayed ${replayedEvents} events`);
+    appendFile("./log.log", `Shard ${shardId} resumed @ ${Date.now()}, replayed ${replayedEvents} events\n`);
 })
 client.login(Bun.env.TOKEN)
