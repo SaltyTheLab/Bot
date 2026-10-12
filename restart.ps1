@@ -1,19 +1,19 @@
 param([string]$BotPid, [string]$intpid)
 $PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
-$logPath = 'C:\Users\micha\Desktop\bot\log.log'
+$logPath = Join-Path $PSScriptRoot 'log.log'
 "Restart script started at $(Get-Date)" | Out-File $logPath -Append
 
-if ($BotPid -and (Get-Process -Id $BotPid -ErrorAction SilentlyContinue)) {
+if ($BotPid -and ($process = Get-Process -Id $BotPid -ErrorAction SilentlyContinue)) {
     "Killing PID $BotPid" | Out-File $logPath -Append
-    taskkill /F /PID $BotPid | Out-File $logPath -Append
-    Wait-Process -Id $BotPid -Timeout 10 -ErrorAction SilentlyContinue
+    Stop-Process -InputObject $process -Force
+    Wait-Process -InputObject $process -Timeout 10 -ErrorAction SilentlyContinue
 } else {
     "PID $BotPid not running, skipping" | Out-File $logPath -Append
 }
 $botArgs = @{
     FilePath         = 'powershell.exe'
-    ArgumentList     = @('-ExecutionPolicy', 'Bypass', '-File', './start.ps1', '-intpid', $intpid)
-    WorkingDirectory = 'C:\Users\micha\Desktop\Bot'
+    ArgumentList     = @('-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'start.ps1'), '-intpid', $intpid)
+    WorkingDirectory = $PSScriptRoot
     WindowStyle      = 'Hidden'
 }
 Start-Process @botArgs -PassThru

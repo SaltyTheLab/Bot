@@ -1,36 +1,27 @@
 param([string]$intpid, [string]$gatewaypid)
 $PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
-$logPath = 'C:\Users\micha\Desktop\bot\log.log'
-$botDir = 'C:\Users\micha\Desktop\bot\'
+$logPath = Join-Path $PSScriptRoot 'log.log'
 $bun = 'bun.exe'
 
-"--- Startup invoked at $(Get-Date) ---" | Out-File $logPath -Append 
+"--- Startup invoked at $(Get-Date) ---" | Out-File $logPath -Append
 
-$interactionsArgs = @{
-    FilePath         = $bun
-    ArgumentList     = @('run', './dist/interactions.js')
-    WorkingDirectory = $botDir
-    WindowStyle      = 'Hidden'
+function Start-BotProcess([string]$name, [string]$entryPoint) {
+    $process = Start-Process -FilePath $bun `
+        -ArgumentList @('run', "./dist/$entryPoint.js") `
+        -WorkingDirectory $PSScriptRoot `
+        -WindowStyle Hidden `
+        -PassThru
+    "Started $name PID $($process.Id)" | Out-File $logPath -Append
+    return $process
 }
-$gatewayArgs = @{
-    FilePath         = $bun
-    ArgumentList     = @('run', './dist/root.js')
-    WorkingDirectory = $botDir
-    WindowStyle      = 'Hidden'
-}
+
 if ($intpid) {
-    $gatewayProc = Start-Process @gatewayArgs -PassThru
-    "Started gateway PID $($gatewayProc.Id)" | Out-File $logPath -Append 
-   
+    Start-BotProcess 'gateway' 'root' | Out-Null
 } elseif ($gatewaypid) {
-    $interactionsProc = Start-Process @interactionsArgs -PassThru
-    "Started interactions PID $($interactionsProc.Id)" | Out-File $logPath -Append
+    Start-BotProcess 'interactions' 'interactions' | Out-Null
 } else {
-     $gatewayProc = Start-Process @gatewayArgs -PassThru
-     "Started gateway PID $($gatewayProc.Id)" | Out-File $logPath -Append 
-     $interactionsProc = Start-Process @interactionsArgs -PassThru
-     "Started interactions PID $($interactionsProc.Id)" | Out-File $logPath -Append 
-     Write-Output $interactionsProc $gatewayProc
+    $gatewayProc = Start-BotProcess 'gateway' 'root'
+    $interactionsProc = Start-BotProcess 'interactions' 'interactions'
+    Write-Output $interactionsProc $gatewayProc
 }
-
 
