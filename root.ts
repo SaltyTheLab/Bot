@@ -28,7 +28,7 @@ const authProvider = new RefreshingAuthProvider({ clientId: Bun.env.TWITCH_ID!, 
 const doc = await ws.findOne({}, { projection: { twitchaccess: 1, twitchrefresh: 1, twitchexpires: 1, twitchobtained: 1 } }) as any;
 if (!doc?.twitchaccess) throw new Error('No Twitch bot tokens found — run get-token.ts first.');
 authProvider.addUser("901114331", { accessToken: doc.twitchaccess, scope: ['chat:read', 'chat:edit'], refreshToken: doc.twitchrefresh, expiresIn: doc.twitchexpires, obtainmentTimestamp: doc.twitchobtained, }, ['chat']);
-authProvider.onRefresh(async (userId, newTokenData) => {
+authProvider.onRefresh(async (_userId, newTokenData) => {
     await ws.updateOne({}, { $set: { twitchaccess: newTokenData.accessToken, twitchrefresh: newTokenData.refreshToken, twitchexpires: newTokenData.expiresIn, twitchobtained: newTokenData.obtainmentTimestamp } });
 });
 authProvider.onRefreshFailure((userId, error) => { appendFile("./log.log", `[twitch] token refresh failed for ${userId}: ${error.message} @ ${Date.now()}\n`) })
@@ -437,6 +437,10 @@ client.on('guildMemberAdd', async (member) => {
 client.on('guildMemberRemove', async (member) => {
     const { user, guild } = member;
     if (user.bot) { return }
+    if (member.user.id == client.user!.id) {
+        await guildconfigs.deleteOne({ guildId: guild.id });
+        await usersCollection.deleteMany({ guildId: guild.id });
+    }
     const { modChannels: { welcomeChannel } } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { modChannels: 1 } }) as Document
     await client.rest.post(Routes.channelMessages(welcomeChannel), {
         body: {
@@ -580,13 +584,16 @@ client.on('inviteCreate', async (invite) => {
 client.on('inviteDelete', async (invite) => {
     await guildconfigs.updateOne({ guildId: invite.guild!.id }, { $unset: { [`Invites.${invite.code}`]: "" } });
 })
+async function getReactionRoleConfig(guildId: string, messageId: string) {
+    const doc = await guildconfigs.findOne({ guildId }, { projection: { messageConfigs: 1 } });
+    return Object.values(doc?.messageConfigs ?? {}).find((info: any) => info?.messageId === messageId) as { reactions: { emoji: string; roleId: string | string[] }[] } | undefined;
+}
 client.on('messageReactionAdd', async (reaction, user) => {
     if (user.bot) return;
     if (reaction.partial) reaction = await reaction.fetch();
     const { message: { guild, id, }, emoji } = reaction;
     if (!guild) return;
-    const doc = await guildconfigs.findOne({ guildId: guild.id }, { projection: { messageConfigs: 1 } });
-    const config = Object.values(doc?.messageConfigs ?? {}).find((info: any) => info?.messageId === id) as { reactions: { emoji: string; roleId: string | string[] }[]; } | undefined;
+    const config = await getReactionRoleConfig(guild.id, id);
     if (!config) return;
     const { reactions } = config;
     const entry = reactions.find(e => e.emoji === emoji.id || e.emoji == emoji.name);
@@ -603,17 +610,13 @@ client.on('messageReactionAdd', async (reaction, user) => {
 client.on('messageReactionRemove', async (reaction, user) => {
     const { message: { guild, id }, emoji } = reaction;
     if (!guild || user.bot) return;
-    const { messageConfigs } = await guildconfigs.findOne({ guildId: guild!.id }, { projection: { messageConfigs: 1 } }) as Document
-    const config = Object.values(messageConfigs).find((info: any) => info.messageId === id) as { reactions: { emoji: string; roleId: string | string[] }[]; } ?? undefined;
+    const config = await getReactionRoleConfig(guild.id, id);
     if (!config) return;
-    else {
-    const { reactions } = config
-    const entry = reactions.find((entry: { emoji: string }) => entry.emoji === (emoji.id! ?? emoji.name!));
+    const entry = config.reactions.find(entry => entry.emoji === (emoji.id! ?? emoji.name!));
     if (!entry) return;
-        const roleIds = Array.isArray(entry.roleId) ? entry.roleId : [entry.roleId];
-        const member = await guild.members.fetch(user.id);
-        await Promise.all(roleIds.map((id: string) => member?.roles.remove(id)));
-    }
+    const roleIds = Array.isArray(entry.roleId) ? entry.roleId : [entry.roleId];
+    const member = await guild.members.fetch(user.id);
+    await Promise.all(roleIds.map(id => member.roles.remove(id)));
 })
 client.on('messageDelete', async (deletedData) => {
     const { id, channelId, guildId, stickers, attachments, author, content } = deletedData;
@@ -694,8 +697,12 @@ client.on('messageCreate', async (message) => {
     if (channel.id == countingChannel) {
         if (!/^\d+$/.test(content) || message.id === lastMessageId) return;
         await guildconfigs.findOneAndUpdate({ guildId: guild.id }, (count + 1 == parseInt(content) && lastuser !== author.id) ? { $inc: { count: 1 }, $set: { lastuser: author.id, lastMessageId: message.id } } : { $set: { count: 0, lastuser: null, lastMessageId: null } })
+        try {
         return (count + 1 == parseInt(content) && lastuser !== author.id) ?
             await message.react("%E2%9C%85") : await message.reply({ content: `<@${author.id}> missed or already counted!` })
+        } catch (err) {
+            appendFile('./log.log', ` ${message.id} in counting was removed before i could react.`)
+        }
     }
     if (content.length >= 1) {
         const stripped = content.replace(/<a?:\w+:\d+>|[\-!$.,?_\\*#()\[\]{}\+:;='"`~/|^&]/g, '');

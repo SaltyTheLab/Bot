@@ -4,7 +4,6 @@ import sharp from 'sharp'
 import { SignJWT, jwtVerify } from 'jose'
 import { ed25519 } from '@noble/curves/ed25519.js'
 import { StatusCodes } from "http-status-codes";
-import { appendFile } from "node:fs/promises";
 import { AppTokenAuthProvider } from "@twurple/auth"
 import { ApiClient } from '@twurple/api'
 import { type APIMessageComponentInteraction, InteractionType, ComponentType, type APIEmbed, type APIInteraction, type APIMessage, InteractionResponseType, MessageFlags, type APIGuild, type APIGuildMember, type APIModalSubmitInteraction, type APIUser, type APIActionRowComponent, type APIChannel, ButtonStyle, type APIChatInputApplicationCommandGuildInteraction, ChannelType, type APIRole, type APIAutoModerationRule, Collection, ApplicationCommandOptionType, subtext, bold, quote, type APIButtonComponentWithCustomId, ModalBuilder, TextInputStyle, REST, Routes, type APIDMChannel, type APIApplicationCommandInteractionDataOption, type APIApplicationCommandInteractionDataBasicOption, type APIMessageTopLevelComponent, OAuth2Routes, type RESTPostOAuth2AccessTokenResult, type APIInteractionDataResolvedGuildMember, type APIApplicationCommandBasicOption, type APIMessageComponent, PermissionFlagsBits, ContainerBuilder, EmbedBuilder, ActionRowBuilder, MediaGalleryBuilder, TextDisplayBuilder, ButtonBuilder, SectionBuilder, ThumbnailBuilder, SeparatorBuilder, type APIMediaGalleryComponent } from "discord.js";
@@ -188,9 +187,43 @@ function getComparableEmbed(embedData: APIEmbed): string | null {
         url: embedData.url ? normalizeText(embedData.url) : null,
         color: embedData.color ?? null,
         fields: embedData.fields ? embedData.fields.map(field => ({ name: normalizeText(field.name), value: normalizeText(field.value), inline: field.inline || false })) : [],
+        image: normalizeAttachmentUrl(embedData.image?.url),
+        thumbnail: normalizeAttachmentUrl(embedData.thumbnail?.url),
         author: embedData.author ? { name: normalizeText(embedData.author.name) } : null,
         footer: embedData.footer ? { text: normalizeText(embedData.footer.text) } : null
     });
+}
+function normalizeAttachmentUrl(url?: string | null): string | null {
+    if (!url) return null;
+    if (url.startsWith('attachment://')) return url;
+    try {
+        const parsed = new URL(url);
+        if (['cdn.discordapp.com', 'media.discordapp.net'].includes(parsed.hostname) && parsed.pathname.includes('/attachments/')) {
+            const filename = parsed.pathname.split('/').pop();
+            if (filename) return `attachment://${decodeURIComponent(filename)}`;
+        }
+    } catch { }
+    return url;
+}
+function getComparableComponents(components: APIMessageComponent[] | undefined): string {
+    const mediaMetadata = new Set(['proxy_url', 'width', 'height', 'placeholder', 'placeholder_version', 'content_type', 'loading_state', 'attachment_id', 'flags']);
+    const normalize = (value: any): any => {
+        if (Array.isArray(value)) return value.map(normalize);
+        if (!value || typeof value !== 'object') return value;
+        const isComponent = typeof value.type === 'number';
+        const isMedia = typeof value.url === 'string' && ('proxy_url' in value || 'width' in value || 'attachment_id' in value);
+        return Object.fromEntries(Object.entries(value)
+            .filter(([property, propertyValue]) => {
+                if (isComponent && property === 'id') return false;
+                if (isComponent && value.type === 13 && (property === 'name' || property === 'size')) return false;
+                if (isMedia && mediaMetadata.has(property)) return false;
+                if ((property === 'spoiler' || property === 'disabled') && propertyValue === false) return false;
+                if (property === 'description' && (propertyValue === null || propertyValue === '')) return false;
+                return true;
+            })
+            .map(([property, propertyValue]) => [property, property === 'url' && typeof propertyValue === 'string' ? normalizeAttachmentUrl(propertyValue) : normalize(propertyValue)]));
+    };
+    return JSON.stringify((components || []).map(normalize));
 }
 function shuffle<T>(array: T[]): T[] {
     for (let i = array.length - 1; i > 0; i--) {
@@ -413,32 +446,35 @@ async function runPunishment({ body, res, guildConfig }: CommandContext): Promis
     }
     return Response.json(res);
 }
-async function syncEmbed(guildId: string, embedName: string, config: { channelid: string, embeds: APIEmbed[], components: APIMessageTopLevelComponent[], reactions?: { emoji: string; roleId: string }[], format: string, messageId?: string }) {
+async function syncEmbed(guildId: string, embedName: string, config: { channelid: string, embeds: APIEmbed[], components: APIMessageTopLevelComponent[], reactions?: { emoji: string; roleId: string }[], format: string, messageId?: string }, files: { name: string; data: Buffer; key: string; contentType?: string }[] = []) {
     const { channelid, embeds, components, reactions, format, messageId: existingMessageId } = config;
-    const isV2 = format === 'v2';
-    const body = isV2 ? { flags: MessageFlags.IsComponentsV2, components: components } as APIMessage : { embeds: embeds, components: components } as APIMessage;
-    const sendNewMessage = async () => {
-        const message = await rest.post(Routes.channelMessages(channelid), { body }) as APIMessage;
-        await guildconfigs.updateOne({ guildId }, { $set: { [`messageConfigs.${embedName}.messageId`]: message.id } });
-        for (const reaction of reactions || []) {
-            await rest.put(Routes.channelMessageOwnReaction(channelid, message.id, reaction.emoji));
+    const buildBody = (existingAttachments: { id: string; filename: string }[] = []) => {
+        const body = format === 'v2' ? { flags: MessageFlags.IsComponentsV2, components } as APIMessage : { embeds, components } as APIMessage;
+        if (files.length || existingAttachments.length) {
+            (body as any).attachments = [
+                ...existingAttachments,
+                ...files.map((file, index) => ({ id: String(index), filename: file.name })),
+            ];
         }
-        await appendFile("./log.log", `📝 Sent '${embedName}'. Message ID: ${message.id}\n`);
-        return { status: 'sent', messageId: message.id };
+        return body;
     };
-    if (!existingMessageId) return sendNewMessage();
-
-    let message: APIMessage;
-    try {
-        message = await rest.get(Routes.channelMessage(channelid, existingMessageId)) as APIMessage;
-    } catch {
-        return sendNewMessage();
+    if (!existingMessageId) {
+        const message = await rest.post(Routes.channelMessages(channelid), { body: buildBody(), files: files.length ? files : undefined }) as APIMessage;
+        await guildconfigs.updateOne({ guildId }, { $set: { [`messageConfigs.${embedName}.messageId`]: message.id } });
+        for (const reaction of reactions || [])
+            await rest.put(Routes.channelMessageOwnReaction(channelid, message.id, reaction.emoji));
+        return { status: 'sent', messageId: message.id };
     }
-    const different = isV2 ? JSON.stringify(message.components) !== JSON.stringify(components ?? [])
-        : message.embeds.map((e) => getComparableEmbed(e)).join('|||') !== embeds.map((e) => getComparableEmbed(e)).join('|||');
-    if (different) await rest.patch(Routes.channelMessage(channelid, message.id), { body });
-    await guildconfigs.updateOne({ guildId }, { $set: { [`messageConfigs.${embedName}.messageId`]: message.id } });
-    return { status: 'updated', messageId: message.id, changed: different };
+    const message = await rest.get(Routes.channelMessage(channelid, existingMessageId)) as APIMessage;
+    const componentsDifferent = getComparableComponents(message.components) !== getComparableComponents(components);
+    const embedsDifferent = message.embeds.map((embed) => getComparableEmbed(embed)).join('|||') !== embeds.map((embed) => getComparableEmbed(embed)).join('|||');
+    const different = files.length > 0 || componentsDifferent || (format !== 'v2' && embedsDifferent);
+    if (different) await rest.patch(Routes.channelMessage(channelid, message.id), {
+        body: buildBody(message.attachments.map(attachment => ({ id: attachment.id, filename: attachment.filename }))),
+        files: files.length ? files : undefined,
+    });
+    await guildconfigs.updateOne({ guildId: guildId }, { $set: { [`messageConfigs.${embedName}.messageId`]: message.id } });
+    return { status: !existingMessageId ? 'sent' : 'updated', messageId: message.id, changed: different };
 }
 async function withGuards({ body, res, guildConfig, restrictedToFullMod = false }: CommandContext): Promise<Response | void> {
     const { member, data: { options, resolved } } = body;
@@ -1222,8 +1258,8 @@ async function handleComponents(body: APIMessageComponentInteraction) {
 }
 
 const corsHeaders = {
-    "Access-Control-Allow-Origin": Bun.env.CONFIGURATOR_ORIGIN!, "Access-Control-Allow-Methods": "GET, PUT, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type", "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Origin": Bun.env.DISCORD_REDIRECT!, "Access-Control-Allow-Methods": "GET, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type", "Access-Control-Allow-Credentials": "true"
 };
 async function getSession(req: Bun.BunRequest) {
     const token = req.cookies.get('session')
@@ -1247,13 +1283,12 @@ Bun.serve({
     websocket: { open() { }, message() { }, close() { } },
     routes: {
         "/": () => new Response(Bun.file("./index.html")),
-        "/controller.js": () => new Response(Bun.file("./dist/controller.js"), { headers: { "Content-Type": "application/javascript" } }),
-        "/favicon.ico": () => new Response(null, { status: 204 }),
+        "/controller.js": () => new Response(Bun.file("./dist/controller.js")),
         "/output.css": () => new Response(Bun.file("./dist/output.css"), { headers: { "Content-Type": "text/css" } }),
         "/api/auth/discord/login": (req) => {
             const state = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
             req.cookies.set("oauth_state", state, { httpOnly: true, secure: true, sameSite: "lax", path: "/", maxAge: 300, });
-            const params = new URLSearchParams({ client_id: Bun.env.CLIENT_ID!, redirect_uri: Bun.env.DISCORD_REDIRECT_URI!, response_type: "code", scope: "identify", state: state });
+            const params = new URLSearchParams({ client_id: Bun.env.CLIENT_ID!, redirect_uri: `${Bun.env.DISCORD_REDIRECT!}/api/auth/discord/redirect`, response_type: "code", scope: "identify", state: state });
             return new Response(null, { status: StatusCodes.MOVED_TEMPORARILY, headers: { Location: `${OAuth2Routes.authorizationURL}?${params}` } });
         },
         "/api/auth/discord/redirect": async (req) => {
@@ -1271,7 +1306,7 @@ Bun.serve({
                     client_secret: Bun.env.DISCORD_SECRET!,
                     grant_type: "authorization_code",
                     code,
-                    redirect_uri: Bun.env.DISCORD_REDIRECT_URI!,
+                    redirect_uri: `${Bun.env.DISCORD_REDIRECT!}/api/auth/discord/redirect`,
                 })
             }) as RESTPostOAuth2AccessTokenResult;
             const discordUser = await rest.get(Routes.user(), { auth: false, headers: { Authorization: `Bearer ${tokenRes.access_token}` } }) as APIUser
@@ -1282,14 +1317,54 @@ Bun.serve({
         "/api/sendembed": {
             OPTIONS: () => new Response(null, { headers: corsHeaders }),
             POST: async (req) => {
-                const { guildId, embedName, config } = await req.json();
                 try {
-                    const result = await syncEmbed(guildId, embedName, config);
+                    let guildId: string;
+                    let embedName: string;
+                    let config: Parameters<typeof syncEmbed>[2];
+                    let files: Parameters<typeof syncEmbed>[3] = [];
+                    if (req.headers.get('content-type')?.includes('multipart/form-data')) {
+                        const formData = await req.formData();
+                        guildId = String(formData.get('guildId') || '');
+                        embedName = String(formData.get('embedName') || '');
+                        config = JSON.parse(String(formData.get('config') || '{}'));
+                        const uploads = formData.getAll('files').filter((entry): entry is File => entry instanceof File);
+                        files = await Promise.all(uploads.map(async (file, index) => ({
+                            name: file.name,
+                            data: Buffer.from(await file.arrayBuffer()),
+                            key: `files[${index}]`,
+                            contentType: file.type || undefined,
+                        })));
+                    } else {
+                        const payload = await req.json();
+                        guildId = payload.guildId;
+                        embedName = payload.embedName;
+                        config = payload.config;
+                    }
+                    if (!guildId || !embedName || !config) return Response.json({ error: 'Guild, embed name, and config are required' }, { status: StatusCodes.BAD_REQUEST, headers: corsHeaders });
+                    const result = await syncEmbed(guildId, embedName, config, files);
                     return new Response(JSON.stringify(result), { headers: corsHeaders });
                 } catch {
                     return new Response(JSON.stringify({ error: 'Failed to sync embed' }), { status: StatusCodes.INTERNAL_SERVER_ERROR, headers: corsHeaders });
                 }
             }
+        },
+        "/api/saveembed": {
+            OPTIONS: () => new Response(null, { headers: corsHeaders }),
+            POST: async (req) => {
+                const { guildId, embedName, config } = await req.json();
+                if (!guildId || !embedName || !config) {
+                    return Response.json({ error: 'Guild, embed name, and config are required' }, { status: StatusCodes.BAD_REQUEST, headers: corsHeaders });
+                }
+                try {
+                    const result = await guildconfigs.updateOne({ guildId }, { $set: { [`messageConfigs.${embedName}`]: config } },);
+                    if (!result.matchedCount) {
+                        return Response.json({ error: 'Guild config not found' }, { status: StatusCodes.NOT_FOUND, headers: corsHeaders });
+                    }
+                    return Response.json({ ok: true }, { headers: corsHeaders });
+                } catch {
+                    return Response.json({ error: 'Failed to save embed' }, { status: StatusCodes.INTERNAL_SERVER_ERROR, headers: corsHeaders });
+                }
+            },
         },
         "/api/deleteembed/:guildId/:key": {
             OPTIONS: () => new Response(null, { headers: corsHeaders }),
@@ -1297,8 +1372,7 @@ Bun.serve({
                 const { guildId, key } = req.params
                 const doc = await guildconfigs.findOne({ guildId: guildId }, { projection: { [`messageConfigs.${key}`]: 1 } }) as any;
                 const { channelid, messageId } = doc?.messageConfigs?.[key] || {};
-                try { await rest.delete(Routes.channelMessage(channelid, messageId)); }
-                catch (err) { throw err; }
+                if (channelid && messageId) await rest.delete(Routes.channelMessage(channelid, messageId));
                 await guildconfigs.findOneAndUpdate({ guildId: guildId }, { $unset: { [`messageConfigs.${key}`]: '' } })
                 return Response.json({ status: 200 })
             }
@@ -1369,6 +1443,7 @@ Bun.serve({
                 return Response.json({ ok: true }, { headers: corsHeaders });
             },
             DELETE: async (req) => {
+                try {
                 const session = await getSession(req);
                 if (!session) return Response.json({ error: "Not logged in" }, { status: StatusCodes.UNAUTHORIZED, headers: corsHeaders });
                 const { guildId } = req.params;
@@ -1376,6 +1451,9 @@ Bun.serve({
                 await guildconfigs.deleteOne({ guildId: guildId });
                 await usersCollection.deleteMany({ guildId: guildId });
                 return Response.json({ ok: true }, { headers: corsHeaders });
+                } catch (err) {
+                    console.log(err)
+                }
             }
         },
         "/interactions": async (req) => {

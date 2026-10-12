@@ -4,29 +4,45 @@ import type { APIEmbed, APIEmbedField, APIRole, APIRoleColors, APIUser, Componen
 // discord-api-types (~200 KB) into the browser script. `satisfies` makes tsc verify every
 // number below is a genuine ComponentType value, so this can't silently drift.
 const ComponentType = {
-    Section: 9, TextDisplay: 10, Thumbnail: 11, MediaGallery: 12, Separator: 14, Container: 17,
+    Button: 2, Section: 9, TextDisplay: 10, Thumbnail: 11, MediaGallery: 12, File: 13, Separator: 14, Container: 17,
 } as const satisfies Record<string, DiscordComponentType>;
 
 // --- Types -------------------------------------------------------------------
-// These mirror what the Bun endpoints in interactions.ts actually return.
-type Role = 'owner' | 'admin' | 'mod'; // roleFromStaffroles() in interactions.ts
+type Role = 'owner' | 'admin' | 'mod';
 type SectionType = 'mod' | 'public' | 'reaction' | 'response' | 'automod';
-type V2Kind = 'container' | 'section' | 'textDisplay' | 'separator' | 'mediaGallery';
+type V2Kind = 'button' | 'container' | 'section' | 'textDisplay' | 'thumbnail' | 'mediaGallery' | 'file' | 'separator';
 
-interface GuildSummary { guildId: string; name: string | null; role: Role } // GET /api/guilds
-// GET /api/guilds/:guildId returns raw Discord channels (text/announcement only).
-// categoryName is NOT sent by the server today, see buildChannelOptionsHtml.
+interface GuildSummary { guildId: string; name: string | null; role: Role }
 interface GuildChannel { id: string; name: string; type: number; position?: number; parent_id?: string | null; categoryName?: string }
 interface AutomodRule { id: string; name: string }
 interface ReasonWeight { reason: string; weight: number }
 interface ReactionRole { emoji: string; roleId: string }
 interface V2ApiComponent {
     type: number;
+    id?: number;
     accent_color?: number;
     spacing?: number;
+    style?: number;
+    label?: string;
+    custom_id?: string;
+    url?: string;
+    sku_id?: string;
+    disabled?: boolean;
+    placeholder?: string;
+    min_values?: number;
+    max_values?: number;
+    channel_types?: number[];
+    default_values?: { type: string; id: string }[];
+    description?: string;
+    spoiler?: boolean;
+    divider?: boolean;
+    content?: string;
     components?: V2ApiComponent[];
-    items?: { media?: { url?: string } }[];
-    accessory?: { type: number; media?: { url?: string } };
+    options?: { label: string; value: string; description?: string; default?: boolean; emoji?: { id?: string; name?: string } }[];
+    items?: { media?: { url?: string }; description?: string; spoiler?: boolean }[];
+    media?: { url?: string };
+    file?: { url?: string };
+    accessory?: V2ApiComponent;
     [key: string]: unknown;
 }
 interface MessageConfig {
@@ -64,18 +80,42 @@ interface GuildConfigDoc {
 let currentGuildId: string | null = null;
 let currentUser: string | null = null;
 let currentRole: Role | null = null;
-let messageConfigsDraft: Record<string, MessageConfig> = {}; // working copy of ALL embeds; only the selected one is shown in the form at a time
+let messageConfigsDraft: Record<string, MessageConfig> = {};
+const v2FileUploads = new Map<string, File>();
 let activeEmbedKey = '';
 let currentAutomodRules: AutomodRule[] = [];
 let currentGuildRoles: APIRole[] = []
 let currentGuildChannels: GuildChannel[] = [];
 let staffRoles: APIRole[] = []
 
+function queueEmbedUpload(file: File): File {
+    const extension = file.name.match(/\.[a-z0-9]{1,10}$/i)?.[0] || '';
+    const upload = new File([file], `embed-${crypto.randomUUID()}${extension}`, { type: file.type });
+    v2FileUploads.set(`${activeEmbedKey}\0${upload.name}`, upload);
+    return upload;
+}
+function queueImageUpload(file: File): File | null {
+    if (!file.type.startsWith('image/')) {
+        showMessage('Choose an image file.', 'bg-yellow-500');
+        return null;
+    }
+    return queueEmbedUpload(file);
+}
+
 function el<T extends HTMLElement = HTMLElement>(id: string): T {
     const node = document.getElementById(id);
     if (!node) throw new Error(`#${id} not found in index.html`);
     return node as T;
 }
+function initializeRolePickers() {
+    const template = el<HTMLTemplateElement>('rolePickerTemplate');
+    document.querySelectorAll<HTMLElement>('[data-role-picker-input]').forEach(target => {
+        const picker = template.content.firstElementChild!.cloneNode(true) as HTMLElement;
+        picker.querySelector('input')!.id = target.dataset.rolePickerInput!;
+        target.replaceWith(picker);
+    });
+}
+initializeRolePickers();
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 const elements = {
@@ -99,7 +139,6 @@ const elements = {
     addStringBtn: el<HTMLButtonElement>('addStringBtn'),
     saveConfigBtn: el<HTMLButtonElement>('saveConfigBtn'),
     deleteConfigBtn: el<HTMLButtonElement>('deleteConfigBtn'),
-    exportConfigBtn: el<HTMLButtonElement>('downloadConfigBtn'),
     messageBox: el('messageBox'),
     reasonsWeightsSection: el('reasonsWeightsSection'),
     addReasonWeightBtn: el<HTMLButtonElement>('addReasonWeightBtn'),
@@ -145,9 +184,13 @@ function buildChannelOptionsHtml(selectedId: string) {
     }
     return html;
 }
+function buildEmbedChannelOptionsHtml(selectedId: string) {
+    const options = buildChannelOptionsHtml(selectedId);
+    if (!selectedId || currentGuildChannels.some(channel => channel.id === selectedId)) return options;
+    const escapedId = selectedId.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!);
+    return options.replace('</option>', `</option><option value="${escapedId}" selected>Unavailable channel (${escapedId})</option>`);
+}
 // --- API helpers ---------------------------------------------------------
-
-function authHeaders(extra: Record<string, string> = {}) { return { ...extra }; }
 function roleColorHex(colorInt: APIRoleColors) {
     if (!colorInt) return '#b9bbbe';
     return `#${colorInt.primary_color.toString(16).padStart(6, '0')}`;
@@ -165,30 +208,26 @@ function makeRolePicker(hiddenInput: HTMLInputElement) {
     let backingValue = hiddenInput.value || '';
     let roleLookup = new Map<string, APIRole>(); // roleId -> role
 
-    function renderLabel() {
-        const role = roleLookup.get(backingValue);
-        label.textContent = role ? `@${role.name}` : '-- Select a role --';
-        label.style.color = role ? roleColorHex(role.colors) : '';
-    }
-
     Object.defineProperty(hiddenInput, 'value', {
         get() { return backingValue; },
-        set(v: string) { backingValue = v || ''; renderLabel(); },
+        set(v: string) {
+            backingValue = v || '';
+            const role = roleLookup.get(backingValue);
+            label.textContent = role ? `@${role.name}` : '-- Select a role --';
+            label.style.color = role ? roleColorHex(role.colors) : '';
+        },
         configurable: true,
     });
 
-    function closeMenu() { menu.classList.add('hidden'); }
-    function openMenu() {
-        document.querySelectorAll('.role-picker-menu').forEach(m => m.classList.add('hidden'));
-        menu.classList.remove('hidden');
-    }
-
     button.addEventListener('click', (e) => {
         e.stopPropagation();
-        menu.classList.contains('hidden') ? openMenu() : closeMenu();
+        if (menu.classList.contains('hidden')) {
+            document.querySelectorAll('.role-picker-menu').forEach(m => m.classList.add('hidden'));
+            menu.classList.remove('hidden');
+        } else menu.classList.add('hidden');;
     });
     document.addEventListener('click', (e) => {
-        if (!wrapper.contains(e.target as Node)) closeMenu();
+        if (!wrapper.contains(e.target as Node)) menu.classList.add('hidden');;
     });
 
     function setRoles(roles: APIRole[]) {
@@ -197,7 +236,7 @@ function makeRolePicker(hiddenInput: HTMLInputElement) {
         const blank = document.createElement('div');
         blank.className = 'px-3 py-2 cursor-pointer hover:bg-gray-700 text-gray-400';
         blank.textContent = '-- Select a role --';
-        blank.addEventListener('click', () => { hiddenInput.value = ''; closeMenu(); });
+        blank.addEventListener('click', () => { hiddenInput.value = ''; menu.classList.add('hidden'); });
         menu.appendChild(blank);
 
         roles.forEach(role => {
@@ -205,11 +244,13 @@ function makeRolePicker(hiddenInput: HTMLInputElement) {
             item.className = 'px-3 py-2 cursor-pointer hover:bg-gray-700';
             item.textContent = `@${role.name}`;
             item.style.color = roleColorHex(role.colors);
-            item.addEventListener('click', () => { hiddenInput.value = role.id; closeMenu(); });
+            item.addEventListener('click', () => { hiddenInput.value = role.id; menu.classList.add('hidden'); });
             menu.appendChild(item);
         });
 
-        renderLabel(); // in case the currently-set value's role just became known
+        const role = roleLookup.get(backingValue);
+        label.textContent = role ? `@${role.name}` : '-- Select a role --';
+        label.style.color = role ? roleColorHex(role.colors) : ''; // in case the currently-set value's role just became known
     }
 
     return { setRoles };
@@ -234,12 +275,14 @@ const OPTIONAL_EMBED_FIELDS: { key: OptionalEmbedKey; label: string; render: (em
         {
             key: 'image', label: 'Image', render: (embed: APIEmbed) => `
             <span class="field-label">Image URL</span>
-            <input type="text" class="field" data-embed-field="image" value="${embed.image?.url || ''}" placeholder="https://...">`,
+            <input type="text" class="field" data-embed-field="image" value="${embed.image?.url || ''}" placeholder="https://...">
+            <input type="file" class="field" accept="image/*" data-embed-image-upload="image">`,
         },
         {
             key: 'thumbnail', label: 'Thumbnail', render: (embed: APIEmbed) => `
             <span class="field-label">Thumbnail URL</span>
-            <input type="text" class="field" data-embed-field="thumbnail" value="${embed.thumbnail?.url || ''}" placeholder="https://...">`,
+            <input type="text" class="field" data-embed-field="thumbnail" value="${embed.thumbnail?.url || ''}" placeholder="https://...">
+            <input type="file" class="field" accept="image/*" data-embed-image-upload="thumbnail">`,
         },
         {
             key: 'footer', label: 'Footer', render: (embed: APIEmbed) => `
@@ -278,51 +321,30 @@ function blankEmbed(): APIEmbed { return { title: '', description: '', author: {
 // fields. This is the "typing" the tree editor is built around — adding a new
 // component kind later means adding one entry here plus its render/serialize
 // handling below, not touching the tree-walking logic itself.
-interface V2FieldDef {
-    key: string; label: string; input: 'text' | 'textarea' | 'checkbox' | 'select';
-    placeholder?: string; options?: { value: string; label: string }[];
-}
-interface V2NodeDef {
-    label: string; type: number; canContain: V2Kind[]; fields: V2FieldDef[];
-    maxChildren?: number; hasThumbnailAccessory?: boolean; hasItemsList?: boolean;
-}
-// Editor-side tree node. Converted to/from the Discord API shape (V2ApiComponent) on commit/load.
+interface V2FieldDef { key: string; label: string; input: 'text' | 'textarea' | 'number' | 'checkbox' | 'select'; placeholder?: string; options?: { value: string; label: string }[] }
+interface V2NodeDef { label: string; type: number; canContain: V2Kind[]; fields: V2FieldDef[]; maxChildren?: number; list?: 'media'; hasAccessory?: boolean }
+interface V2MediaItem { url: string; description: string; spoiler: boolean }
 interface V2Node {
-    id: string; kind: V2Kind; fields: Record<string, string | boolean>;
-    children: V2Node[]; accessory: { url: string } | null; items: string[];
+    id: string; apiId?: number; kind: V2Kind; fields: Record<string, string | boolean>;
+    children: V2Node[]; accessory: V2Node | null; items: V2MediaItem[]; extra: Record<string, unknown>;
 }
-// Keyed by node *kind name* ('container', ...): V2_ROOT_KINDS, canContain and createV2Node all look it up by name.
 const V2_NODE_KINDS: Record<V2Kind, V2NodeDef> = {
-    container: {
-        label: 'Container', type: ComponentType.Container,
-        canContain: ['textDisplay', 'separator', 'mediaGallery', 'section'],
-        fields: [{ key: 'accent_color', label: 'Accent Color (hex)', input: 'text', placeholder: '#5865F2' }],
+    button: {
+        label: 'Button', type: ComponentType.Button, canContain: [], fields: [
+            { key: 'label', label: 'Label', input: 'text' }, { key: 'url', label: 'Link URL', input: 'text' },
+            { key: 'emoji_name', label: 'Emoji', input: 'text' }, { key: 'emoji_id', label: 'Custom Emoji ID', input: 'text' },
+        ]
     },
-    section: {
-        label: 'Section', type: ComponentType.Section,
-        canContain: ['textDisplay'], maxChildren: 3, hasThumbnailAccessory: true,
-        fields: [],
-    },
-    textDisplay: {
-        label: 'Text', type: ComponentType.TextDisplay,
-        canContain: [],
-        fields: [{ key: 'content', label: 'Content (markdown)', input: 'textarea', placeholder: 'Type text...' }],
-    },
-    separator: {
-        label: 'Separator', type: ComponentType.Separator,
-        canContain: [],
-        fields: [
-            { key: 'divider', label: 'Show divider line', input: 'checkbox' },
-            { key: 'spacing', label: 'Spacing', input: 'select', options: [{ value: '1', label: 'Small' }, { value: '2', label: 'Large' }] },
-        ],
-    },
-    mediaGallery: {
-        label: 'Media Gallery', type: ComponentType.MediaGallery,
-        canContain: [], hasItemsList: true,
-        fields: [],
-    },
+    container: { label: 'Container', type: ComponentType.Container, canContain: ['file', 'mediaGallery', 'section', 'separator', 'textDisplay'], maxChildren: 10, fields: [{ key: 'accent_color', label: 'Accent Color (hex)', input: 'text' }, { key: 'spoiler', label: 'Spoiler', input: 'checkbox' }] },
+    section: { label: 'Section', type: ComponentType.Section, canContain: ['textDisplay'], maxChildren: 3, fields: [], hasAccessory: true },
+    textDisplay: { label: 'Text', type: ComponentType.TextDisplay, canContain: [], fields: [{ key: 'content', label: 'Content (markdown)', input: 'textarea' }] },
+    thumbnail: { label: 'Thumbnail', type: ComponentType.Thumbnail, canContain: [], fields: [{ key: 'media_url', label: 'Thumbnail URL', input: 'text' }, { key: 'description', label: 'Alt text', input: 'text' }, { key: 'spoiler', label: 'Spoiler', input: 'checkbox' }] },
+    mediaGallery: { label: 'Media Gallery', type: ComponentType.MediaGallery, canContain: [], fields: [], list: 'media' },
+    file: { label: 'File', type: ComponentType.File, canContain: [], fields: [] },
+    separator: { label: 'Separator', type: ComponentType.Separator, canContain: [], fields: [{ key: 'divider', label: 'Show divider line', input: 'checkbox' }, { key: 'spacing', label: 'Spacing', input: 'select', options: [{ value: '1', label: 'Small' }, { value: '2', label: 'Large' }] }] },
 };
-const V2_ROOT_KINDS: V2Kind[] = ['container', 'textDisplay', 'separator', 'mediaGallery', 'section'];
+const V2_ROOT_KINDS: V2Kind[] = ['container', 'file', 'mediaGallery', 'section', 'separator', 'textDisplay'];
+const V2_COMPONENT_PROPERTIES = new Set(['type', 'id', 'components', 'accessory', 'items', 'options', 'emoji', 'media', 'file', 'name', 'size', 'accent_color', 'spacing', 'style', 'label', 'custom_id', 'url', 'sku_id', 'disabled', 'placeholder', 'min_values', 'max_values', 'channel_types', 'default_values', 'description', 'spoiler', 'divider', 'content']);
 
 function hexColorToInt(hex: string) {
     const n = parseInt(String(hex || '').trim().replace(/^#/, ''), 16);
@@ -332,81 +354,107 @@ function intColorToHex(n?: number | null) {
     return typeof n === 'number' ? '#' + n.toString(16).padStart(6, '0') : '';
 }
 function createV2Node(kind: V2Kind): V2Node {
-    const fields: Record<string, string | boolean> = kind === 'separator' ? { divider: true, spacing: '1' } : {};
-    return { id: crypto.randomUUID(), kind, fields, children: [], accessory: null, items: [] };
+    const fields: Record<string, string | boolean> = {};
+    if (kind === 'separator') Object.assign(fields, { divider: true, spacing: '1' });
+    if (kind === 'container' || kind === 'thumbnail' || kind === 'file') fields.spoiler = false;
+    return { id: crypto.randomUUID(), kind, fields, children: [], accessory: null, items: [], extra: {} };
 }
 function v2NodeToApi(node: V2Node): V2ApiComponent {
     const def = V2_NODE_KINDS[node.kind];
-    const api: V2ApiComponent = { type: def.type };
-    for (const f of def.fields) {
-        const val = node.fields[f.key];
-        if (f.input === 'checkbox') { api[f.key] = !!val; continue; }
-        if (val === undefined || val === '') continue;
-        if (f.key === 'accent_color') { const c = hexColorToInt(String(val)); if (c !== undefined) api.accent_color = c; }
-        else if (f.key === 'spacing') api.spacing = parseInt(String(val), 10);
-        else api[f.key] = val;
+    const api: V2ApiComponent = { ...node.extra, type: def.type };
+    if (node.apiId !== undefined) api.id = node.apiId;
+    if (node.kind === 'file' && node.fields.file_url) api.file = { url: String(node.fields.file_url).trim() };
+    if (node.kind === 'button') api.style = 5;
+    for (const fieldDef of def.fields) {
+        const value = node.fields[fieldDef.key];
+        if (fieldDef.input === 'checkbox') { api[fieldDef.key] = !!value; continue; }
+        if (value === undefined || value === '') continue;
+        if (fieldDef.key === 'accent_color') { const color = hexColorToInt(String(value)); if (color !== undefined) api.accent_color = color; }
+        else if (fieldDef.key === 'media_url') api.media = { url: String(value).trim() };
+        else if (fieldDef.key === 'file_url') api.file = { url: String(value).trim() };
+        else if (fieldDef.key === 'spacing') api.spacing = Number(value);
+        else api[fieldDef.key] = value;
     }
-    if (def.hasItemsList) {
-        api.items = node.items.map(u => ({ media: { url: u.trim() } }));
-    }
+    if (node.kind === 'button' && (node.fields.emoji_name || node.fields.emoji_id)) api.emoji = { name: node.fields.emoji_name || undefined, id: node.fields.emoji_id || undefined };
+    if (def.list === 'media') api.items = node.items.map(item => ({ media: { url: item.url.trim() }, ...(item.description ? { description: item.description } : {}), ...(item.spoiler ? { spoiler: true } : {}) }));
     if (def.canContain.length) {
         api.components = node.children.map(v2NodeToApi);
     }
-    if (def.hasThumbnailAccessory && node.accessory) {
-        api.accessory = { type: ComponentType.Thumbnail, media: { url: node.accessory.url.trim() } };
-    }
+    if (def.hasAccessory && node.accessory) api.accessory = v2NodeToApi(node.accessory);
     return api;
 }
 function v2ApiToNode(api: V2ApiComponent): V2Node | null {
     const kind = (Object.keys(V2_NODE_KINDS) as V2Kind[]).find(k => V2_NODE_KINDS[k].type === api.type);
-    if (!kind) return null; // unknown/unsupported component type (e.g. ActionRow) — dropped rather than guessed at
+    if (!kind) return null; // Unsupported or removed component types are not reconstructed.
     const def = V2_NODE_KINDS[kind];
     const node = createV2Node(kind);
-    for (const f of def.fields) {
-        if (f.key === 'accent_color') node.fields.accent_color = intColorToHex(api.accent_color);
-        else if (f.input === 'checkbox') node.fields[f.key] = api[f.key] === undefined ? true : !!api[f.key];
-        else if (api[f.key] !== undefined) node.fields[f.key] = String(api[f.key]);
+    node.apiId = api.id;
+    node.extra = Object.fromEntries(Object.entries(api).filter(([key]) => !V2_COMPONENT_PROPERTIES.has(key)));
+    if (kind === 'file') node.fields.file_url = String(api.file?.url || '');
+    for (const fieldDef of def.fields) {
+        if (fieldDef.key === 'accent_color') node.fields.accent_color = intColorToHex(api.accent_color);
+        else if (fieldDef.key === 'media_url') node.fields.media_url = String(api.media?.url || '');
+        else if (fieldDef.key === 'file_url') node.fields.file_url = String(api.file?.url || '');
+        else if (fieldDef.key === 'emoji_name') node.fields.emoji_name = String((api.emoji as any)?.name || '');
+        else if (fieldDef.key === 'emoji_id') node.fields.emoji_id = String((api.emoji as any)?.id || '');
+        else if (fieldDef.input === 'checkbox') node.fields[fieldDef.key] = api[fieldDef.key] === undefined ? fieldDef.key === 'divider' : !!api[fieldDef.key];
+        else if (api[fieldDef.key] !== undefined) node.fields[fieldDef.key] = String(api[fieldDef.key]);
     }
-    if (def.hasItemsList) node.items = (api.items || []).map(it => it.media?.url || '');
+    if (def.list === 'media') node.items = (api.items || []).map(item => ({ url: String(item.media?.url || ''), description: String(item.description || ''), spoiler: !!item.spoiler }));
     if (def.canContain.length && Array.isArray(api.components)) {
         node.children = api.components.map(v2ApiToNode).filter((n): n is V2Node => n !== null);
     }
-    if (def.hasThumbnailAccessory && api.accessory?.type === ComponentType.Thumbnail && typeof api.accessory.media?.url === 'string') {
-        node.accessory = { url: api.accessory.media.url };
-    }
+    if (def.hasAccessory && api.accessory) node.accessory = v2ApiToNode(api.accessory);
     return node;
 }
 function validateV2Components(components: V2ApiComponent[]) {
     if (!components.length) return 'Add at least one component.';
     let componentCount = 0;
+    const validateButton = (button: V2ApiComponent) => {
+        const style = Number(button.style);
+        if (style !== 5) return 'Only link buttons are supported here.';
+        if (!button.url) return 'Link buttons need a URL.';
+        if (!button.label?.trim() && !button.emoji) return 'Buttons need a label or emoji.';
+        if ((button.label?.length || 0) > 80) return 'Button labels are limited to 80 characters.';
+        return null;
+    };
     const inspect = (component: V2ApiComponent, parentType: number | null): string | null => {
         componentCount++;
         if (componentCount > 40) return 'Components V2 messages allow at most 40 components.';
 
         const allowedTypes: number[] = parentType === null
-            ? [ComponentType.Container, ComponentType.TextDisplay, ComponentType.Separator, ComponentType.MediaGallery, ComponentType.Section]
+            ? V2_ROOT_KINDS.map(rootKind => V2_NODE_KINDS[rootKind].type)
             : parentType === ComponentType.Container
-                ? [ComponentType.TextDisplay, ComponentType.Separator, ComponentType.MediaGallery, ComponentType.Section]
+                ? V2_NODE_KINDS.container.canContain.map(childKind => V2_NODE_KINDS[childKind].type)
                 : parentType === ComponentType.Section ? [ComponentType.TextDisplay] : [];
         if (!allowedTypes.includes(component.type)) return 'A component is in a position Discord does not allow.';
 
+        if (component.type === ComponentType.Button) {
+            const error = validateButton(component);
+            if (error) return error;
+        }
         if (component.type === ComponentType.TextDisplay) {
-            const content = component.content as string;
+            const content = String(component.content || '');
             if (!content.trim()) return 'Text components need non-empty content.';
             if (content.length > 4000) return 'Text components cannot exceed 4,000 characters.';
         } else if (component.type === ComponentType.Section) {
             if (!Array.isArray(component.components) || component.components.length < 1 || component.components.length > 3) {
                 return 'Sections need 1 to 3 text components.';
             }
-            if (component.accessory?.type !== ComponentType.Thumbnail || !component.accessory.media?.url) {
-                return 'Sections need a thumbnail accessory with an image URL.';
+            const accessory = component.accessory;
+            if (accessory?.type === ComponentType.Thumbnail && !accessory.media?.url) return 'Section thumbnail accessories need an image URL.';
+            if (![ComponentType.Thumbnail, ComponentType.Button].includes(accessory?.type as any)) return 'Sections need a thumbnail or button accessory.';
+            if (accessory?.type === ComponentType.Button) {
+                const error = validateButton(accessory);
+                if (error) return error;
+                componentCount++;
             }
             for (const child of component.components) {
                 const error = inspect(child, ComponentType.Section);
                 if (error) return error;
             }
         } else if (component.type === ComponentType.Container) {
-            if (!Array.isArray(component.components) || component.components.length === 0) return 'Containers need at least one child component.';
+            if (!Array.isArray(component.components) || component.components.length === 0 || component.components.length > 10) return 'Containers need 1 to 10 child components.';
             for (const child of component.components) {
                 const error = inspect(child, ComponentType.Container);
                 if (error) return error;
@@ -416,7 +464,7 @@ function validateV2Components(components: V2ApiComponent[]) {
                 return 'Media galleries need 1 to 10 images.';
             }
             if (component.items.some(item => !item.media?.url?.trim())) return 'Every gallery item needs an image URL.';
-        } 
+        } else if (component.type === ComponentType.File && !component.file?.url?.startsWith('attachment://')) return 'File components need an uploaded attachment.';
         return null;
     };
     for (const component of components) {
@@ -424,6 +472,21 @@ function validateV2Components(components: V2ApiComponent[]) {
         if (error) return error;
     }
     return null;
+}
+function collectAttachmentNames(config: MessageConfig): string[] {
+    const fileNames = new Set<string>();
+    const visit = (value: unknown) => {
+        if (Array.isArray(value)) { value.forEach(visit); return; }
+        if (!value || typeof value !== 'object') return;
+        const record = value as Record<string, unknown>;
+        if (typeof record.url === 'string' && record.url.startsWith('attachment://')) {
+            fileNames.add(record.url.slice('attachment://'.length));
+        }
+        Object.values(record).forEach(visit);
+    };
+    visit(config.embeds || []);
+    visit(config.components || []);
+    return [...fileNames];
 }
 function addEmbedFieldRow(list: HTMLElement, field: APIEmbedField = { name: '', value: '', inline: false }) {
     if (list.children.length >= 25) {
@@ -496,7 +559,7 @@ function syncActiveEmbedFromForm(formContainer: HTMLFormElement) {
         reactionsPatch = { reactions };
     }
 
-    const channelid = formContainer.querySelector<HTMLInputElement>('[data-embed-field="channelid"]')?.value.trim() || '';
+    const channelid = formContainer.querySelector<HTMLSelectElement>('[data-embed-field="channelid"]')?.value.trim() || '';
     const existing: MessageConfig = messageConfigsDraft[activeEmbedKey] || { channelid: '', format: 'v1' };
     messageConfigsDraft[activeEmbedKey] = { ...existing, channelid, embeds: [embed], ...reactionsPatch, format: 'v1' };
 }
@@ -504,15 +567,18 @@ function rerender(formContainer: HTMLElement) {
     formContainer.querySelector('#v2TreeRoot')!.innerHTML = '';
     const tree = (messageConfigsDraft[activeEmbedKey]!.components || []).map(v2ApiToNode).filter((n): n is V2Node => n !== null);
     const commit = (nextTree: V2Node[]) => {
-        messageConfigsDraft[activeEmbedKey] = { ...messageConfigsDraft[activeEmbedKey], components: nextTree.map(v2NodeToApi), format: "v2" };
+        messageConfigsDraft[activeEmbedKey] = { ...messageConfigsDraft[activeEmbedKey], components: nextTree.map(v2NodeToApi), format: 'v2' };
     };
     tree.forEach((node, index) => formContainer.querySelector('#v2TreeRoot')!.appendChild(renderNode(node, tree, index, tree, commit, formContainer)));
-    formContainer.querySelector('#v2RootAddButtons')!.innerHTML = V2_ROOT_KINDS.map(k => `<button type="button" class="add-btn" data-add-root="${k}">+ ${V2_NODE_KINDS[k].label}</button>`).join('');
-    formContainer.querySelector('#v2RootAddButtons')!.querySelectorAll<HTMLElement>('[data-add-root]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            tree.push(createV2Node(btn.dataset.addRoot as V2Kind));
-            commit(tree); rerender(formContainer);
-        });
+    const rootButtons = formContainer.querySelector('#v2RootAddButtons')!;
+    rootButtons.innerHTML = '';
+    V2_ROOT_KINDS.forEach(kind => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'add-btn';
+        button.textContent = `+ ${V2_NODE_KINDS[kind].label}`;
+        button.addEventListener('click', () => { tree.push(createV2Node(kind)); commit(tree); rerender(formContainer); });
+        rootButtons.appendChild(button);
     });
 }
 function renderNode(node: V2Node, parentArray: V2Node[], index: number, rootTree: V2Node[], commit: (tree: V2Node[]) => void, formContainer: HTMLElement): HTMLElement {
@@ -529,70 +595,163 @@ function renderNode(node: V2Node, parentArray: V2Node[], index: number, rootTree
     removeBtn.addEventListener('click', () => { parentArray.splice(index, 1); commit(rootTree); rerender(formContainer); });
     header.appendChild(removeBtn);
     wrap.appendChild(header);
-    def.fields.forEach(f => {
+
+    const renderFields = (targetNode: V2Node, target: HTMLElement) => V2_NODE_KINDS[targetNode.kind].fields.forEach(fieldDef => {
         const fieldWrap = document.createElement('div');
         fieldWrap.className = 'flex flex-col';
-        if (f.input === 'textarea') {
-            fieldWrap.innerHTML = `<span class="field-label">${f.label}</span><textarea class="field">${node.fields[f.key] || ''}</textarea>`;
-            const el = fieldWrap.querySelector<HTMLTextAreaElement>('textarea')!;
-            el.addEventListener('input', () => { node.fields[f.key] = el.value; commit(rootTree); });
-        } else if (f.input === 'checkbox') {
-            fieldWrap.innerHTML = `<span class="flex items-center gap-2 text-gray-300"><input type="checkbox" ${node.fields[f.key] ? 'checked' : ''}>${f.label}</span>`;
-            const el = fieldWrap.querySelector<HTMLInputElement>('input')!;
-            el.addEventListener('change', () => { node.fields[f.key] = el.checked; commit(rootTree); });
-        } else if (f.input === 'select') {
-            const optionsHtml = (f.options ?? []).map(o => `<option value="${o.value}" ${node.fields[f.key] === o.value ? 'selected' : ''}>${o.label}</option>`).join('');
-            fieldWrap.innerHTML = `<span class="field-label">${f.label}</span><select class="field">${optionsHtml}</select>`;
-            const el = fieldWrap.querySelector<HTMLSelectElement>('select')!;
-            el.addEventListener('change', () => { node.fields[f.key] = el.value; commit(rootTree); });
+        const updateField = (value: string | boolean) => { targetNode.fields[fieldDef.key] = value; commit(rootTree); };
+        if (fieldDef.input === 'checkbox') {
+            const label = document.createElement('label');
+            label.className = 'flex items-center gap-2 text-gray-300';
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.checked = !!targetNode.fields[fieldDef.key];
+            checkbox.addEventListener('change', () => updateField(checkbox.checked));
+            label.append(checkbox, document.createTextNode(fieldDef.label));
+            fieldWrap.appendChild(label);
         } else {
-            fieldWrap.innerHTML = `<span class="field-label">${f.label}</span><input type="text" class="field" placeholder="${f.placeholder || ''}" value="${node.fields[f.key] || ''}">`;
-            const el = fieldWrap.querySelector<HTMLInputElement>('input')!;
-            el.addEventListener('input', () => { node.fields[f.key] = el.value; commit(rootTree); });
+            const label = document.createElement('span');
+            label.className = 'field-label';
+            label.textContent = fieldDef.label;
+            fieldWrap.appendChild(label);
+            const control = fieldDef.input === 'textarea' ? document.createElement('textarea') : document.createElement(fieldDef.input === 'select' ? 'select' : 'input');
+            control.className = 'field';
+            if (control instanceof HTMLInputElement) {
+                control.type = fieldDef.input === 'number' ? 'number' : 'text';
+                control.placeholder = fieldDef.placeholder || '';
+            }
+            if (control instanceof HTMLSelectElement) {
+                (fieldDef.options || []).forEach(option => {
+                    const optionEl = document.createElement('option');
+                    optionEl.value = option.value;
+                    optionEl.textContent = option.label;
+                    control.appendChild(optionEl);
+                });
+            }
+            control.value = String(targetNode.fields[fieldDef.key] ?? '');
+            control.addEventListener(fieldDef.input === 'select' ? 'change' : 'input', () => updateField(control.value));
+            fieldWrap.appendChild(control);
+            if (fieldDef.key === 'media_url') {
+                const imageInput = document.createElement('input');
+                imageInput.type = 'file';
+                imageInput.accept = 'image/*';
+                imageInput.className = 'field';
+                imageInput.addEventListener('change', () => {
+                    const selected = imageInput.files?.[0];
+                    if (!selected) return;
+                    const upload = queueImageUpload(selected);
+                    if (!upload) return;
+                    updateField(`attachment://${upload.name}`);
+                    control.value = `attachment://${upload.name}`;
+                });
+                fieldWrap.appendChild(imageInput);
+            }
         }
-        wrap.appendChild(fieldWrap);
+        target.appendChild(fieldWrap);
     });
+    renderFields(node, wrap);
 
-    if (def.hasItemsList) {
+    if (node.kind === 'file') {
+        const uploadWrap = document.createElement('div');
+        uploadWrap.className = 'flex flex-col gap-1';
+        const label = document.createElement('span');
+        label.className = 'field-label';
+        label.textContent = 'Upload file';
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.className = 'field';
+        const selectedName = document.createElement('span');
+        selectedName.className = 'text-sm text-gray-400';
+        selectedName.textContent = String(node.fields.file_url || '').replace(/^attachment:\/\//, '');
+        fileInput.addEventListener('change', () => {
+            const file = fileInput.files?.[0];
+            if (!file) return;
+            const upload = queueEmbedUpload(file);
+            node.fields.file_url = `attachment://${upload.name}`;
+            selectedName.textContent = upload.name;
+            commit(rootTree);
+        });
+        uploadWrap.append(label, fileInput, selectedName);
+        wrap.appendChild(uploadWrap);
+    }
+
+    if (def.list === 'media') {
         const listWrap = document.createElement('div');
         listWrap.className = 'space-y-1';
-        (node.items || []).forEach((url, i) => {
+        node.items.forEach((entry, entryIndex) => {
             const row = document.createElement('div');
             row.className = 'row gap-2';
-            row.innerHTML = `<input type="text" class="field" placeholder="https://..." value="${url}"><button type="button" class="remove-btn self-start">&times;</button>`;
-            row.querySelector('input')!.addEventListener('input', (e) => { node.items[i] = (e.target as HTMLInputElement).value; commit(rootTree); });
-            row.querySelector('button')!.addEventListener('click', () => { node.items.splice(i, 1); commit(rootTree); rerender(formContainer); });
+            ['url', 'description'].forEach(key => {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'field';
+                input.placeholder = key === 'url' ? 'https://...' : key;
+                input.value = String((entry as any)[key] || '');
+                input.addEventListener('input', () => { (entry as any)[key] = input.value; commit(rootTree); });
+                row.appendChild(input);
+                if (key === 'url') {
+                    const imageInput = document.createElement('input');
+                    imageInput.type = 'file';
+                    imageInput.accept = 'image/*';
+                    imageInput.className = 'field';
+                    imageInput.addEventListener('change', () => {
+                        const selected = imageInput.files?.[0];
+                        if (!selected) return;
+                        const upload = queueImageUpload(selected);
+                        if (!upload) return;
+                        entry.url = `attachment://${upload.name}`;
+                        input.value = entry.url;
+                        commit(rootTree);
+                    });
+                    row.appendChild(imageInput);
+                }
+            });
+            const spoilerLabel = document.createElement('label');
+            spoilerLabel.className = 'flex items-center gap-1 text-gray-300';
+            const spoiler = document.createElement('input');
+            spoiler.type = 'checkbox';
+            spoiler.checked = entry.spoiler;
+            spoiler.addEventListener('change', () => { entry.spoiler = spoiler.checked; commit(rootTree); });
+            spoilerLabel.append(spoiler, document.createTextNode('Spoiler'));
+            row.appendChild(spoilerLabel);
+            const remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'remove-btn self-start';
+            remove.textContent = '×';
+            remove.addEventListener('click', () => {
+                node.items.splice(entryIndex, 1);
+                commit(rootTree); rerender(formContainer);
+            });
+            row.appendChild(remove);
             listWrap.appendChild(row);
         });
         wrap.appendChild(listWrap);
-        const addImgBtn = document.createElement('button');
-        addImgBtn.type = 'button';
-        addImgBtn.className = 'add-btn';
-        addImgBtn.textContent = '+ Add Image URL';
-        addImgBtn.addEventListener('click', () => { node.items.push(''); commit(rootTree); rerender(formContainer); });
-        wrap.appendChild(addImgBtn);
+        const addEntry = document.createElement('button');
+        addEntry.type = 'button';
+        addEntry.className = 'add-btn';
+        addEntry.textContent = '+ Add Media';
+        addEntry.addEventListener('click', () => {
+            node.items.push({ url: '', description: '', spoiler: false });
+            commit(rootTree); rerender(formContainer);
+        });
+        wrap.appendChild(addEntry);
     }
 
-    if (def.hasThumbnailAccessory) {
+    if (def.hasAccessory) {
+        const accessoryType = document.createElement('select');
+        accessoryType.className = 'field';
+        accessoryType.innerHTML = '<option value="">-- Select accessory --</option><option value="thumbnail">Thumbnail</option><option value="button">Button</option>';
+        accessoryType.value = node.accessory?.kind || '';
+        accessoryType.addEventListener('change', () => {
+            node.accessory = accessoryType.value ? createV2Node(accessoryType.value as V2Kind) : null;
+            commit(rootTree); rerender(formContainer);
+        });
+        wrap.appendChild(accessoryType);
         if (node.accessory) {
             const accWrap = document.createElement('div');
             accWrap.className = 'flex flex-col border-t border-gray-700 pt-2';
-            accWrap.innerHTML = `<span class="field-label">Thumbnail URL</span><input type="text" class="field" value="${node.accessory.url || ''}" placeholder="https://...">`;
-            accWrap.querySelector('input')!.addEventListener('input', (e) => { if (node.accessory) node.accessory.url = (e.target as HTMLInputElement).value; commit(rootTree); });
-            const removeAcc = document.createElement('button');
-            removeAcc.type = 'button';
-            removeAcc.className = 'remove-btn mt-1';
-            removeAcc.textContent = 'Remove Thumbnail';
-            removeAcc.addEventListener('click', () => { node.accessory = null; commit(rootTree); rerender(formContainer); });
-            accWrap.appendChild(removeAcc);
+            renderFields(node.accessory, accWrap);
             wrap.appendChild(accWrap);
-        } else {
-            const addAcc = document.createElement('button');
-            addAcc.type = 'button';
-            addAcc.className = 'add-btn';
-            addAcc.textContent = '+ Thumbnail';
-            addAcc.addEventListener('click', () => { node.accessory = { url: '' }; commit(rootTree); rerender(formContainer); });
-            wrap.appendChild(addAcc);
         }
     }
 
@@ -602,7 +761,7 @@ function renderNode(node: V2Node, parentArray: V2Node[], index: number, rootTree
         node.children.forEach((child, i) => childrenWrap.appendChild(renderNode(child, node.children, i, rootTree, commit, formContainer)));
         wrap.appendChild(childrenWrap);
 
-        const atLimit = def.maxChildren && node.children.length >= def.maxChildren;
+        const atLimit = !!def.maxChildren && node.children.length >= def.maxChildren;
         if (!atLimit) {
             const addChildButtons = document.createElement('div');
             addChildButtons.className = 'flex gap-2 flex-wrap';
@@ -629,26 +788,24 @@ function renderEmbedForm(container: HTMLElement) {
     if (messageConfigsDraft[activeEmbedKey]!.format === 'v2') {
         // v2ApiToNode returns null for component types the builder can't edit; drop them instead of crashing the render
         const tree = (messageConfigsDraft[activeEmbedKey]!.components || []).map(v2ApiToNode).filter((n): n is V2Node => n !== null);
-        const commit = () => {
-            messageConfigsDraft[activeEmbedKey] = { ...messageConfigsDraft[activeEmbedKey], components: tree.map(v2NodeToApi), format: "v2" };
-        };
-
         formContainer.innerHTML = `
         <div class="flex flex-col gap-2">
             <span class="field-label text-red-400">Channel ID</span>
-            <input type="text" class="field" data-embed-field="channelid" value="${messageConfigsDraft[activeEmbedKey]!.channelid || ''}">
+            <select class="field" data-embed-field="channelid">${buildEmbedChannelOptionsHtml(messageConfigsDraft[activeEmbedKey]!.channelid || '')}</select>
             <p class="text-sm text-yellow-400">Format can't be changed after creation — switching to Standard means deleting this entry and sending a new one.</p>
             <div id="v2TreeRoot" class="space-y-3 mt-2"></div>
             <div id="v2RootAddButtons" class="flex gap-2 flex-wrap"></div>
         </div>
     `;
-        formContainer.querySelector('[data-embed-field="channelid"]')!.addEventListener('input', (e) => {
-            messageConfigsDraft[activeEmbedKey] = { ...messageConfigsDraft[activeEmbedKey], channelid: (e.target as HTMLInputElement).value.trim(), format: 'v2' };
+        formContainer.querySelector('[data-embed-field="channelid"]')!.addEventListener('change', (e) => {
+            messageConfigsDraft[activeEmbedKey] = { ...messageConfigsDraft[activeEmbedKey], channelid: (e.target as HTMLSelectElement).value.trim(), format: 'v2' };
         });
         rerender(container);
-        commit();
+        messageConfigsDraft[activeEmbedKey] = { ...messageConfigsDraft[activeEmbedKey], components: tree.map(v2NodeToApi), format: "v2" };
             return;
     }
+    const activeConfig = messageConfigsDraft[activeEmbedKey]!;
+    messageConfigsDraft[activeEmbedKey] = { ...activeConfig, components: [] };
     const embed = messageConfigsDraft[activeEmbedKey]!.embeds?.[0] || blankEmbed();
     const visibleOptional = new Set<OptionalEmbedKey>(
         OPTIONAL_EMBED_FIELDS.filter(f => {
@@ -664,8 +821,8 @@ function renderEmbedForm(container: HTMLElement) {
     formContainer.innerHTML = `
                 <div class="flex flex-col">
                     <div id="optionalFieldButtons" class="flex gap-2 flex-wrap"></div>
-                    <span class="field-label text-red-400">Channel ID</span>
-                    <input type="text" class="field" data-embed-field="channelid" value="${messageConfigsDraft[activeEmbedKey]!.channelid || ''}">
+                    <span class="field-label text-red-400">Channel</span>
+                    <select class="field" data-embed-field="channelid">${buildEmbedChannelOptionsHtml(messageConfigsDraft[activeEmbedKey]!.channelid || '')}</select>
                     <span class="field-label">Title</span>
                     <input type="text" class="field" data-embed-field="title" value="${embed.title || ''}">
                     <span class="field-label">Description</span>
@@ -675,41 +832,34 @@ function renderEmbedForm(container: HTMLElement) {
                     <div id="optionalFieldGroups" class="space-y-3"></div>
                 </div>
             `;
-
-    const buttonsEl = formContainer.querySelector('#optionalFieldButtons') as HTMLElement;
-    const groupsEl = formContainer.querySelector('#optionalFieldGroups') as HTMLDivElement;
-
-    const drawButtons = () => {
-        buttonsEl.innerHTML = OPTIONAL_EMBED_FIELDS
+    const drawButtons = (buttonsContainer: HTMLElement) => {
+        buttonsContainer.innerHTML = OPTIONAL_EMBED_FIELDS
             .filter(f => !visibleOptional.has(f.key))
             .map(f => `<button type="button" class="add-btn" data-show-optional="${f.key}">+ ${f.label}</button>`)
             .join('');
 
-        buttonsEl.querySelectorAll<HTMLElement>('[data-show-optional]').forEach(btn => {
+        buttonsContainer.querySelectorAll<HTMLElement>('[data-show-optional]').forEach(btn => {
             btn.addEventListener('click', () => {
                 visibleOptional.add(btn.dataset.showOptional as OptionalEmbedKey);
-                drawButtons();
-                drawGroups();
+                drawButtons(buttonsContainer);
+                drawGroups(groupsEl);
             });
         });
     };
-
-    const drawGroups = () => {
-        groupsEl.innerHTML = '';
+    const buttonsEl = formContainer.querySelector('#optionalFieldButtons') as HTMLElement;
+    const groupsEl = formContainer.querySelector('#optionalFieldGroups') as HTMLElement;
+    const drawGroups = (groupsContainer: HTMLElement) => {
+        groupsContainer.innerHTML = '';
         OPTIONAL_EMBED_FIELDS.filter(f => visibleOptional.has(f.key)).forEach(f => {
             const wrap = document.createElement('div');
             wrap.className = 'flex flex-col';
             wrap.dataset.optionalGroup = f.key;
-            wrap.innerHTML = `
-                        ${f.render(embed)}
-                        <button type="button" class="remove-btn" data-hide-optional="${f.key}">Remove</button>  
-                        `;
-            groupsEl.appendChild(wrap);
-
+            wrap.innerHTML = `${f.render(embed)}<button type="button" class="remove-btn" data-hide-optional="${f.key}">Remove</button>`;
+            groupsContainer.appendChild(wrap);
             wrap.querySelector('[data-hide-optional]')!.addEventListener('click', () => {
                 visibleOptional.delete(f.key);
-                drawButtons();
-                drawGroups();
+                drawButtons(buttonsEl);
+                drawGroups(groupsEl);
             });
 
             if (f.key === 'fields') {
@@ -762,13 +912,25 @@ function renderEmbedForm(container: HTMLElement) {
                 });
             }
 
-            wrap.addEventListener('input', () => syncActiveEmbedFromForm(formContainer));
-            wrap.addEventListener('change', () => syncActiveEmbedFromForm(formContainer));
+            if (f.key === 'image' || f.key === 'thumbnail') {
+                const imageInput = wrap.querySelector<HTMLInputElement>(`[data-embed-image-upload="${f.key}"]`)!;
+                imageInput.addEventListener('change', () => {
+                    const selected = imageInput.files?.[0];
+                    if (!selected) return;
+                    const upload = queueImageUpload(selected);
+                    if (!upload) return;
+                    const urlInput = wrap.querySelector<HTMLInputElement>(`[data-embed-field="${f.key}"]`)!;
+                    urlInput.value = `attachment://${upload.name}`;
+                    syncActiveEmbedFromForm(formContainer);
+                });
+            }
+
         });
     };
-    drawButtons();
-    drawGroups();
+    drawButtons(buttonsEl);
+    drawGroups(groupsEl);
     formContainer.addEventListener('input', () => syncActiveEmbedFromForm(formContainer));
+    formContainer.addEventListener('change', () => syncActiveEmbedFromForm(formContainer));
 }
 const MESSAGE_REASON_CATEGORIES: {key: string, label: string}[] = [
     { key: 'hasInvite', label: 'Discord Invite Link' },
@@ -793,59 +955,31 @@ function getMessageReasonsWeightsValues(container: HTMLElement) {
 }
 type SectionValue = string | number | boolean | string[];
 function getSectionValues(container: HTMLElement, type: SectionType) {
-        const values: Record<string, SectionValue> = {};
-        const divs = container.querySelectorAll('div');
+    const values: Record<string, SectionValue> = {};
+    const nameSelector = type === 'automod' ? '[data-automod-name]' : '[data-channel-name]';
+    const valueSelector = type === 'automod' ? '[data-automod-value]' : '[data-channel-id]';
 
-        divs.forEach(div => {
-            switch (type) {
-                case 'automod': {
-                    const nameSpan = div.querySelector<HTMLElement>('span[data-automod-name]');
-                    const valueInput = div.querySelector<HTMLInputElement>('input[data-automod-value]');
-                    if (nameSpan && valueInput) {
-                        const name = nameSpan.dataset.automodName?.trim();
-                        const raw = valueInput.value.trim();
-                        if (name) {
-                            let parsedValue: string | number | boolean = raw;
-                            if (raw === 'true') parsedValue = true;
-                            else if (raw === 'false') parsedValue = false;
-                            else if (raw !== '' && !isNaN(Number(raw))) parsedValue = Number(raw);
-                            values[name] = parsedValue;
-                        }
-                    }
-                    break;
-                }
-                case 'mod': {
-                    const nameSpanMod = div.querySelector<HTMLElement>('span[data-channel-name]');
-                    const idSelectMod = div.querySelector<HTMLSelectElement>('select[data-channel-id]');
-                    if (nameSpanMod && idSelectMod) {
-                        const name = nameSpanMod.dataset.channelName?.trim();
-                        if (name) values[name] = idSelectMod.value.trim();
-                    }
-                    break;
-                }
-                case 'reaction': {
-                    const nameInput = div.querySelector<HTMLInputElement>('input[data-channel-name]');
-                    const idSelect = div.querySelector<HTMLSelectElement>('select[data-channel-id]');
-                    if (nameInput && idSelect) {
-                        const name = nameInput.value.trim();
-                        const selected = Array.from(idSelect.selectedOptions).map(opt => opt.value);
-                        if (name) values[name] = selected.length > 1 ? selected : (selected[0] || '');
-                    }
-                    break;
-                }
-                default: { // 'public', 'response'
-                    const nameInput = div.querySelector<HTMLInputElement>('input[data-channel-name]');
-                    const idField = div.querySelector<HTMLInputElement | HTMLSelectElement>('[data-channel-id]'); // select for 'public', input otherwise
-                    if (nameInput && idField) {
-                        const name = nameInput.value.trim();
-                        if (name) values[name] = idField.value.trim();
-                    }
-                    break;
-                }
-            }
-        });
+    container.querySelectorAll('div').forEach(div => {
+        const nameElement = div.querySelector<HTMLElement>(nameSelector);
+        const valueElement = div.querySelector<HTMLInputElement | HTMLSelectElement>(valueSelector);
+        const name = nameElement instanceof HTMLInputElement
+            ? nameElement.value.trim()
+            : nameElement?.dataset[type === 'automod' ? 'automodName' : 'channelName']?.trim();
+        if (!name || !valueElement) return;
 
-        return values;
+        if (type === 'reaction' && valueElement instanceof HTMLSelectElement) {
+            const selected = Array.from(valueElement.selectedOptions, option => option.value);
+            values[name] = selected.length > 1 ? selected : selected[0] || '';
+        } else if (type === 'automod') {
+            const raw = valueElement.value.trim();
+            values[name] = raw === 'true' ? true
+                : raw === 'false' ? false
+                    : raw !== '' && !Number.isNaN(Number(raw)) ? Number(raw) : raw;
+        } else {
+            values[name] = valueElement.value.trim();
+        }
+    });
+    return values;
 }
 function createChannelInput(container: HTMLElement, name = '', value: string | string[] = '', type: SectionType) {
         const div = document.createElement('div');
@@ -955,7 +1089,7 @@ function confirmModal(message: string) {
         document.getElementById('confirmNo')!.addEventListener('click', () => { modal.remove(); resolve(false); });
     });
 }
-function getFormValues() {
+function getFormValues(includeMessageConfigs = true) {
     const { modChannelsSection, publicChannelsSection, GeneralChannelsSection, reactionsSection, automodSection, Responses, adminRoleInput, modRoleInput, jrRoleInput, reasonsWeightsSection, messageReasonsWeightsSection, } = elements;
 
     const modChannels = getSectionValues(modChannelsSection, 'mod');
@@ -968,7 +1102,8 @@ function getFormValues() {
     const responses = getSectionValues(Responses, 'response');
     const staffroles = [adminRoleInput.value.trim(), modRoleInput.value.trim(), jrRoleInput.value.trim()];
 
-    return { modChannels, publicChannels, generalchannels, reactions, automodsettings: { ...automodThresholds, messagereasonsandweights, automodreasonsandweights, }, responses, staffroles, messageConfigs: messageConfigsDraft };
+    const config = { modChannels, publicChannels, generalchannels, reactions, automodsettings: { ...automodThresholds, messagereasonsandweights, automodreasonsandweights, }, responses, staffroles };
+    return includeMessageConfigs ? { ...config, messageConfigs: messageConfigsDraft } : config;
 }
 function showMessage(message: string, colorClass: string) {
     const { messageBox } = elements;
@@ -982,14 +1117,6 @@ function showMessage(message: string, colorClass: string) {
         }, { once: true });
     }, 5000);
 }
-function applyRolePermissions() {
-    const { saveConfigBtn, deleteConfigBtn } = elements;
-    const canEdit = currentRole === 'admin' || currentRole === 'owner';
-    setDisabledState(saveConfigBtn, !canEdit);
-    saveConfigBtn.title = canEdit ? '' : 'Admin role required';
-    setDisabledState(deleteConfigBtn, !canEdit);
-    deleteConfigBtn.title = canEdit ? '' : 'Admin role required';
-}
 // --- Guild list / selection ------------------------------------------------
 
 async function refreshGuildSelect() {
@@ -1002,7 +1129,7 @@ async function refreshGuildSelect() {
         return;
     }
     try {
-        const resGuilds = await fetch(`/api/guilds`, { headers: authHeaders(), credentials: 'include' });
+        const resGuilds = await fetch(`/api/guilds`, { credentials: 'include' });
         if (!resGuilds.ok) throw new Error(`Failed to list guilds (${resGuilds.status})`);
         if (resGuilds.status === 401) {
             currentUser = null;
@@ -1034,11 +1161,10 @@ function setGuildRoles(roles: APIRole[]) {
     rolePickers.jr.setRoles(roles);
 }
 async function loadSelectedGuild() {
-    const { guildSelect, deleteConfigBtn, addServerBtn, orText, saveConfigBtn, exportConfigBtn, buttonColumnText, channelsContainer, adminRoleInput, modRoleInput, jrRoleInput } = elements;
+    const { guildSelect, deleteConfigBtn, addServerBtn, orText, saveConfigBtn, buttonColumnText, channelsContainer, adminRoleInput, modRoleInput, jrRoleInput } = elements;
     currentGuildId = guildSelect.value || null;
     deleteConfigBtn.classList.toggle('hidden', !currentGuildId);
     saveConfigBtn.classList.toggle('hidden', !currentGuildId);
-    exportConfigBtn.classList.toggle('hidden', !currentGuildId);
     addServerBtn.classList.toggle('hidden', !!currentGuildId)
     orText.classList.toggle('hidden', !!currentGuildId)
     channelsContainer.classList.toggle('hidden', !currentGuildId)
@@ -1053,11 +1179,10 @@ async function loadSelectedGuild() {
             addServerBtn.classList.add('hidden');
             orText.classList.add('hidden');
             saveConfigBtn.classList.remove('hidden');
-            deleteConfigBtn.classList.remove('hidden');
-            exportConfigBtn.classList.remove('hidden');
+        deleteConfigBtn.classList.remove('hidden');
             buttonColumnText.textContent = '';
         try {
-            const res = await fetch(`/api/guilds/${encodeURIComponent(currentGuildId)}`, { method: 'GET', headers: authHeaders(), credentials: 'include', cache: 'no-store' });
+            const res = await fetch(`/api/guilds/${encodeURIComponent(currentGuildId)}`, { method: 'GET', credentials: 'include', cache: 'no-store' });
             if (!res.ok) throw new Error(`Failed to load guild ${currentGuildId} (${res.status})`);
             const doc: GuildConfigDoc = await res.json();
             currentAutomodRules = doc.rules
@@ -1074,7 +1199,11 @@ async function loadSelectedGuild() {
             showMessage(`Failed to load config: ${errMsg(error)}`, 'bg-red-500');
         }
     }
-    applyRolePermissions();
+    const canEdit = currentRole === 'admin' || currentRole === 'owner';
+    setDisabledState(saveConfigBtn, !canEdit);
+    saveConfigBtn.title = canEdit ? '' : 'Admin role required';
+    setDisabledState(deleteConfigBtn, !canEdit);
+    deleteConfigBtn.title = canEdit ? '' : 'Admin role required';
 }
 // --- Config rendering ------------------------------------------------------
 
@@ -1085,10 +1214,9 @@ function renderConfig(config: GuildConfigDoc) {
         { key: 'reactions', elementKey: 'reactionsSection', type: 'reaction' },
         { key: 'responses', elementKey: 'Responses', type: 'response' },
     ];
-    for (const { key, elementKey, type } of sections) {
+    sections.forEach(({ key, elementKey, type }) => {
         renderSection(elements[elementKey], config[key] || {}, type);
-    }
-
+    })
     // automodsettings is now consolidated: flat thresholds + two nested reason/weight maps.
     const { messagereasonsandweights, automodreasonsandweights, ...automodThresholds } = config.automodsettings ?? ({} as AutomodSettings);
     renderSection(elements.automodSection, automodThresholds, 'automod');
@@ -1183,10 +1311,11 @@ function renderEmbedSection(container: HTMLElement, messageConfigs: Record<strin
         <button type="button" id="deleteEmbedBtn" class="remove-btn" style="max-width:200px">Delete</button>
         <span id="orSeparator" class="text-gray-300 font-semibold shrink-0">- or -</span>
         <button type="button" id="createEmbedBtn" class="add-btn" style="max-width:200px">+ New Embed</button>
+        <button type="button" id="saveEmbedBtn" class="action-btn bg-green-500 hover:bg-green-600" style="max-width:200px">Save Embed</button>
         <button type="button" id="pushEmbedBtn" class="action-btn bg-purple-500 hover:bg-purple-600" style="max-width:220px">Push to Discord</button>
     </div>
     <p id="v1info" class="text-sm text-gray-400 mt-2">At least one of Title, Description, or Author Name is required.</p>
-    <p class="text-xs text-yellow-400 mt-1 hidden" id="pushEmbedHint">Pushes the current form contents to Discord. This does not save your changes to the database — hit Save separately to persist them.</p>
+    <p class="text-xs text-yellow-400 mt-1 hidden" id="pushEmbedHint">Push saves this embed's current form contents, then sends or updates its Discord message. Use Save separately to persist other configuration changes.</p>
     <div id="embedFormFields" class="space-y-4 mt-2"></div>
     `;
     const v1info = container.querySelector('#v1info')!;
@@ -1194,6 +1323,7 @@ function renderEmbedSection(container: HTMLElement, messageConfigs: Record<strin
     const deleteBtn = container.querySelector('#deleteEmbedBtn')as HTMLButtonElement ;
     const orSeparator = container.querySelector('#orSeparator')!;
     const createBtn = container.querySelector('#createEmbedBtn')as HTMLButtonElement;
+    const saveEmbedBtn = container.querySelector('#saveEmbedBtn') as HTMLButtonElement;
     const pushBtn = container.querySelector('#pushEmbedBtn')as HTMLButtonElement;
     const pushHint = container.querySelector('#pushEmbedHint')!;
     const hasEmbeds = keys.length > 0;
@@ -1202,8 +1332,10 @@ function renderEmbedSection(container: HTMLElement, messageConfigs: Record<strin
     setDisabledState(select, !hasEmbeds);
     select.classList.toggle('hidden', !hasEmbeds);
     setDisabledState(deleteBtn, !hasEmbeds);
+    setDisabledState(saveEmbedBtn, !hasEmbeds || (currentRole !== 'admin' && currentRole !== 'owner'));
     setDisabledState(pushBtn, !hasEmbeds);
     deleteBtn.classList.toggle('hidden', !hasEmbeds);
+    saveEmbedBtn.classList.toggle('hidden', !hasEmbeds);
     orSeparator.classList.toggle('hidden', !hasEmbeds);
     pushBtn.classList.toggle('hidden', !hasEmbeds);
     select.innerHTML = hasEmbeds
@@ -1214,13 +1346,39 @@ function renderEmbedSection(container: HTMLElement, messageConfigs: Record<strin
         activeEmbedKey = select.value;
         renderEmbedForm(container);
     });
+    saveEmbedBtn.addEventListener('click', async () => {
+        if (!activeEmbedKey || !currentGuildId) return;
+        if (currentRole !== 'admin' && currentRole !== 'owner') { showMessage('Admin role/owner required to save.', 'bg-red-500'); return; }
+        setDisabledState(saveEmbedBtn, true);
+        try {
+            const res = await fetch('/api/saveembed', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ guildId: currentGuildId, embedName: activeEmbedKey, config: messageConfigsDraft[activeEmbedKey] }),
+            });
+            const result = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(result.error || `Failed to save embed (${res.status})`);
+            showMessage(`Saved embed "${activeEmbedKey}" to database.`, 'bg-green-500');
+        } catch (error) {
+            showMessage(`Save failed: ${errMsg(error)}`, 'bg-red-500');
+        } finally {
+            setDisabledState(saveEmbedBtn, false);
+        }
+    });
     pushBtn.addEventListener('click', async () => {
         if (!activeEmbedKey || !currentGuildId) return;
         const config = messageConfigsDraft[activeEmbedKey];
-        if (!config?.channelid) { showMessage('Set a Channel ID before pushing.', 'bg-yellow-500'); return; }
+        if (!config?.channelid) { showMessage('Set a Channel before pushing.', 'bg-yellow-500'); return; }
 
-        const v2Error = config.format === 'v2' ? validateV2Components(config.components || []) : null;
-        if (v2Error) { showMessage(v2Error, 'bg-yellow-500'); return; }
+        const componentError = config.format === 'v2' ? validateV2Components(config.components || []) : null;
+        if (componentError) { showMessage(componentError, 'bg-yellow-500'); return; }
+        const fileNames = collectAttachmentNames(config);
+        if (fileNames.length > 10) { showMessage('Discord messages can include at most 10 uploaded files.', 'bg-yellow-500'); return; }
+        if (!config.messageId) {
+            const missingUpload = fileNames.find(name => !v2FileUploads.has(`${activeEmbedKey}\0${name}`));
+            if (missingUpload) { showMessage(`Select the file for "${missingUpload}" before creating this message.`, 'bg-yellow-500'); return; }
+        }
         const hasContent = config.format === 'v2'
             ? !!config.components?.length
             : !!(config.embeds?.[0]?.title?.trim() || config.embeds?.[0]?.description?.trim() || config.embeds?.[0]?.author?.name?.trim());
@@ -1232,11 +1390,19 @@ function renderEmbedSection(container: HTMLElement, messageConfigs: Record<strin
         setDisabledState(pushBtn, true);
         pushHint.classList.remove('hidden');
         try {
+            const formData = new FormData();
+            formData.append('guildId', currentGuildId);
+            formData.append('embedName', activeEmbedKey);
+            formData.append('config', JSON.stringify(config));
+            const sentFiles: string[] = [];
+            fileNames.forEach(name => {
+                const file = v2FileUploads.get(`${activeEmbedKey}\0${name}`);
+                if (file) { formData.append('files', file, file.name); sentFiles.push(name); }
+            });
             const res = await fetch(`/api/sendembed`, {
                 method: 'POST',
-                headers: authHeaders({ 'Content-Type': 'application/json' }),
                 credentials: 'include',
-                body: JSON.stringify({ guildId: currentGuildId, embedName: activeEmbedKey, config }),
+                body: formData,
             });
             const responseText = await res.text();
             console.log(responseText)
@@ -1250,6 +1416,7 @@ function renderEmbedSection(container: HTMLElement, messageConfigs: Record<strin
             if (!result.messageId) throw new Error(result.error || 'Push API did not return a Discord message ID.');
             config.messageId = result.messageId;
             messageConfigsDraft[activeEmbedKey] = config;
+            sentFiles.forEach(name => v2FileUploads.delete(`${activeEmbedKey}\0${name}`));
             showMessage('Updated Discord message.', 'bg-green-500');
         } catch (error: any) {
             showMessage(`Push failed: ${error.message}`, 'bg-red-500');
@@ -1315,7 +1482,7 @@ function renderEmbedSection(container: HTMLElement, messageConfigs: Record<strin
         try {
             const res = await fetch(`/api/deleteembed/${encodeURIComponent(currentGuildId ?? '')}/${encodeURIComponent(activeEmbedKey)}`, {
                 method: 'DELETE',
-                headers: authHeaders({ 'Content-Type': 'application/json' }),
+                headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
             });
             if (!res.ok) {
@@ -1397,7 +1564,6 @@ elements.logoutBtn!.addEventListener('click', async () => {
     authStatus.textContent = 'Not logged in';
     await refreshGuildSelect();
     await loadSelectedGuild();
-    applyRolePermissions();
 });
 elements.addPublicChannelBtn.addEventListener('click', () => createChannelInput(elements.publicChannelsSection, '', '', 'public'));
 elements.addMediaBtn.addEventListener('click', () => createArrayInput(elements.GeneralChannelsSection, ''));
@@ -1411,42 +1577,11 @@ elements.saveConfigBtn.addEventListener('click', async () => {
         showMessage('Admin and Mod Role IDs are both required (Staff Roles tab).', 'bg-red-500');
         return;
     }
-    for (const [key, entry] of Object.entries(messageConfigsDraft)) {
-        if (!entry.channelid?.trim()) {
-            return showMessage(`Embed "${key}": Channel ID is required.`, 'bg-red-500');
-
-        }
-        if (entry.format === 'v2') {
-            if (!entry.components?.length)
-                return showMessage(`Embed "${key}": add at least one component before saving.`, 'bg-red-500')
-
-            continue;
-        }
-        const embed = entry.embeds?.[0] ?? blankEmbed();
-        const hasTitle = !!embed.title?.trim();
-        const hasDescription = !!embed.description?.trim();
-        const hasAuthor = !!embed.author?.name?.trim();
-        if (!hasTitle && !hasDescription && !hasAuthor) {
-            return showMessage(`Embed "${key}": at least one of Title, Description, or Author Name is required.`, 'bg-red-500')
-        }
-        if (entry.reactions?.length) {
-            const seenEmojis = new Set<string>();
-            for (const r of entry.reactions) {
-                if (!r.emoji || !r.roleId) {
-                    return showMessage(`Embed "${key}": every reaction row needs both an emoji and a role.`, 'bg-red-500')
-                }
-                if (seenEmojis.has(r.emoji)) {
-                    return showMessage(`Embed "${key}": duplicate emoji "${r.emoji}" in reactions.`, 'bg-red-500')
-                }
-                seenEmojis.add(r.emoji);
-            }
-        }
-    }
-    const config = getFormValues();
+    const config = getFormValues(false);
     try {
         const res = await fetch(`/api/guilds/${encodeURIComponent(currentGuildId)}`, {
             method: 'PUT',
-            headers: authHeaders({ 'Content-Type': 'application/json' }),
+            headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
             body: JSON.stringify(config),
         });
@@ -1462,11 +1597,7 @@ elements.deleteConfigBtn.addEventListener('click', async () => {
     if (currentRole !== 'admin' && currentRole !== 'owner') { showMessage('Admin/owner role required to delete.', 'bg-red-500'); return; }
     const shouldDelete = await confirmModal(`Are you sure you want to permanently delete the config for Guild ID: ${currentGuildId} from the database?`);
     if (!shouldDelete) return;
-    const res = await fetch(`/api/guilds/${encodeURIComponent(currentGuildId!)}`, {
-        method: 'DELETE',
-        headers: authHeaders(),
-        credentials: 'include',
-    });
+    const res = await fetch(`/api/guilds/${encodeURIComponent(currentGuildId!)}`, { method: 'DELETE', credentials: 'include', });
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `Failed to delete guild ${currentGuildId} (${res.status})`);
@@ -1476,20 +1607,8 @@ elements.deleteConfigBtn.addEventListener('click', async () => {
     currentGuildId = null
     await refreshGuildSelect();
 });
-elements.exportConfigBtn.addEventListener('click', () => {
-    const config = getFormValues();
-    const fileContent = JSON.stringify({ [currentGuildId || 'new-guild']: config }, null, 2);
-    const blob = new Blob([fileContent], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${currentGuildId || 'new-guild'}-backup.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-});
-elements.addServerBtn.addEventListener('click', () => { window.open('https://discord.com/oauth2/authorize?client_id=1420927654701301951&permissions=1202859404454&redirect_uri=https%3A%2F%2Fpostnecrotic-carli-superindustriously.ngrok-free.dev%2Fapi%2Fauth%2Fdiscord%2Fbot-redirect&integration_type=0&scope=bot+applications.commands', '_blank', 'noopener,noreferrer'); });
+
+elements.addServerBtn.addEventListener('click', () => { window.open('https://discord.com/oauth2/authorize?client_id=1420927654701301951&permissions=1202859404454&integration_type=0&scope=bot+applications.commands', '_blank', 'noopener,noreferrer'); });
 initTabs();
 initSubtabs();
 const { loginBtn, logoutBtn, authStatus } = elements;
@@ -1506,4 +1625,3 @@ if (res.loggedIn && res.user) {
     authStatus.textContent = 'Not logged in';
 }
 await refreshGuildSelect();
-

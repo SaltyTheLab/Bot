@@ -33,6 +33,7 @@
   </style>
 </head>
 <body class="bg-gray-900 text-gray-100 p-4 rounded-xl shadow-lg space-y-6">
+  <div id="messageBox"></div>
   <h1 class="text-3xl font-bold text-blue-400 justify-center"> Bot Configuration</h1>
   <h2 class="text-3xl font-semibold text-red-400 justify-center">All edits are only kept locally until you hit save.
   </h2>
@@ -107,40 +108,12 @@
             </div>
             <div id="StaffRolesContent" class="tab-content bg-gray-700 p-4 rounded-xl space-y-4 shadow-inner hidden">
               <div class="flex flex-col gap-4">
-            <span class="field-label text-red-400">Admin Role</span>
-            <div class="relative" data-role-picker>
-              <button type="button" class="role-picker-btn field text-left flex items-center justify-between w-full">
-                <span class="role-picker-label text-gray-400">-- Select a role --</span>
-                <span class="text-gray-400">&#9662;</span>
-              </button>
-              <div
-                class="role-picker-menu hidden absolute z-10 mt-1 max-h-60 w-full overflow-y-auto rounded-lg bg-gray-800 border border-gray-600 shadow-lg">
-              </div>
-              <input type="hidden" id="adminRoleInput">
-            </div>
-            <span class="field-label text-red-400">Mod Role</span>
-            <div class="relative" data-role-picker>
-              <button type="button" class="role-picker-btn field text-left flex items-center justify-between w-full">
-                <span class="role-picker-label text-gray-400">-- Select a role --</span>
-                <span class="text-gray-400">&#9662;</span>
-              </button>
-              <div
-                class="role-picker-menu hidden absolute z-10 mt-1 max-h-60 w-full overflow-y-auto rounded-lg bg-gray-800 border border-gray-600 shadow-lg">
-              </div>
-              <input type="hidden" id="modRoleInput">
-            </div>
-            <span class="field-label">Jr Role</span>
-            <div class="relative" data-role-picker>
-              <button type="button" class="role-picker-btn field text-left flex items-center justify-between w-full">
-                <span class="role-picker-label text-gray-400">-- Select a role --</span>
-                <span class="text-gray-400">&#9662;</span>
-              </button>
-              <div
-                class="role-picker-menu hidden absolute z-10 mt-1 max-h-60 w-full overflow-y-auto rounded-lg bg-gray-800 border border-gray-600 shadow-lg">
-              </div>
-              <input type="hidden" id="jrRoleInput">
-            </div>
-
+                <span class="field-label text-red-400">Admin Role</span>
+                <div data-role-picker-input="adminRoleInput"></div>
+                <span class="field-label text-red-400">Mod Role</span>
+                <div data-role-picker-input="modRoleInput"></div>
+                <span class="field-label">Jr Role</span>
+                <div data-role-picker-input="jrRoleInput"></div>
               </div>
             </div>
             <div id="autoModContent" class="tab-content bg-gray-700 p-4 rounded-xl space-y-4 shadow-inner hidden">
@@ -168,9 +141,17 @@
     <button id="addReasonWeightBtn" class="add-btn">Add Rule Weight</button>
   </div>
   </div>
-<!-- Message Error Display-->
-<div id="messageBox"></div>
-
+  <template id="rolePickerTemplate">
+    <div class="relative" data-role-picker>
+      <button type="button" class="role-picker-btn field text-left flex items-center justify-between w-full">
+        <span class="role-picker-label text-gray-400">-- Select a role --</span>
+        <span class="text-gray-400">&#9662;</span>
+      </button>
+      <div
+        class="role-picker-menu hidden absolute z-10 mt-1 max-h-60 w-full overflow-y-auto rounded-lg bg-gray-800 border border-gray-600 shadow-lg">
+      </div>
+      <input type="hidden">
+    </div>
+  </template>
 </body>
-
 </html>
