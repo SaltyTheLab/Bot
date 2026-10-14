@@ -1,27 +1,29 @@
 param([string]$intpid, [string]$gatewaypid)
 $PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
-$logPath = Join-Path $PSScriptRoot 'log.log'
-$bun = 'bun.exe'
-
-"--- Startup invoked at $(Get-Date) ---" | Out-File $logPath -Append
-
 function Start-BotProcess([string]$name, [string]$entryPoint) {
-    $process = Start-Process -FilePath $bun `
-        -ArgumentList @('run', "./dist/$entryPoint.js") `
+    $logPath = Join-Path $PSScriptRoot "$entryPoint.log"
+    $runnerPath = Join-Path $PSScriptRoot 'run-bot.ps1'
+    $process = Start-Process -FilePath 'powershell.exe' `
+        -ArgumentList @(
+        '-NoProfile',
+        '-ExecutionPolicy', 'Bypass',
+        '-File', $runnerPath,
+        '-EntryPoint', $entryPoint
+    ) `
         -WorkingDirectory $PSScriptRoot `
         -WindowStyle Hidden `
         -PassThru
-    "Started $name PID $($process.Id)" | Out-File $logPath -Append
+    "Started $name output supervisor PID $($process.Id)" | Out-File $logPath -Append
     return $process
 }
 
 if ($intpid) {
     Start-BotProcess 'gateway' 'root' | Out-Null
-} elseif ($gatewaypid) {
-    Start-BotProcess 'interactions' 'interactions' | Out-Null
-} else {
-    $gatewayProc = Start-BotProcess 'gateway' 'root'
-    $interactionsProc = Start-BotProcess 'interactions' 'interactions'
-    Write-Output $interactionsProc $gatewayProc
 }
-
+elseif ($gatewaypid) {
+    Start-BotProcess 'interactions' 'interactions' | Out-Null
+}
+else {
+    Start-BotProcess 'gateway' 'root'
+    Start-BotProcess 'interactions' 'interactions'
+}
