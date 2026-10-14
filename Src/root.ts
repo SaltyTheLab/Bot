@@ -1,37 +1,34 @@
 import { usersCollection, guildconfigs, ws } from './Database';
 import { ObjectId, type Document, type WithId } from 'mongodb';
-import { appendFile } from 'node:fs/promises'
 import { ApiClient } from '@twurple/api'
 import { EventSubWsListener } from '@twurple/eventsub-ws'
 import { ChatClient } from '@twurple/chat';
 import { RefreshingAuthProvider } from '@twurple/auth';
-import { ComponentType, ButtonStyle, MessageType, ActivityType, PresenceUpdateStatus, Client, Options, Role, Routes, Partials, GatewayIntentBits, TextChannel, MessageFlags, type AnyComponentV2, subtext, GuildMember, GuildMemberFlags, Invite, type APIMessage, SectionBuilder, TextDisplayBuilder, ContainerBuilder, ButtonBuilder, ThumbnailBuilder } from 'discord.js'
+import { ComponentType, ButtonStyle, MessageType, ActivityType, PresenceUpdateStatus, Client, Options, Role, Routes, Partials, GatewayIntentBits, TextChannel, MessageFlags, type AnyComponentV2, subtext, GuildMember, GuildMemberFlags, Invite, SectionBuilder, TextDisplayBuilder, ContainerBuilder, ButtonBuilder, ThumbnailBuilder, type APIMessage } from 'discord.js'
 import { createHash } from 'crypto'
 interface xp { Id: string | GuildMember; channel?: TextChannel | string; guildId?: string };
 type DbInvite = Record<string, { uses: number; id: string; code: string }>;
 process.on("uncaughtException", async (err: any) => {
     const intpid = parseInt(await Bun.file("./interpid.txt").text())
-    await appendFile("./log.log",
-        `[root] Uncaught exception @ ${Date.now()}: method: ${err.method}, url: ${err.url}, status: ${err.status}, code: ${err.code}\n 
-        rawError: ${JSON.stringify(err.rawError)}\n`
-    )
+    console.error('[root] Uncaught exception', err)
     await client.destroy();
     Bun.spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", "C:\\Users\\micha\\Desktop\\Bot\\restart.ps1", "-BotPid", `${process.pid}`, "-intpid", `${intpid}`], { stderr: "pipe", stdout: 'pipe', stdin: 'pipe' })
 })
 process.on("unhandledRejection", async (reason: any) => {
     const intpid = parseInt(await Bun.file("./interpid.txt").text())
-    appendFile("./log.log", `[root] unhandled Rejection: ${JSON.stringify(reason)}\n`)
+    console.error('[root] Unhandled rejection', reason)
     client.destroy();
     Bun.spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", "C:\\Users\\micha\\Desktop\\Bot\\restart.ps1", "-BotPid", `${process.pid}`, "-intpid", `${intpid}`], { stderr: "pipe", stdout: 'pipe', stdin: 'pipe' });
 });
 const authProvider = new RefreshingAuthProvider({ clientId: Bun.env.TWITCH_ID!, clientSecret: Bun.env.TWITCH_SECRET! });
 const doc = await ws.findOne({}, { projection: { twitchaccess: 1, twitchrefresh: 1, twitchexpires: 1, twitchobtained: 1 } }) as any;
 if (!doc?.twitchaccess) throw new Error('No Twitch bot tokens found — run get-token.ts first.');
+
 authProvider.addUser("901114331", { accessToken: doc.twitchaccess, scope: ['chat:read', 'chat:edit'], refreshToken: doc.twitchrefresh, expiresIn: doc.twitchexpires, obtainmentTimestamp: doc.twitchobtained, }, ['chat']);
 authProvider.onRefresh(async (_userId, newTokenData) => {
     await ws.updateOne({}, { $set: { twitchaccess: newTokenData.accessToken, twitchrefresh: newTokenData.refreshToken, twitchexpires: newTokenData.expiresIn, twitchobtained: newTokenData.obtainmentTimestamp } });
 });
-authProvider.onRefreshFailure((userId, error) => { appendFile("./log.log", `[twitch] token refresh failed for ${userId}: ${error.message} @ ${Date.now()}\n`) })
+authProvider.onRefreshFailure((userId, error) => { console.error(`[twitch] token refresh failed for ${userId}`, error) })
 
 const apiClient = new ApiClient({ authProvider: authProvider });
 const BROADCASTER_ID = '901114331';
@@ -52,12 +49,12 @@ twitchChatClient.onMessageFailed((channel, reason) => console.log('[twitch] mess
 twitchChatClient.onMessageRatelimit((channel, msg) => console.log('[twitch] ratelimited', channel, msg));
 function connectTwitchChat() {
     if (!twitchChatClient.isConnected) { twitchChatClient.connect(); }
-    appendFile("./log.log", `[twitch] chat connected @ ${Date.now()}\n`);
+    console.info('[twitch] chat connected')
 }
 const eventSubListener = new EventSubWsListener({ apiClient: apiClient });
 eventSubListener.start();
 eventSubListener.onStreamOnline(BROADCASTER_ID, () => connectTwitchChat());
-eventSubListener.onStreamOffline(BROADCASTER_ID, () => { twitchChatClient.quit(); appendFile("./log.log", `[twitch] chat disconnected @ ${Date.now()}\n`); });
+eventSubListener.onStreamOffline(BROADCASTER_ID, () => { twitchChatClient.quit(); console.info('[twitch] chat disconnected'); });
 if (await apiClient.streams.getStreamByUserId(BROADCASTER_ID)) connectTwitchChat();
 async function grantXp({ Id, channel, guildId }: xp) {
         const { baseMultiplier, exponent, flatOffset, roundToNearest } = await guildconfigs.findOne({ guildId: guildId }, { projection: { baseMultiplier: 1, exponent: 1, flatOffset: 1, roundToNearest: 1 } }
@@ -97,8 +94,8 @@ async function inactiveusers() {
                 usersCollection.deleteOne({ userId: userId })
                 await Bun.sleep(750);
             }
-        } catch {
-            appendFile("./log.log", `${userId} is no longer in guild.`)
+        } catch (error) {
+            console.warn(`[inactive users] Could not remove ${userId}; they may no longer be in the guild`, error)
         }
     }
 }
@@ -125,7 +122,7 @@ function startStatusLoop() {
     }, 5000);
 }
 client.on('clientReady', async (ready) => {
-    await appendFile("./log.log", `[Gateway] Ready\n`);
+    console.info('[Gateway] Ready')
     startStatusLoop();
     await usersCollection.updateMany(
         { "punishments": { $elemMatch: { "active": 1, "timestamp": { $lt: Date.now() - 24 * 60 * 60 * 1000 } } } },
@@ -355,8 +352,8 @@ client.on('guildMemberAdd', async (member) => {
                     { type: ComponentType.TextDisplay, content: `Welcome to the server ${user}!\n\nBe sure to check out the rules and grab some roles in the role channel.` }]
             }]
         })
-    } catch {
-        await appendFile("./log.log", `[Member Add] Error: ${user.id} does not have dms open/channel cannot be created.`)
+    } catch (error) {
+        console.warn(`[Member Add] Could not send a DM to ${user.id}`, error)
     }
     if (!flags.has(GuildMemberFlags.DidRejoin) && !user.bot) {
         await usersCollection.insertOne({ userId: user.id, guildId: guild.id, level: 1, coins: 100, xp: 0, totalmessages: 0, punishments: [], notes: [], blacklist: [], avatar: user.avatarURL() ?? user.defaultAvatarURL, total: 0, mediaCount: 0, duplicateCounts: {}, timestamps: [], nick: user.username, lastmessage: null, joinedTime: joinedTimestamp, verified: false })
@@ -391,7 +388,7 @@ client.on('guildMemberAdd', async (member) => {
     }
         setTimeout(async () => {
             try {
-                await client.rest.patch(Routes.channelMessage(welcomeChannel, originalMessage.id), {
+                await client.rest.patch(Routes.channelMessage(welcomeChannel, originalMessage.id as string), {
                 body: {
                     allowed_mentions: { "parse": [] },
                     flags: MessageFlags.IsComponentsV2,
@@ -426,10 +423,8 @@ client.on('guildMemberAdd', async (member) => {
                     }]
                 }
             })
-            } catch (err: any) {
-                await appendFile("./log.log",
-                    `[guildMemberAdd] Button-disable PATCH failed: ${JSON.stringify({ method: err.method, url: err.url, status: err.status, rawError: err.rawError })}\n`
-                );
+            } catch (error) {
+                console.error('[guildMemberAdd] Button-disable PATCH failed', error)
             }
         }, 15 * 60 * 1000)
 
@@ -645,9 +640,8 @@ client.on('messageDelete', async (deletedData) => {
         });
     }
     bodyComponents.push({
-        type: ComponentType.Section,
-        components: [{ type: ComponentType.TextDisplay, content: `ID: ${id}` }],
-        accessory: { type: ComponentType.Button, style: ButtonStyle.Link, label: 'Event link', url: `https://discord.com/channels/${guildId}/${channelId}/${id}` }
+        type: ComponentType.ActionRow,
+        components: [{ type: ComponentType.Button, style: ButtonStyle.Link, label: 'Event link', url: `https://discord.com/channels/${guildId}/${channelId}/${id}` }]
     })
     await client.rest.post(Routes.channelMessages(deletedlogChannel), {
         body: { flags: MessageFlags.IsComponentsV2, components: [{ type: ComponentType.Container, accent_color: 0xf03030, components: bodyComponents }] }
@@ -673,14 +667,12 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
                     accessory: { type: ComponentType.Thumbnail, media: { url: author.avatarURL() ?? author.defaultAvatarURL } }
                 },
                 {
-                    type: ComponentType.Section,
-                    components: [{ type: ComponentType.TextDisplay, content: `ID: ${id}` }],
-                    accessory: {
-                        type: ComponentType.Button,
-                        style: ButtonStyle.Link,
+                    type: ComponentType.ActionRow,
+                    components: [{
+                        type: ComponentType.Button, style: ButtonStyle.Link,
                         label: 'Event Link',
                         url: `https://discordapp.com/channels/${guildId}/${channelId}/messages/${id}`
-                    }
+                    }]
                 }],
             }]
         }
@@ -700,8 +692,8 @@ client.on('messageCreate', async (message) => {
         try {
         return (count + 1 == parseInt(content) && lastuser !== author.id) ?
             await message.react("%E2%9C%85") : await message.reply({ content: `<@${author.id}> missed or already counted!` })
-        } catch (err) {
-            appendFile('./log.log', ` ${message.id} in counting was removed before i could react.`)
+        } catch (error) {
+            console.error(`[counting] Could not react to message ${message.id}`, error)
         }
     }
     if (content.length >= 1) {
@@ -786,7 +778,7 @@ client.on('messageCreate', async (message) => {
 
     const activeWarns = punishments.length > 0 ? punishments.filter((p: any) => p.active === 1).reduce((acc: number, cur: any) => acc + (cur.weight || 1), 0) : 0;
     const totalWarns = activeWarns + totalWeight;
-    const { minutes, label } = Stages[Math.min(totalWarns - 1, Stages.length - 1)];
+    const { minutes, label } = Stages[Math.min(totalWarns > 0 ? totalWarns - 1 : 0, Stages.length - 1)];
     const object = new ObjectId();
     let warnType = bannable ? 'Ban' : 'Warn';
     let durationMs = 0, durationStr = null;
@@ -902,12 +894,12 @@ client.on('guildUpdate', async (oldGuild, newGuild) => {
     else await guildconfigs.updateOne({ guildId: newGuild.id }, { $set: { ownerId: newGuild.ownerId } })
 })
 client.on('shardError', async (err, shardId) => {
-    await appendFile("./log.log", `[root] errror on shard ${shardId} @ ${Date.now()}: ${err}\n`)
+    console.error(`[root] Shard ${shardId} error`, err)
 })
 client.on('shardDisconnect', async (event, shardId) => {
-    appendFile("./log.log", `Shard ${shardId} disconnected @ ${Date.now()}. Code: ${event.code}\n`)
+    console.info(`[root] Shard ${shardId} disconnected. Code: ${event.code}`)
 })
 client.on('shardResume', async (shardId, replayedEvents) => {
-    appendFile("./log.log", `Shard ${shardId} resumed @ ${Date.now()}, replayed ${replayedEvents} events\n`);
+    console.info(`[root] Shard ${shardId} resumed, replayed ${replayedEvents} events`)
 })
 client.login(Bun.env.TOKEN)

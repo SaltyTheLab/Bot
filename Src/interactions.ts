@@ -1,6 +1,6 @@
 import { guildconfigs, usersCollection, logos } from "./Database";
 import { type Document, type WithId, ObjectId } from "mongodb";
-import sharp from 'sharp'
+import { Resvg } from '@resvg/resvg-js'
 import { SignJWT, jwtVerify } from 'jose'
 import { ed25519 } from '@noble/curves/ed25519.js'
 import { StatusCodes } from "http-status-codes";
@@ -656,7 +656,8 @@ commands.set('rank', async ({ body, guildConfig }) => {
     const resizedAvatarBuf = await new Bun.Image(await avRes.arrayBuffer()).resize(100, 100).png().toBase64();
     const reqXp = Math.round(((level < 100 ? level : 100) ** exponent * baseMultiplier + flatOffset) / roundToNearest);
     const rankCardSvg = `<svg width="500" height="150" xmlns="http://www.w3.org/2000/svg"><defs><clipPath id="avatarClip"><circle cx="70" cy="75" r="50"/></clipPath></defs><rect width="500" height="150" rx="16" fill="#2c2f33"/><circle cx="70" cy="75" r="52" stroke="#3ba55d" stroke-width="3" fill="none" /><image href="data:image/png;base64,${resizedAvatarBuf}" x="20" y="25" width="100" height="100" clip-path="url(#avatarClip)"/><text x="130" y="60" fill="white" font-size="20" font-family="Arial" font-weight="bold">${targetUser?.username.slice(0, 15) + (targetUser?.username.length! > 15 ? "..." : "")}</text><text x="300" y="35" fill="white" font-size="16" font-family="Arial" font-weight="bold" text-anchor="middle">Level ${level}</text><text x="440" y="35" fill="white" font-size="16" font-family="Arial" font-weight="bold" text-anchor="end">Rank #${rank + 1}</text><rect x="130" y="85" width="350" height="20" rx="10" fill="#484b4e"/><rect x="130" y="85" width="${Math.min(Math.max(350 * (xp / reqXp), 25), 350)}" height="20" rx="10" fill="#3ba55d"/><text x="480" y="75" fill="#ccc" font-size="16" font-family="Arial" text-anchor="end">${xp} / ${reqXp} xp</text><text x="150" y="130" fill="#ccc" font-size="18" font-family="Arial">Coins: ${coins} | Messages: ${totalmessages}</text></svg>`;
-    const rankCardBuffer = await sharp(Buffer.from(rankCardSvg)).png().toBuffer();
+    const renderer = new Resvg(rankCardSvg, {font: { loadSystemFonts: true } });
+    const rankCardBuffer = Buffer.from(renderer.render().asPng());
     const form = new FormData();
     form.append('files[0]', new Blob([rankCardBuffer], { type: "image/png" }), 'rankcard.png');
     form.append('payload_json', JSON.stringify({ type: InteractionResponseType.ChannelMessageWithSource }));
@@ -1314,7 +1315,7 @@ Bun.serve({
             req.cookies.set("session", await new SignJWT({}).setProtectedHeader({ alg: "HS256" }).setSubject(discordUser.id).setIssuedAt().setExpirationTime("24H").sign(key), { httpOnly: true, secure: true, sameSite: "lax", path: "/", maxAge: 86400, });
             return new Response(null, { status: StatusCodes.MOVED_TEMPORARILY, headers: { Location: "/", } });
         },
-        "/api/sendembed": {
+        "/api/embed": {
             OPTIONS: () => new Response(null, { headers: corsHeaders }),
             POST: async (req) => {
                 try {
@@ -1346,11 +1347,8 @@ Bun.serve({
                 } catch {
                     return new Response(JSON.stringify({ error: 'Failed to sync embed' }), { status: StatusCodes.INTERNAL_SERVER_ERROR, headers: corsHeaders });
                 }
-            }
-        },
-        "/api/saveembed": {
-            OPTIONS: () => new Response(null, { headers: corsHeaders }),
-            POST: async (req) => {
+            },
+            PUT: async (req) => {
                 const { guildId, embedName, config } = await req.json();
                 if (!guildId || !embedName || !config) {
                     return Response.json({ error: 'Guild, embed name, and config are required' }, { status: StatusCodes.BAD_REQUEST, headers: corsHeaders });
@@ -1366,7 +1364,7 @@ Bun.serve({
                 }
             },
         },
-        "/api/deleteembed/:guildId/:key": {
+        "/api/embed/:guildId/:key": {
             OPTIONS: () => new Response(null, { headers: corsHeaders }),
             DELETE: async (req) => {
                 const { guildId, key } = req.params
@@ -1418,19 +1416,17 @@ Bun.serve({
                 const { guildId } = req.params;
                 const doc = await guildconfigs.findOne({ guildId: guildId });
                 if (!doc) return Response.json({ error: "Not found" }, { status: StatusCodes.NOT_FOUND, headers: corsHeaders });
-                const [guildRoles, guildChannels, rules] = await Promise.all([
+                const [guildRoles, guildChannels, rules, role] = await Promise.all([
                     rest.get(Routes.guildRoles(guildId)) as Promise<APIRole[]>,
                     rest.get(Routes.guildChannels(guildId)) as Promise<APIChannel[]>,
                     rest.get(Routes.guildAutoModerationRules(guildId)) as Promise<APIAutoModerationRule[]>,
+                    roleFromStaffroles(session.userId, guildId, doc.staffroles as string[], doc.ownerId as string) as Promise<string>
                 ]);
-                const selectableChannels = guildChannels
-                    .filter((c) => [ChannelType.GuildText, ChannelType.GuildAnnouncement].includes(c.type))
-                    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
                 return Response.json({
                     ...doc,
-                    _viewerRole: await roleFromStaffroles(session.userId, guildId, doc.staffroles as string[], doc.ownerId as string),
+                    _viewerRole: role,
                     guildRoles: guildRoles,
-                    guildChannels: selectableChannels,
+                    guildChannels: guildChannels.filter((c) => ChannelType.GuildText == c.type).sort((a, b) => (a.position ?? 0) - (b.position ?? 0)),
                     staffRoles: guildRoles.filter((role: APIRole) => (BigInt(role.permissions) & (PermissionFlagsBits.ModerateMembers | PermissionFlagsBits.Administrator)) !== 0n && !role.managed),
                     rules: (rules.map(r => ({ id: r.id, name: r.name })))
                 }, { headers: corsHeaders });
@@ -1439,7 +1435,7 @@ Bun.serve({
                 const session = await getSession(req);
                 if (!session) return Response.json({ error: "Not logged in" }, { status: StatusCodes.UNAUTHORIZED, headers: corsHeaders });
                 const { guildId } = req.params;
-                await guildconfigs.findOneAndUpdate({ guildId: guildId }, { $set: { ...await req.json() } }, { projection: { messageConfigs: 1 }, returnDocument: "after" }) as Document;
+                await guildconfigs.findOneAndUpdate({ guildId: guildId }, { $set: { ...await req.json() } }) as Document;
                 return Response.json({ ok: true }, { headers: corsHeaders });
             },
             DELETE: async (req) => {

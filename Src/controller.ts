@@ -1351,8 +1351,8 @@ function renderEmbedSection(container: HTMLElement, messageConfigs: Record<strin
         if (currentRole !== 'admin' && currentRole !== 'owner') { showMessage('Admin role/owner required to save.', 'bg-red-500'); return; }
         setDisabledState(saveEmbedBtn, true);
         try {
-            const res = await fetch('/api/saveembed', {
-                method: 'POST',
+            const res = await fetch('/api/embed', {
+                method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
                 body: JSON.stringify({ guildId: currentGuildId, embedName: activeEmbedKey, config: messageConfigsDraft[activeEmbedKey] }),
@@ -1399,13 +1399,8 @@ function renderEmbedSection(container: HTMLElement, messageConfigs: Record<strin
                 const file = v2FileUploads.get(`${activeEmbedKey}\0${name}`);
                 if (file) { formData.append('files', file, file.name); sentFiles.push(name); }
             });
-            const res = await fetch(`/api/sendembed`, {
-                method: 'POST',
-                credentials: 'include',
-                body: formData,
-            });
+            const res = await fetch(`/api/embed`, { method: 'POST', credentials: 'include', body: formData, });
             const responseText = await res.text();
-            console.log(responseText)
             let result: { messageId?: string; error?: string };
             try {
                 result = responseText ? JSON.parse(responseText) : {};
@@ -1480,7 +1475,7 @@ function renderEmbedSection(container: HTMLElement, messageConfigs: Record<strin
         const key = activeEmbedKey;
         setDisabledState(deleteBtn, true);
         try {
-            const res = await fetch(`/api/deleteembed/${encodeURIComponent(currentGuildId ?? '')}/${encodeURIComponent(activeEmbedKey)}`, {
+            const res = await fetch(`/api/embed/${encodeURIComponent(currentGuildId ?? '')}/${encodeURIComponent(activeEmbedKey)}`, {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
