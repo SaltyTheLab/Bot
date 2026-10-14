@@ -10,10 +10,4 @@ if ($BotPid -and ($process = Get-Process -Id $BotPid -ErrorAction SilentlyContin
 } else {
     "PID $BotPid not running, skipping" | Out-File $logPath -Append
 }
-$botArgs = @{
-    FilePath         = 'powershell.exe'
-    ArgumentList     = @('-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'start.ps1'), '-intpid', $intpid)
-    WorkingDirectory = $PSScriptRoot
-    WindowStyle      = 'Hidden'
-}
-Start-Process @botArgs -PassThru
+& (Join-Path $PSScriptRoot 'start.ps1') -intpid $intpid

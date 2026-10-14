@@ -1,29 +1,20 @@
-param([string]$intpid, [string]$gatewaypid)
+param([string]$intpid)
 $PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
-function Start-BotProcess([string]$name, [string]$entryPoint) {
-    $logPath = Join-Path $PSScriptRoot "$entryPoint.log"
-    $runnerPath = Join-Path $PSScriptRoot 'run-bot.ps1'
-    $process = Start-Process -FilePath 'powershell.exe' `
-        -ArgumentList @(
-        '-NoProfile',
-        '-ExecutionPolicy', 'Bypass',
-        '-File', $runnerPath,
-        '-EntryPoint', $entryPoint
-    ) `
+function Start-BotProcess([string]$entryPoint) {
+    $exePath = Join-Path $PSScriptRoot "$entryPoint.exe"
+    if (-not (Test-Path -LiteralPath $exePath -PathType Leaf)) {
+        throw "Executable not found: $exePath"
+    }
+    $process = Start-Process -FilePath $exePath `
         -WorkingDirectory $PSScriptRoot `
+        -RedirectStandardOutput (Join-Path $PSScriptRoot "$entryPoint.log") `
+        -RedirectStandardError (Join-Path $PSScriptRoot "$entryPoint-error.log") `
         -WindowStyle Hidden `
         -PassThru
-    "Started $name output supervisor PID $($process.Id)" | Out-File $logPath -Append
+    Write-Output "Started $entryPoint.exe PID $($process.Id)"
     return $process
 }
 
 if ($intpid) {
-    Start-BotProcess 'gateway' 'root' | Out-Null
-}
-elseif ($gatewaypid) {
-    Start-BotProcess 'interactions' 'interactions' | Out-Null
-}
-else {
-    Start-BotProcess 'gateway' 'root'
-    Start-BotProcess 'interactions' 'interactions'
+    Start-BotProcess 'root' | Out-Null
 }
