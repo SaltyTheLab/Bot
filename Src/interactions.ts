@@ -1,4 +1,8 @@
 import { guildconfigs, usersCollection, logos } from "./Database";
+import statusMap from "./statusMap";
+import { syncEmbed } from "./syncEmbed";
+import { buildApplicationHub } from "./applicationUi";
+import { PART_CONFIG } from "./applicationConfig";
 import { type Document, type WithId, ObjectId } from "mongodb";
 import { Resvg } from '@resvg/resvg-js'
 import { SignJWT, jwtVerify } from 'jose'
@@ -6,7 +10,7 @@ import { ed25519 } from '@noble/curves/ed25519.js'
 import { StatusCodes } from "http-status-codes";
 import { AppTokenAuthProvider } from "@twurple/auth"
 import { ApiClient } from '@twurple/api'
-import { type APIMessageComponentInteraction, InteractionType, ComponentType, type APIEmbed, type APIInteraction, type APIMessage, InteractionResponseType, MessageFlags, type APIGuild, type APIGuildMember, type APIModalSubmitInteraction, type APIUser, type APIActionRowComponent, type APIChannel, ButtonStyle, type APIChatInputApplicationCommandGuildInteraction, ChannelType, type APIRole, type APIAutoModerationRule, Collection, ApplicationCommandOptionType, subtext, bold, quote, type APIButtonComponentWithCustomId, ModalBuilder, TextInputStyle, REST, Routes, type APIDMChannel, type APIApplicationCommandInteractionDataOption, type APIApplicationCommandInteractionDataBasicOption, type APIMessageTopLevelComponent, OAuth2Routes, type RESTPostOAuth2AccessTokenResult, type APIInteractionDataResolvedGuildMember, type APIApplicationCommandBasicOption, type APIMessageComponent, PermissionFlagsBits, ContainerBuilder, EmbedBuilder, ActionRowBuilder, MediaGalleryBuilder, TextDisplayBuilder, ButtonBuilder, SectionBuilder, ThumbnailBuilder, SeparatorBuilder, type APIMediaGalleryComponent } from "discord.js";
+import { type APIMessageComponentInteraction, InteractionType, ComponentType, type APIInteraction, type APIMessage, InteractionResponseType, MessageFlags, type APIGuild, type APIGuildMember, type APIModalSubmitInteraction, type APIUser, type APIActionRowComponent, type APIChannel, ButtonStyle, type APIChatInputApplicationCommandGuildInteraction, ChannelType, type APIRole, type APIAutoModerationRule, Collection, ApplicationCommandOptionType, subtext, bold, quote, type APIButtonComponentWithCustomId, ModalBuilder, REST, Routes, type APIDMChannel, type APIApplicationCommandInteractionDataOption, type APIApplicationCommandInteractionDataBasicOption, OAuth2Routes, type RESTPostOAuth2AccessTokenResult, type APIInteractionDataResolvedGuildMember, type APIApplicationCommandBasicOption, type APIMessageComponent, PermissionFlagsBits, ContainerBuilder, EmbedBuilder, ActionRowBuilder, MediaGalleryBuilder, TextDisplayBuilder, ButtonBuilder, SectionBuilder, ThumbnailBuilder, SeparatorBuilder, type APIMediaGalleryComponent, SeparatorSpacingSize } from "discord.js";
 const rest = new REST().setToken(`${Bun.env.TOKEN}`)
 const Client = new ApiClient({ authProvider: new AppTokenAuthProvider(Bun.env.TWITCH_ID!, Bun.env.TWITCH_SECRET!) })
 type CommandContext = {
@@ -30,137 +34,7 @@ type OptionValueMap = {
     [ApplicationCommandOptionType.Mentionable]: string;
     [ApplicationCommandOptionType.Attachment]: string;
 };
-const PART_CONFIG: Record<number, { modal: ModalBuilder, fields: string[] }> = {
-    1: {
-        modal: new ModalBuilder({
-            title: 'Experience & Activity',
-            customId: 'apply-modal-1',
-            components: [
-                {
-                    type: ComponentType.Label, label: 'What age range are you in?', component: { custom_id: 'age', type: ComponentType.StringSelect, options: [{ label: '12 or under', value: '12 or under' }, { label: '13 to 15', value: '13-15' }, { label: '16 to 17', value: '16-17' }, { label: '18 or over', value: '18 or over' }] }
-                },
-                {
-                    type: ComponentType.Label, label: 'Any prior mod experience?', component: { custom_id: 'experience', type: ComponentType.TextInput, style: TextInputStyle.Paragraph, max_length: 300 }
-                },
-                {
-                    type: ComponentType.Label, label: 'Have you been warned/muted?', component: {
-                        custom_id: 'punishments', type: ComponentType.TextInput, style: TextInputStyle.Short, max_length: 100
-                    }
-                },
-                {
-                    type: ComponentType.Label, label: 'Timezone?', component: {
-                        custom_id: 'timezone', type: ComponentType.TextInput, style: TextInputStyle.Short, max_length: 8
-                    }
-                },
-                {
-                    type: ComponentType.Label, label: 'How active are you in the server?', component: {
-                        custom_id: 'activity', type: ComponentType.TextInput, style: TextInputStyle.Short, max_length: 150
-                    }
-                }],
-
-        }),
-        fields: ['Agerange', 'Experience', 'History', 'Timezone', 'Activity']
-    },
-    2: {
-        modal: new ModalBuilder({
-            title: 'Definitions, Why mod, and Staff issues',
-            customId: 'apply-modal-2',
-            components: [
-                {
-                    type: ComponentType.Label,
-                    label: 'Why should you be on the team?',
-                    component: {
-                        custom_id: 'why',
-                        type: ComponentType.TextInput,
-                        style: TextInputStyle.Paragraph,
-                        max_length: 500
-                    }
-                },
-                {
-                    type: ComponentType.Label, label: 'What is your definition of a troll?', component: {
-                        type: ComponentType.TextInput,
-                        custom_id: 'trolldef',
-                        style: TextInputStyle.Short,
-                        max_length: 65
-                    }
-                },
-                {
-                    type: ComponentType.Label, label: 'What is your definition of a raid?', component: {
-                        type: ComponentType.TextInput,
-                        custom_id: 'raiddef',
-                        style: TextInputStyle.Short,
-                        max_length: 65
-                    }
-                },
-                {
-                    type: ComponentType.Label, label: 'You disagree with an action from staff', component: {
-                        type: ComponentType.TextInput,
-                        style: TextInputStyle.Paragraph,
-                        max_length: 300,
-                        custom_id: 'staffissues'
-                    }
-                },
-                {
-                    type: ComponentType.Label, label: 'How would you handle a member report?', component: {
-                        custom_id: 'memberreport', type: ComponentType.TextInput, style: TextInputStyle.Paragraph, max_length: 300
-                    }
-                }]
-        }),
-        fields: ['why', 'Trolldef', 'Raiddef', 'Staffissues', 'Memberreport']
-    },
-    3: {
-        modal: new ModalBuilder({
-        title: 'Situations',
-            customId: 'apply-modal-3',
-            components: [{
-                type: ComponentType.Label, label: 'A member messages you about being harassed', component: {
-                    type: ComponentType.TextInput,
-                    style: TextInputStyle.Paragraph,
-                    max_length: 350,
-                    custom_id: 'dmmember'
-                }
-            },
-            {
-                type: ComponentType.Label, label: 'Users are arguing in general chat', component: {
-                    custom_id: 'arguments',
-                    type: ComponentType.TextInput,
-                    style: TextInputStyle.Paragraph,
-                    max_length: 350
-                }
-            }, {
-                type: ComponentType.Label, label: 'A member DMs you about a rule-breaking DM', component: {
-                    type: ComponentType.TextInput,
-                    custom_id: 'rulebreakdm',
-                    style: TextInputStyle.Paragraph,
-                    max_length: 350
-                }
-            },
-            {
-                type: ComponentType.Label, label: 'Staff is failing to follow the rules', component: {
-                    custom_id: 'staffrulebreak', type: ComponentType.TextInput, style: TextInputStyle.Paragraph, max_length: 350
-                }
-            },
-            {
-                type: ComponentType.Label, label: 'A user shares illegal content', component: {
-                    type: ComponentType.TextInput,
-                    style: TextInputStyle.Paragraph,
-                    max_length: 350,
-                    custom_id: 'illegal',
-                }
-            }]
-
-        }),
-        fields: ['dmmember', 'arguments', 'rulebreakdm', 'staffrulebreak', 'illegal']
-    },
-};
-await Bun.write("./interpid.txt", String(process.pid))
 const commands = new Collection<string, ((ctx: CommandContext) => Promise<Response | void>) & { cooldownMs?: number }>();
-const statusMap: Record<string, { cmd: string, log: string, dm: string, color: number }> = {
-    Ban: { cmd: 'was banned', log: 'banned a member', dm: `you were banned from`, color: 0xd10000 },
-    Kick: { cmd: 'was kicked', log: 'kicked a member', dm: `you were kicked from`, color: 0x838383 },
-    Mute: { cmd: 'was issued a mute', log: 'muted a member', dm: `you were given a`, color: 0xff4444 },
-    Warn: { cmd: 'was issued a warning', log: 'warned a member', dm: `you were given a warning`, color: 0xffcc00 }
-};
 const key = crypto.getRandomValues(new Uint8Array(32));
 function flattenLeafOptions(options: APIApplicationCommandInteractionDataOption[] | undefined): { path: string[]; leaves: APIApplicationCommandInteractionDataBasicOption[] } {
     const path: string[] = [];
@@ -178,52 +52,6 @@ function resolveOptions<T extends Record<string, keyof OptionValueMap>>(options:
     const result: any = { subcommandPath: path };
     for (const key in schema) { const opt = leaves.find(o => o.name === key); result[key] = opt?.type === schema[key] ? opt?.value : undefined; }
     return result;
-}
-function getComparableEmbed(embedData: APIEmbed): string | null {
-    if (!embedData) return null; const normalizeText = (text: string | null) => text ? text.replace(/\r\n/g, '\n').trim() : null;
-    return JSON.stringify({
-        title: embedData.title ? normalizeText(embedData.title) : null,
-        description: embedData.description ? normalizeText(embedData.description) : null,
-        url: embedData.url ? normalizeText(embedData.url) : null,
-        color: embedData.color ?? null,
-        fields: embedData.fields ? embedData.fields.map(field => ({ name: normalizeText(field.name), value: normalizeText(field.value), inline: field.inline || false })) : [],
-        image: normalizeAttachmentUrl(embedData.image?.url),
-        thumbnail: normalizeAttachmentUrl(embedData.thumbnail?.url),
-        author: embedData.author ? { name: normalizeText(embedData.author.name) } : null,
-        footer: embedData.footer ? { text: normalizeText(embedData.footer.text) } : null
-    });
-}
-function normalizeAttachmentUrl(url?: string | null): string | null {
-    if (!url) return null;
-    if (url.startsWith('attachment://')) return url;
-    try {
-        const parsed = new URL(url);
-        if (['cdn.discordapp.com', 'media.discordapp.net'].includes(parsed.hostname) && parsed.pathname.includes('/attachments/')) {
-            const filename = parsed.pathname.split('/').pop();
-            if (filename) return `attachment://${decodeURIComponent(filename)}`;
-        }
-    } catch { }
-    return url;
-}
-function getComparableComponents(components: APIMessageComponent[] | undefined): string {
-    const mediaMetadata = new Set(['proxy_url', 'width', 'height', 'placeholder', 'placeholder_version', 'content_type', 'loading_state', 'attachment_id', 'flags']);
-    const normalize = (value: any): any => {
-        if (Array.isArray(value)) return value.map(normalize);
-        if (!value || typeof value !== 'object') return value;
-        const isComponent = typeof value.type === 'number';
-        const isMedia = typeof value.url === 'string' && ('proxy_url' in value || 'width' in value || 'attachment_id' in value);
-        return Object.fromEntries(Object.entries(value)
-            .filter(([property, propertyValue]) => {
-                if (isComponent && property === 'id') return false;
-                if (isComponent && value.type === 13 && (property === 'name' || property === 'size')) return false;
-                if (isMedia && mediaMetadata.has(property)) return false;
-                if ((property === 'spoiler' || property === 'disabled') && propertyValue === false) return false;
-                if (property === 'description' && (propertyValue === null || propertyValue === '')) return false;
-                return true;
-            })
-            .map(([property, propertyValue]) => [property, property === 'url' && typeof propertyValue === 'string' ? normalizeAttachmentUrl(propertyValue) : normalize(propertyValue)]));
-    };
-    return JSON.stringify((components || []).map(normalize));
 }
 function shuffle<T>(array: T[]): T[] {
     for (let i = array.length - 1; i > 0; i--) {
@@ -249,19 +77,13 @@ function findComponent(components: APIMessageComponent[], predicate: (c: APIMess
 }
 function buildNoteView(notes: any[], index: number, user: APIUser, mod: APIUser, opener: string, disabled = false) {
     const n = notes[index];
-    const quoted = String(n.note).split('\n').map(l => `> ${l}`).join('\n');
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder().setCustomId(`note-prev-${user.id}-${index}-${opener}`).setLabel('◀️ prev').setStyle(ButtonStyle.Secondary).setDisabled(disabled || index === 0),
-        new ButtonBuilder().setCustomId(`note-next-${user.id}-${index}-${opener}`).setLabel('▶️ next').setStyle(ButtonStyle.Secondary).setDisabled(disabled || index >= notes.length - 1),
-        new ButtonBuilder().setCustomId(`note-del-${user.id}-${index}-${opener}-${n._id}`).setLabel('🗑️ delete').setStyle(ButtonStyle.Danger).setDisabled(disabled),
-    );
-    return new ContainerBuilder()
-        .setAccentColor(0xdddddd)
-        .addSectionComponents(section(
-            `<@${user.id}> notes | \`${index + 1} of ${notes.length}\`\n${quoted}\n\n${subtext(`<@${mod.id}> | ${fmtDate(n.timestamp)}`)}`,
-            avatarOf(user),
-        ))
-        .addActionRowComponents(row);
+    return new ContainerBuilder({ accent_color: 0xdddddd, })
+        .addSectionComponents(new SectionBuilder({ components: [{ type: ComponentType.TextDisplay, content: `<@${user.id}> notes | \`${index + 1} of ${notes.length}\`\n${String(n.note).split('\n').map(l => `> ${l}`).join('\n')}\n\n${subtext(`<@${mod.id}> | ${fmtDate(n.timestamp)}`)}` }], accessory: { type: ComponentType.Thumbnail, media: { url: avatarOf(user) } } }))
+        .addActionRowComponents(new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder({ custom_id: `note-prev-${user.id}-${index}-${opener}`, label: '◀️ prev', style: ButtonStyle.Secondary, disabled: disabled || index === 0 }),
+            new ButtonBuilder({ custom_id: `note-next-${user.id}-${index}-${opener}`, label: '▶️ next', style: ButtonStyle.Secondary, disabled: disabled || index >= notes.length - 1 }),
+            new ButtonBuilder({ custom_id: `note-del-${user.id}-${index}-${opener}-${n._id}`, label: '🗑️ delete', style: ButtonStyle.Secondary, disabled: disabled })
+        ));
 }
 
 function buildModlogView(logs: any[], index: number, user: APIUser, mod: APIUser, opener: string, isAdmin: boolean, disabled = false) {
@@ -303,17 +125,13 @@ function highlowRow(start: number, secret: number, streak: number, pot: number, 
 }
 const ephemeral = (content: string) => Response.json({ type: InteractionResponseType.ChannelMessageWithSource, data: { content, flags: MessageFlags.Ephemeral } });
 const v2 = (...parts: { toJSON(): any }[]) => ({ flags: MessageFlags.IsComponentsV2 as const, components: parts.map(p => p.toJSON()) });
-const section = (text: string, thumb: string) =>
-    new SectionBuilder()
-        .addTextDisplayComponents(new TextDisplayBuilder().setContent(text))
-        .setThumbnailAccessory(new ThumbnailBuilder().setURL(thumb));
 const LOG_COLORS: Record<string, number> = { Warn: 0xffcc00, Mute: 0xff4444, Ban: 0xd10000, Kick: 0x838383 };
 const fmtDate = (ts: number) => new Date(ts).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Chicago' });
 const avatarOf = (u: { id: string; avatar: string | null }) =>
     u.avatar
         ? rest.cdn.avatar(u.id, u.avatar)
         : rest.cdn.defaultAvatar(Number((BigInt(u.id) >> 22n) % 6n));
-const notice = (description: string, color?: number) => new EmbedBuilder().setDescription(description).setColor(color ?? null).toJSON();
+const notice = (description: string, color?: number) => new EmbedBuilder({ color: color ?? undefined, description: description }).toJSON();
 
 function generateButtons(board: string[], p1: string, p2: string, current: string, disabled: boolean) {
     return [0, 1, 2].map(i =>
@@ -348,7 +166,6 @@ async function runPunishment({ body, res, guildConfig }: CommandContext): Promis
     const { Stages, guildname, icon, modChannels } = guildConfig as Document;
     const { punishments } = await usersCollection.findOne({ userId: target, guildId: guild_id }, { projection: { punishments: 1 } }) as any;
     const activeWarns = punishments.length > 0 ? punishments.filter((p: any) => p.active === 1).reduce((acc: number, cur: any) => acc + (cur.weight || 1), 0) : 0;
-    const totalWarns = activeWarns + 1;
     let warnType = subcommandPath[0] === 'ban' ? 'Ban' : subcommandPath[0] === 'kick' ? 'Kick' : subcommandPath[0] === 'mute' ? 'Mute' : 'Warn';
     const stage = Stages[activeWarns]
     let durationMs: number = 0, durationStr: string | null = null
@@ -366,7 +183,7 @@ async function runPunishment({ body, res, guildConfig }: CommandContext): Promis
         body: { embeds: [finalembed.toJSON()] }
     });
     const object = new ObjectId();
-    const newPunishment = { _id: object, userId: target, moderatorId: member!.user.id, reason: reason, duration: durationMs, timestamp: Date.now(), active: 1, weight: 1, type: warnType, guildId: guild_id, channel: channel.id, refrence: `https://discord.com/channels/${guild_id}/${channel.id}/${finalMessage.id}`, warns: totalWarns - 1 };
+    const newPunishment = { _id: object, userId: target, moderatorId: member!.user.id, reason: reason, duration: durationMs, timestamp: Date.now(), active: 1, weight: 1, type: warnType, guildId: guild_id, channel: channel.id, refrence: `https://discord.com/channels/${guild_id}/${channel.id}/${finalMessage.id}`, warns: activeWarns };
     await usersCollection.updateOne({ userId: targetUser!.id, guildId: guild_id }, { $push: { punishments: newPunishment as any } });
     const caseHistory = [...punishments, newPunishment].filter((r: any) => warnType === 'Ban' ? r.type === "Ban" : r.type !== 'Kick').slice(0, 10).map((p: any, idx: number) => p.refrence ? `[Case ${idx + 1}](${p.refrence})` : null).filter(Boolean);
     let dm = true
@@ -390,7 +207,7 @@ async function runPunishment({ body, res, guildConfig }: CommandContext): Promis
                         },
                         {
                             type: ComponentType.TextDisplay,
-                            content: `Reason: \`${reason}\` ${['Ban', 'Kick'].includes(warnType) ? '' : `\nPunishment: ${durationStr ? `\`1 warn,${durationStr}\`` : `\`1 warn\``}`}\nActive Warnings: \`${totalWarns}\`\nWarn expires: <t:${Math.floor((Date.now() + 86400000) / 1000)}:F>`
+                            content: `Reason: \`${reason}\` ${['Ban', 'Kick'].includes(warnType) ? '' : `\nPunishment: ${durationStr ? `\`1 warn,${durationStr}\`` : `\`1 warn\``}`}\nActive Warnings: \`${activeWarns + 1}\`\nWarn expires: <t:${Math.floor((Date.now() + 86400000) / 1000)}:F>`
                         }]
                 },
                     ...(warnType === 'Ban' ? [{
@@ -433,7 +250,7 @@ async function runPunishment({ body, res, guildConfig }: CommandContext): Promis
                     },
                     components: [{
                         type: ComponentType.TextDisplay,
-                        content: `${member!.user.username} ${statusMap[warnType]!.log}\n\nuser:<@${targetUser!.id}>\nChannel: <#${channel.id}>\nHistory: ${caseHistory.join(' | ') || "none"}\nReason: \`${reason}\`\n${['Ban', 'Kick'].includes(warnType) ? '' : `Punishment: ${durationStr ? `\`1 warn,${durationStr}\`` : `\`1 warn\``}`}\nNext Punishment: \`${Stages[Math.min(totalWarns - 1, Stages.length - 1)].label}\`\n\n${subtext(dm ? 'User DMed ✅' : 'User DMed 🚫')}`
+                        content: `${member!.user.username} ${statusMap[warnType]!.log}\n\nuser:<@${targetUser!.id}>\nChannel: <#${channel.id}>\nHistory: ${caseHistory.join(' | ') || "none"}\nReason: \`${reason}\`\n${['Ban', 'Kick'].includes(warnType) ? '' : `Punishment: ${durationStr ? `\`1 warn,${durationStr}\`` : `\`1 warn\``}`}\nNext Punishment: \`${Stages[Math.min(activeWarns, Stages.length - 1)].label}\`\n\n${subtext(dm ? 'User DMed ✅' : 'User DMed 🚫')}`
                     }]
                 }]
             }]
@@ -445,36 +262,6 @@ async function runPunishment({ body, res, guildConfig }: CommandContext): Promis
         }, 86400000);
     }
     return Response.json(res);
-}
-async function syncEmbed(guildId: string, embedName: string, config: { channelid: string, embeds: APIEmbed[], components: APIMessageTopLevelComponent[], reactions?: { emoji: string; roleId: string }[], format: string, messageId?: string }, files: { name: string; data: Buffer; key: string; contentType?: string }[] = []) {
-    const { channelid, embeds, components, reactions, format, messageId: existingMessageId } = config;
-    const buildBody = (existingAttachments: { id: string; filename: string }[] = []) => {
-        const body = format === 'v2' ? { flags: MessageFlags.IsComponentsV2, components } as APIMessage : { embeds, components } as APIMessage;
-        if (files.length || existingAttachments.length) {
-            (body as any).attachments = [
-                ...existingAttachments,
-                ...files.map((file, index) => ({ id: String(index), filename: file.name })),
-            ];
-        }
-        return body;
-    };
-    if (!existingMessageId) {
-        const message = await rest.post(Routes.channelMessages(channelid), { body: buildBody(), files: files.length ? files : undefined }) as APIMessage;
-        await guildconfigs.updateOne({ guildId }, { $set: { [`messageConfigs.${embedName}.messageId`]: message.id } });
-        for (const reaction of reactions || [])
-            await rest.put(Routes.channelMessageOwnReaction(channelid, message.id, reaction.emoji));
-        return { status: 'sent', messageId: message.id };
-    }
-    const message = await rest.get(Routes.channelMessage(channelid, existingMessageId)) as APIMessage;
-    const componentsDifferent = getComparableComponents(message.components) !== getComparableComponents(components);
-    const embedsDifferent = message.embeds.map((embed) => getComparableEmbed(embed)).join('|||') !== embeds.map((embed) => getComparableEmbed(embed)).join('|||');
-    const different = files.length > 0 || componentsDifferent || (format !== 'v2' && embedsDifferent);
-    if (different) await rest.patch(Routes.channelMessage(channelid, message.id), {
-        body: buildBody(message.attachments.map(attachment => ({ id: attachment.id, filename: attachment.filename }))),
-        files: files.length ? files : undefined,
-    });
-    await guildconfigs.updateOne({ guildId: guildId }, { $set: { [`messageConfigs.${embedName}.messageId`]: message.id } });
-    return { status: !existingMessageId ? 'sent' : 'updated', messageId: message.id, changed: different };
 }
 async function withGuards({ body, res, guildConfig, restrictedToFullMod = false }: CommandContext): Promise<Response | void> {
     const { member, data: { options, resolved } } = body;
@@ -505,26 +292,6 @@ async function withGuards({ body, res, guildConfig, restrictedToFullMod = false 
         return Response.json(res);
     }
 };
-function buildApplicationHub(application: any | {}) {
-    const sections = [1, 2, 3].map(part => {
-        const done = PART_CONFIG[part]!.fields.every(f => application?.[f] !== undefined && application?.[f] !== '');
-        return {
-            type: ComponentType.Section,
-            components: [{ type: ComponentType.TextDisplay, content: `${done ? '✅' : '⬜'} **Part ${part}: ${PART_CONFIG[part]!.modal.data.title}**` }],
-            accessory: { type: ComponentType.Button, disabled: done, style: done ? ButtonStyle.Secondary : ButtonStyle.Primary, label: done ? 'Done' : 'Fill out', custom_id: `apply-part-${part}` },
-        };
-    });
-    const allDone = [1, 2, 3].every(p => PART_CONFIG[p]!.fields.every(f => application?.[f] !== undefined && application?.[f] !== ''));
-    return [{
-        type: ComponentType.Container,
-        accent_color: allDone ? 0x2ecc71 : 0x5865F2,
-        components: [
-            { type: ComponentType.TextDisplay, content: '## Moderator Application\nFill out each section below, in any order. You can reopen and edit a section any time before submitting.' },
-            ...sections,
-            { type: ComponentType.ActionRow, components: [{ type: ComponentType.Button, style: 3, label: 'Submit Application', custom_id: 'apply-submit', disabled: !allDone }] },
-        ],
-    }];
-}
 commands.set('dnd', async ({ body, res }) => {
     const { subcommandPath } = resolveOptions(body.data.options, {})
     res.data = { content: `you rolled a ${Math.ceil(Math.random() * parseInt(subcommandPath[0]!))}` };
@@ -695,7 +462,7 @@ commands.set('apply', async ({ body, res }) => {
     const { member, guild_id } = body;
     const doc = await usersCollection.findOne({ userId: member?.user.id, guildId: guild_id }, { projection: { application: 1 } }) as any;
     res.type = InteractionResponseType.ChannelMessageWithSource
-    res.data = { flags: MessageFlags.IsComponentsV2, components: buildApplicationHub(doc?.application ?? {}) };
+    res.data = { flags: MessageFlags.IsComponentsV2, components: buildApplicationHub(doc?.application ?? {}, PART_CONFIG) };
 });
 commands.set('leaderboard', async ({ body, res }) => {
     const { guild_id } = body;
@@ -824,11 +591,6 @@ commands.set('link', async ({ body, res }) => {
     await usersCollection.updateOne({ userId: member?.user.id, guildId: '1231453115937587270' }, { $set: { twitchChannelId: twitchUser.id, twitchChannelLogin: twitchUser.name } });
     res.data = { embeds: [{ description: `Level Linked to Twitch channel **${twitchUser.displayName}**.` }], flags: MessageFlags.Ephemeral };
 });
-commands.set('restart', async ({ res }) => {
-    const botPid = parseInt(await Bun.file("./pid.txt").text());
-    res.data = { embeds: [notice("🔄 **Restarting bot..**", 0x5865F2)] };
-    Bun.spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", "C:\\Users\\micha\\Desktop\\Bot\\restart.ps1", "-BotPid", `${botPid}`, "-intpid", `${process.pid}`], { stderr: "pipe", stdout: 'pipe', stdin: 'pipe' });
-});
 const activeCooldowns = new Collection<string, number>(); // userId -> expiry timestamp
 function checkCooldown(userId: string, isStaff: boolean, cooldownMs: number): Response | null {
     if (isStaff || cooldownMs <= 0) return null;
@@ -920,7 +682,7 @@ async function handleModals(body: APIModalSubmitInteraction) {
         }
         const doc = await usersCollection.findOne({ userId: member?.user.id, guildId: guild_id }, { projection: { application: 1 } }) as any;
         res.type = InteractionResponseType.UpdateMessage;
-        res.data = { flags: MessageFlags.IsComponentsV2, components: buildApplicationHub(doc?.application ?? {}) };
+        res.data = { flags: MessageFlags.IsComponentsV2, components: buildApplicationHub(doc?.application ?? {}, PART_CONFIG) };
     }
     return Response.json(res)
 }
@@ -959,11 +721,8 @@ async function handleComponents(body: APIMessageComponentInteraction) {
             const dmchannel = await rest.post(Routes.userChannels(), { body: { recipient_id: targetUser.id } }) as APIDMChannel;
             const dmContainer = new ContainerBuilder()
                 .setAccentColor(0xd10000)
-                .addSectionComponents(section(
-                    `<@${targetUser.id}>, you were banned from [${guildname}](https://discord.com/channels/${guild_id}). To appeal this decision, please join our dedicated appeal server using the button below.\n${bold('Reason:')} ${quote('troll')}`,
-                    rest.cdn.icon(guild_id!, icon),
-                ))
-                .addSeparatorComponents(new SeparatorBuilder())
+                .addSectionComponents(new SectionBuilder({ components: [{ type: ComponentType.TextDisplay, content: `<@${targetUser.id}>, you were banned from [${guildname}](https://discord.com/channels/${guild_id}). To appeal this decision, please join our dedicated appeal server using the button below.\n${bold('Reason:')} ${quote('troll')}` }], accessory: { type: ComponentType.Thumbnail, media: { url: icon } } }))
+                .addSeparatorComponents(new SeparatorBuilder({ spacing: SeparatorSpacingSize.Small }))
                 .addActionRowComponents(new ActionRowBuilder<ButtonBuilder>().addComponents(
                     new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Appeal').setURL('https://discord.gg/qMjjyXyYbr'),
                 ));
@@ -972,10 +731,18 @@ async function handleComponents(body: APIMessageComponentInteraction) {
 
         await rest.put(Routes.guildBan(guild_id!, targetUser.id), { body: { delete_message_seconds: 604800 }, reason: 'Ban Command: troll' });
         await rest.post(Routes.channelMessages(modChannels.banlogChannel), {
-            body: v2(new ContainerBuilder().setAccentColor(0xd10000).addSectionComponents(section(
-                `${member!.user.username} banned a member\n\nuser: <@${targetUser.id}>\nChannel: <#${channel.id}>\nHistory: ${caseHistory.join(' | ') || 'none'}\nReason: Troll\n\n${subtext(dm ? 'User DMed ✅' : 'User DMed 🚫')}`,
-                avatar,
-            ))),
+            body: v2(new ContainerBuilder({ accent_color: 0xd10000 })
+                .addSectionComponents(new SectionBuilder({
+                    components: [{
+                        type: ComponentType.TextDisplay,
+                        content: `${member!.user.username} banned a member\n\nuser: <@${targetUser.id}>\nChannel: <#${channel.id}>\nHistory: ${caseHistory.join(' | ') || 'none'}\nReason: Troll\n\n${subtext(dm ? 'User DMed ✅' : 'User DMed 🚫')}`
+                    }],
+                    accessory: {
+                        type: ComponentType.Thumbnail,
+                        media: { url: avatar }
+                    }
+                })),
+            )
         });
         if (inviteCode !== 'none') await rest.delete(Routes.invite(inviteCode!));
         const btn = findComponent(message.components!, c => 'custom_id' in c && c.custom_id.startsWith('ban_')) as APIButtonComponentWithCustomId | null;
@@ -1016,10 +783,7 @@ async function handleComponents(body: APIMessageComponentInteraction) {
         const gallery = findComponent(message.components!, c => c.type === ComponentType.MediaGallery) as APIMediaGalleryComponent | null;
         const container = new ContainerBuilder()
             .setAccentColor(color)
-            .addSectionComponents(section(
-                `## Ban appeal: ${approved ? 'Approved' : 'Denied'}\n**Why did you get banned?**\n${appeals.reason}\n\n**Why accept appeal?**\n${appeals.justification}\n\n**Extra info**\n${appeals.extra || 'None'}`,
-                avatarOf(targetUser),
-            ));
+            .addSectionComponents(new SectionBuilder({ components: [{ type: ComponentType.TextDisplay, content: `## Ban appeal: ${approved ? 'Approved' : 'Denied'}\n**Why did you get banned?**\n${appeals.reason}\n\n**Why accept appeal?**\n${appeals.justification}\n\n**Extra info**\n${appeals.extra || 'None'}` }], accessory: { type: ComponentType.Thumbnail, media: { url: avatarOf(targetUser) } } }));
         if (gallery) container.addMediaGalleryComponents(
             new MediaGalleryBuilder().addItems(gallery.items.map(i => ({ media: { url: i.media.url } }))),
         );
@@ -1141,14 +905,12 @@ async function handleComponents(body: APIMessageComponentInteraction) {
         );
     }
     else if (custom_id.startsWith('highlow-')) {
-        const owner = message.interaction_metadata?.user.id; // verify this field exists in your discord-api-types version
-        if (owner && owner !== member!.user.id) return ephemeral('This is not your game.');
         const [, choice, startNum, secretNum, streakNum, potNum, prevMin, prevMax] = custom_id.split('-');
         if (choice === 'cashout') {
             const pot = parseInt(startNum!);
             await usersCollection.updateOne({ userId: member?.user.id, guildId: guild_id }, { $inc: { coins: pot } });
             res.data = {
-                embeds: [new EmbedBuilder().setTitle('Cashed Out 💰').setColor(0x2ecc71).setDescription(`You walked away with **${pot}** coins. Smart move, or was it?`).toJSON()],
+                embeds: [{ color: 0x2ecc71, title: 'Cashed Out 💰', description: `You walked away with **${pot}** coins. Smart move, or was it?` }],
                 components: [],
             };
         } else {
@@ -1161,76 +923,21 @@ async function handleComponents(body: APIMessageComponentInteraction) {
                 let newSecret = min + Math.ceil(Math.random() * (max - min));
                 while (newSecret === newStart) newSecret = min + Math.ceil(Math.random() * (max - min));
                 res.data = {
-                    embeds: [new EmbedBuilder()
-                        .setTitle(`Correct! (Streak: ${streak + 1})`)
-                        .setColor(0xc79c0f)
-                        .setDescription(`📉 Range tightening — this round's number is between **${min}** and **${max}**.`)
-                        .addFields({ name: 'Current Number:', value: `${newStart}` })
-                        .toJSON()],
+                    embeds: [{
+                        title: `Correct! (Streak: ${streak + 1})`,
+                        color: 0xc79c0f,
+                        description: `📉 Range tightening — this round's number is between **${min}** and **${max}**.`,
+                        fields: [{ name: 'Current Number:', value: `${newStart}` }],
+                    }],
                     components: [highlowRow(newStart, newSecret, streak + 1, pot + gained, min, max).toJSON()],
                 };
             } else {
                 if (streak === 0) await usersCollection.updateOne({ userId: member?.user.id, guildId: guild_id }, { $inc: { coins: -10 } });
                 res.data = {
-                    embeds: [new EmbedBuilder()
-                        .setTitle('You Lost! 💀')
-                        .setColor(0x870000)
-                        .setDescription(`The number was **${secret}**.\n(Guess was ${choice} than ${start})\n\nYou lost a pot of **${pot}** coins. 💸`)
-                        .toJSON()],
+                    embeds: [{ color: 0x870000, title: 'You Lost! 💀', description: `The number was **${secret}**.\n(Guess was ${choice} than ${start})\n\nYou lost a pot of **${pot}** coins. 💸` }],
                     components: [],
                 };
             }
-        }
-    }
-    else if (custom_id.startsWith('highlow-')) {
-        const [, choice, startNum, secretNum, streakNum, potNum, Prevmin, Prevmax] = custom_id.split('-');
-        const start = parseInt(startNum!), secret = parseInt(secretNum!), streak = parseInt(streakNum!), pot = parseInt(potNum!);
-        const won = (choice === 'higher' && secret > start) || (choice === 'lower' && secret < start);
-        if (won) {
-            const p = winProbability(choice, start, parseInt(Prevmin!), parseInt(Prevmax!));
-            const gained = Math.round(8 / p);
-            const { min, max } = rangeForStreak(streak + 1);
-            const newStart = min + Math.ceil(Math.random() * (max - min));
-            let newSecret = min + Math.ceil(Math.random() * (max - min));
-            while (newSecret === newStart) newSecret = min + Math.ceil(Math.random() * (max - min));
-            res.type = InteractionResponseType.UpdateMessage;
-            res.data = {
-                embeds: [{
-                    title: `Correct! (Streak: ${streak + 1})`,
-                    color: 0xc79c0f,
-                    description: `\n\n📉 Range tightening — this round's number is between **${min}** and **${max}**.`,
-                    fields: [{ name: 'Current Number:', value: `${newStart}` }]
-                }],
-                components: [{
-                    type: 1, components: [
-                        { type: 2, label: "Higher", style: 1, custom_id: `highlow-higher-${newStart}-${newSecret}-${streak + 1}-${pot + gained}-${min}-${max}` },
-                        { type: 2, label: "Lower", style: 4, custom_id: `highlow-lower-${newStart}-${newSecret}-${streak + 1}-${pot + gained}-${min}-${max}` },
-                        { type: 2, label: `Cash Out (${pot + gained})`, style: 3, custom_id: `highlow-cashout-${pot + gained}` }
-                    ]
-                }]
-            };
-        }
-        else if (choice == 'cashout') {
-            const pot = parseInt(startNum!);
-            await usersCollection.findOneAndUpdate({ userId: member?.user.id, guildId: guild_id }, { $inc: { coins: pot } });
-            res.type = InteractionResponseType.UpdateMessage;
-            res.data = {
-                embeds: [{ title: "Cashed Out 💰", color: 0x2ecc71, description: `You walked away with **${pot}** coins. Smart move — or was it?` }],
-                components: []
-            };
-        }
-        else {
-            if (streak === 0)
-                await usersCollection.findOneAndUpdate({ userId: member?.user.id, guildId: guild_id }, { $inc: { coins: -10 } });
-            res.type = InteractionResponseType.UpdateMessage;
-            res.data = {
-                embeds: [{
-                    title: "You Lost! 💀",
-                    color: 0x870000,
-                    description: `The number was **${secret}**.\n(Guess was ${choice} than ${start})\n\nYou lost a pot of **${pot}** coins. 💸`
-                }],
-                components: []
-            };
         }
     }
     else if (custom_id.startsWith('verify')) {
@@ -1283,9 +990,7 @@ Bun.serve({
     port: 3000,
     websocket: { open() { }, message() { }, close() { } },
     routes: {
-        "/": () => new Response(Bun.file("./index.html")),
-        "/controller.js": () => new Response(Bun.file("./dist/controller.js")),
-        "/output.css": () => new Response(Bun.file("./dist/output.css"), { headers: { "Content-Type": "text/css" } }),
+        "/": () => new Response(Bun.file('./.dist/index.html')),
         "/api/auth/discord/login": (req) => {
             const state = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
             req.cookies.set("oauth_state", state, { httpOnly: true, secure: true, sameSite: "lax", path: "/", maxAge: 300, });
@@ -1321,8 +1026,8 @@ Bun.serve({
                 try {
                     let guildId: string;
                     let embedName: string;
-                    let config: Parameters<typeof syncEmbed>[2];
-                    let files: Parameters<typeof syncEmbed>[3] = [];
+                    let config: Parameters<typeof syncEmbed>[3];
+                    let files: Parameters<typeof syncEmbed>[4] = [];
                     if (req.headers.get('content-type')?.includes('multipart/form-data')) {
                         const formData = await req.formData();
                         guildId = String(formData.get('guildId') || '');
@@ -1342,7 +1047,7 @@ Bun.serve({
                         config = payload.config;
                     }
                     if (!guildId || !embedName || !config) return Response.json({ error: 'Guild, embed name, and config are required' }, { status: StatusCodes.BAD_REQUEST, headers: corsHeaders });
-                    const result = await syncEmbed(guildId, embedName, config, files);
+                    const result = await syncEmbed(rest, guildId, embedName, config, files);
                     return new Response(JSON.stringify(result), { headers: corsHeaders });
                 } catch {
                     return new Response(JSON.stringify({ error: 'Failed to sync embed' }), { status: StatusCodes.INTERNAL_SERVER_ERROR, headers: corsHeaders });
@@ -1382,7 +1087,7 @@ Bun.serve({
                 if (!session) return Response.json({ loggedIn: false }, { headers });
                 try {
                     const user = await rest.get(Routes.user(session.userId)) as APIUser;
-                    return Response.json({ user: { ...user }, loggedIn: true }, { headers });
+                    return Response.json({ user: { ...user } }, { headers });
                 } catch {
                     return Response.json({ error: "Could not resolve user" }, { status: StatusCodes.NOT_FOUND, headers });
                 }
@@ -1404,8 +1109,7 @@ Bun.serve({
                     const role = await roleFromStaffroles(session.userId, doc.guildId, doc.staffroles as string[], doc.ownerId as string)
                     return { guildId: doc.guildId as string, name: (doc.name as string) ?? null, role: role };
                 }));
-                const authorized = results.filter((r) => r!.role !== null)
-                return Response.json(authorized, { headers: corsHeaders });
+                return Response.json(results.filter((r) => r!.role !== null), { headers: corsHeaders });
             }
         },
         "/api/guilds/:guildId": {
