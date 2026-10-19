@@ -77,9 +77,6 @@ interface GuildConfigDoc {
     staffRoles: APIRole[]
 }
 // --- State -------------------------------------------------------------------
-let currentGuildId: string | null = null;
-let currentUser: string | null = null;
-let currentRole: Role | null = null;
 let messageConfigsDraft: Record<string, MessageConfig> = {};
 const v2FileUploads = new Map<string, File>();
 let activeEmbedKey = '';
@@ -148,6 +145,7 @@ const elements = {
     orText: el('orText'),
     buttonColumnText: el('buttoncolumnMessage'),
     channelsContainer: el('channelsContainer'),
+    guilds: el('guilds')
 };
 const rolePickers = {
     admin: makeRolePicker(elements.adminRoleInput),
@@ -1089,7 +1087,7 @@ function confirmModal(message: string) {
         document.getElementById('confirmNo')!.addEventListener('click', () => { modal.remove(); resolve(false); });
     });
 }
-function getFormValues(includeMessageConfigs = true) {
+function getFormValues() {
     const { modChannelsSection, publicChannelsSection, GeneralChannelsSection, reactionsSection, automodSection, Responses, adminRoleInput, modRoleInput, jrRoleInput, reasonsWeightsSection, messageReasonsWeightsSection, } = elements;
 
     const modChannels = getSectionValues(modChannelsSection, 'mod');
@@ -1103,7 +1101,7 @@ function getFormValues(includeMessageConfigs = true) {
     const staffroles = [adminRoleInput.value.trim(), modRoleInput.value.trim(), jrRoleInput.value.trim()];
 
     const config = { modChannels, publicChannels, generalchannels, reactions, automodsettings: { ...automodThresholds, messagereasonsandweights, automodreasonsandweights, }, responses, staffroles };
-    return includeMessageConfigs ? { ...config, messageConfigs: messageConfigsDraft } : config;
+    return config;
 }
 function showMessage(message: string, colorClass: string) {
     const { messageBox } = elements;
@@ -1120,76 +1118,93 @@ function showMessage(message: string, colorClass: string) {
 // --- Guild list / selection ------------------------------------------------
 
 async function refreshGuildSelect() {
-    const { guildSelect, addServerBtn, deleteConfigBtn } = elements;
-    const selectedValue = guildSelect.value;
+    const { guildSelect, addServerBtn, deleteConfigBtn, loginBtn, authStatus, logoutBtn, guilds } = elements;
     guildSelect.innerHTML = '<option value="">-- Select a Guild --</option>';
-    if (!currentUser) {
+    const response = await fetch(`/api/auth/me`, { credentials: 'include' });
+    const res: { user: APIUser } = await response.json();
+    if (res.user) {
+        guilds.classList.remove('hidden')
+        loginBtn.classList.add('hidden');
+        logoutBtn.classList.remove('hidden');
+        authStatus.textContent = `Logged in as ${res.user.username}`;
+    } else {
+        guilds.classList.add('hidden')
+        loginBtn.classList.remove('hidden');
+        logoutBtn.classList.add('hidden');
         addServerBtn.classList.remove('hidden');
         deleteConfigBtn.classList.add('hidden');
+        authStatus.textContent = 'Not logged in';
         return;
     }
     try {
         const resGuilds = await fetch(`/api/guilds`, { credentials: 'include' });
         if (!resGuilds.ok) throw new Error(`Failed to list guilds (${resGuilds.status})`);
         if (resGuilds.status === 401) {
-            currentUser = null;
             elements.loginBtn.classList.remove('hidden');
             elements.logoutBtn.classList.add('hidden');
             elements.authStatus.textContent = 'Not logged in'; return;
         }
         const summaries: GuildSummary[] = await resGuilds.json();
-        summaries
-            .sort((a, b) => a.guildId.localeCompare(b.guildId))
+        if (summaries.length === 0) {
+            showMessage('No guilds found where you hold a staff role.', 'bg-yellow-500');
+            await loadSelectedGuild(null);
+            return;
+        }
+        summaries.sort((a, b) => a.guildId.localeCompare(b.guildId))
             .forEach(g => {
                 const option = document.createElement('option');
                 option.value = g.guildId;
                 option.textContent = `${g.name} (${g.role})`;
                 guildSelect.appendChild(option);
             });
-
-        guildSelect.value = summaries.some(g => g.guildId === selectedValue) ? selectedValue : '';
-        if (summaries.length === 0) { showMessage('No guilds found where you hold a staff role.', 'bg-yellow-500'); return; }
         addServerBtn.classList.remove('hidden');
+        guildSelect.value = summaries.some(g => g.guildId === guildSelect.value) ? guildSelect.value : summaries[0]!.guildId;;
     } catch (error) {
         showMessage(`Could not reach the config API: ${errMsg(error)}`, 'bg-red-500');
+        return;
     }
-    await loadSelectedGuild();
+    await loadSelectedGuild(guildSelect.value || null);
 }
 function setGuildRoles(roles: APIRole[]) {
     rolePickers.admin.setRoles(roles);
     rolePickers.mod.setRoles(roles);
     rolePickers.jr.setRoles(roles);
 }
-async function loadSelectedGuild() {
-    const { guildSelect, deleteConfigBtn, addServerBtn, orText, saveConfigBtn, buttonColumnText, channelsContainer, adminRoleInput, modRoleInput, jrRoleInput } = elements;
-    currentGuildId = guildSelect.value || null;
-    deleteConfigBtn.classList.toggle('hidden', !currentGuildId);
-    saveConfigBtn.classList.toggle('hidden', !currentGuildId);
-    addServerBtn.classList.toggle('hidden', !!currentGuildId)
-    orText.classList.toggle('hidden', !!currentGuildId)
-    channelsContainer.classList.toggle('hidden', !currentGuildId)
-    if (!currentGuildId) {
-        currentRole = null;
+async function loadSelectedGuild(guildId: string | null = null) {
+    const { deleteConfigBtn, addServerBtn, orText, saveConfigBtn, buttonColumnText, channelsContainer, adminRoleInput, modRoleInput, jrRoleInput } = elements;
+    deleteConfigBtn.classList.toggle('hidden', !guildId);
+    saveConfigBtn.classList.toggle('hidden', !guildId);
+    addServerBtn.classList.toggle('hidden', !guildId)
+    orText.classList.toggle('hidden', !guildId)
+    if (!guildId) {
         currentGuildChannels = [];
         currentGuildRoles = [];
         currentAutomodRules = [];
+        addServerBtn.classList.remove('hidden');
+        orText.classList.remove('hidden');
         buttonColumnText.textContent = 'Please select a guild or invite the bot';
+        channelsContainer.classList.add('hidden')
         return;
     } else {
-            addServerBtn.classList.add('hidden');
-            orText.classList.add('hidden');
-            saveConfigBtn.classList.remove('hidden');
+        addServerBtn.classList.add('hidden');
+        orText.classList.add('hidden');
+        channelsContainer.classList.remove('hidden')
+        saveConfigBtn.classList.remove('hidden');
         deleteConfigBtn.classList.remove('hidden');
-            buttonColumnText.textContent = '';
+        buttonColumnText.textContent = '';
         try {
-            const res = await fetch(`/api/guilds/${encodeURIComponent(currentGuildId)}`, { method: 'GET', credentials: 'include', cache: 'no-store' });
-            if (!res.ok) throw new Error(`Failed to load guild ${currentGuildId} (${res.status})`);
+            const res = await fetch(`/api/guilds/${encodeURIComponent(guildId)}`, { method: 'GET', credentials: 'include', cache: 'no-store' });
+            if (!res.ok) throw new Error(`Failed to load guild ${guildId} (${res.status})`);
             const doc: GuildConfigDoc = await res.json();
             currentAutomodRules = doc.rules
-            currentRole = doc._viewerRole || null;
             currentGuildChannels = doc.guildChannels || [];
             staffRoles = doc.staffRoles
             currentGuildRoles = doc.guildRoles!
+            const canEdit = doc._viewerRole === 'admin' || doc._viewerRole === 'owner';
+            setDisabledState(saveConfigBtn, !canEdit);
+            saveConfigBtn.title = canEdit ? '' : 'Admin role required';
+            setDisabledState(deleteConfigBtn, !canEdit);
+            deleteConfigBtn.title = canEdit ? '' : 'Admin role required';
             setGuildRoles(staffRoles)
             renderConfig(doc);
             adminRoleInput.value = doc.staffroles![0] ?? '';
@@ -1199,11 +1214,7 @@ async function loadSelectedGuild() {
             showMessage(`Failed to load config: ${errMsg(error)}`, 'bg-red-500');
         }
     }
-    const canEdit = currentRole === 'admin' || currentRole === 'owner';
-    setDisabledState(saveConfigBtn, !canEdit);
-    saveConfigBtn.title = canEdit ? '' : 'Admin role required';
-    setDisabledState(deleteConfigBtn, !canEdit);
-    deleteConfigBtn.title = canEdit ? '' : 'Admin role required';
+
 }
 // --- Config rendering ------------------------------------------------------
 
@@ -1332,7 +1343,7 @@ function renderEmbedSection(container: HTMLElement, messageConfigs: Record<strin
     setDisabledState(select, !hasEmbeds);
     select.classList.toggle('hidden', !hasEmbeds);
     setDisabledState(deleteBtn, !hasEmbeds);
-    setDisabledState(saveEmbedBtn, !hasEmbeds || (currentRole !== 'admin' && currentRole !== 'owner'));
+    setDisabledState(saveEmbedBtn, !hasEmbeds);
     setDisabledState(pushBtn, !hasEmbeds);
     deleteBtn.classList.toggle('hidden', !hasEmbeds);
     saveEmbedBtn.classList.toggle('hidden', !hasEmbeds);
@@ -1347,15 +1358,14 @@ function renderEmbedSection(container: HTMLElement, messageConfigs: Record<strin
         renderEmbedForm(container);
     });
     saveEmbedBtn.addEventListener('click', async () => {
-        if (!activeEmbedKey || !currentGuildId) return;
-        if (currentRole !== 'admin' && currentRole !== 'owner') { showMessage('Admin role/owner required to save.', 'bg-red-500'); return; }
+        if (!activeEmbedKey) return;
         setDisabledState(saveEmbedBtn, true);
         try {
             const res = await fetch('/api/embed', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
-                body: JSON.stringify({ guildId: currentGuildId, embedName: activeEmbedKey, config: messageConfigsDraft[activeEmbedKey] }),
+                body: JSON.stringify({ guildId: elements.guildSelect.value, embedName: activeEmbedKey, config: messageConfigsDraft[activeEmbedKey] }),
             });
             const result = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(result.error || `Failed to save embed (${res.status})`);
@@ -1367,7 +1377,7 @@ function renderEmbedSection(container: HTMLElement, messageConfigs: Record<strin
         }
     });
     pushBtn.addEventListener('click', async () => {
-        if (!activeEmbedKey || !currentGuildId) return;
+        if (!activeEmbedKey) return;
         const config = messageConfigsDraft[activeEmbedKey];
         if (!config?.channelid) { showMessage('Set a Channel before pushing.', 'bg-yellow-500'); return; }
 
@@ -1391,7 +1401,7 @@ function renderEmbedSection(container: HTMLElement, messageConfigs: Record<strin
         pushHint.classList.remove('hidden');
         try {
             const formData = new FormData();
-            formData.append('guildId', currentGuildId);
+            formData.append('guildId', elements.guildSelect.value);
             formData.append('embedName', activeEmbedKey);
             formData.append('config', JSON.stringify(config));
             const sentFiles: string[] = [];
@@ -1471,11 +1481,11 @@ function renderEmbedSection(container: HTMLElement, messageConfigs: Record<strin
     });
 
     deleteBtn.addEventListener('click', async () => {
-        if (!activeEmbedKey || !currentGuildId) return;
+        if (!activeEmbedKey) return;
         const key = activeEmbedKey;
         setDisabledState(deleteBtn, true);
         try {
-            const res = await fetch(`/api/embed/${encodeURIComponent(currentGuildId ?? '')}/${encodeURIComponent(activeEmbedKey)}`, {
+            const res = await fetch(`/api/embed/${encodeURIComponent(elements.guildSelect.value ?? '')}/${encodeURIComponent(activeEmbedKey)}`, {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
@@ -1546,19 +1556,19 @@ function initSubtabs() {
     });
 }
 // --- Wiring --------------------------------------------------------------------
-elements.guildSelect!.addEventListener('change', async () => { await loadSelectedGuild() });
+elements.guildSelect!.addEventListener('change', async () => { await loadSelectedGuild(elements.guildSelect.value) });
 elements.loginBtn!.addEventListener('click', () => { window.location.href = `/api/auth/discord/login`; });
 elements.logoutBtn!.addEventListener('click', async () => {
     await fetch(`/api/auth/logout`, { method: 'POST', credentials: 'include' });
-    currentUser = null;
-    currentRole = null;
-    currentGuildId = null;
-    const { loginBtn, logoutBtn, authStatus } = elements;
+    const { loginBtn, logoutBtn, authStatus, saveConfigBtn, channelsContainer } = elements;
     loginBtn.classList.remove('hidden');
     logoutBtn.classList.add('hidden');
+    saveConfigBtn.classList.add('hidden');
+    channelsContainer.classList.add('hidden')
     authStatus.textContent = 'Not logged in';
+    elements.guildSelect!.value = '';
+    elements.guilds.classList.add('hidden')
     await refreshGuildSelect();
-    await loadSelectedGuild();
 });
 elements.addPublicChannelBtn.addEventListener('click', () => createChannelInput(elements.publicChannelsSection, '', '', 'public'));
 elements.addMediaBtn.addEventListener('click', () => createArrayInput(elements.GeneralChannelsSection, ''));
@@ -1566,15 +1576,13 @@ elements.addReactionBtn.addEventListener('click', () => createChannelInput(eleme
 elements.addStringBtn.addEventListener('click', () => createChannelInput(elements.Responses, '', '', 'response'));
 elements.addReasonWeightBtn.addEventListener('click', () => createReasonWeightInput(elements.reasonsWeightsSection, currentAutomodRules, '', '', 1));
 elements.saveConfigBtn.addEventListener('click', async () => {
-    if (!currentGuildId) { showMessage('Select a guild to save.', 'bg-red-500'); return; }
-    if (currentRole !== 'admin' && currentRole !== 'owner') { showMessage('Admin role/owner required to save.', 'bg-red-500'); return; }
     if (!elements.adminRoleInput!.value.trim() || !elements.modRoleInput!.value.trim()) {
         showMessage('Admin and Mod Role IDs are both required (Staff Roles tab).', 'bg-red-500');
         return;
     }
-    const config = getFormValues(false);
+    const config = getFormValues();
     try {
-        const res = await fetch(`/api/guilds/${encodeURIComponent(currentGuildId)}`, {
+        const res = await fetch(`/api/guilds/${encodeURIComponent(elements.guildSelect.value)}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
@@ -1582,41 +1590,26 @@ elements.saveConfigBtn.addEventListener('click', async () => {
         });
         if (!res.ok) {
             const body = await res.json().catch(() => ({}));
-            throw new Error(body.error || `Failed to save guild ${currentGuildId} (${res.status})`);
+            throw new Error(body.error || `Failed to save guild ${elements.guildSelect.value} (${res.status})`);
         }
         showMessage('Saved to database!', 'bg-green-500');
     }
     catch (error) { showMessage(`Save failed: ${errMsg(error)}`, 'bg-red-500'); }
 });
 elements.deleteConfigBtn.addEventListener('click', async () => {
-    if (currentRole !== 'admin' && currentRole !== 'owner') { showMessage('Admin/owner role required to delete.', 'bg-red-500'); return; }
-    const shouldDelete = await confirmModal(`Are you sure you want to permanently delete the config for Guild ID: ${currentGuildId} from the database?`);
+    const shouldDelete = await confirmModal(`Are you sure you want to permanently delete the config for Guild ID: ${elements.guildSelect.value} from the database?`);
     if (!shouldDelete) return;
-    const res = await fetch(`/api/guilds/${encodeURIComponent(currentGuildId!)}`, { method: 'DELETE', credentials: 'include', });
+    const res = await fetch(`/api/guilds/${encodeURIComponent(elements.guildSelect.value)}`, { method: 'DELETE', credentials: 'include', });
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || `Failed to delete guild ${currentGuildId} (${res.status})`);
+        throw new Error(body.error || `Failed to delete guild ${elements.guildSelect.value} (${res.status})`);
     }
     showMessage('Configuration deleted from database.', 'bg-green-500');
     elements.guildSelect!.value = '';
-    currentGuildId = null
     await refreshGuildSelect();
 });
 
 elements.addServerBtn.addEventListener('click', () => { window.open('https://discord.com/oauth2/authorize?client_id=1420927654701301951&permissions=1202859404454&integration_type=0&scope=bot+applications.commands', '_blank', 'noopener,noreferrer'); });
 initTabs();
 initSubtabs();
-const { loginBtn, logoutBtn, authStatus } = elements;
-const response = await fetch(`/api/auth/me`, { credentials: 'include' });
-const res: { user: APIUser, loggedIn: boolean; } = await response.json();
-if (res.loggedIn && res.user) {
-    currentUser = res.user.username;
-    loginBtn.classList.add('hidden');
-    logoutBtn.classList.remove('hidden');
-    authStatus.textContent = `Logged in as ${currentUser}`;
-} else {
-    loginBtn.classList.remove('hidden');
-    logoutBtn.classList.add('hidden');
-    authStatus.textContent = 'Not logged in';
-}
 await refreshGuildSelect();
