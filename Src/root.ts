@@ -1,25 +1,16 @@
 import { usersCollection, guildconfigs, ws } from './Database';
+import statusMap from './statusMap';
 import { ObjectId, type Document, type WithId } from 'mongodb';
 import { ApiClient } from '@twurple/api'
 import { EventSubWsListener } from '@twurple/eventsub-ws'
 import { ChatClient } from '@twurple/chat';
 import { RefreshingAuthProvider } from '@twurple/auth';
-import { ComponentType, ButtonStyle, MessageType, ActivityType, PresenceUpdateStatus, Client, Options, Role, Routes, Partials, GatewayIntentBits, TextChannel, MessageFlags, type AnyComponentV2, subtext, GuildMember, GuildMemberFlags, Invite, SectionBuilder, TextDisplayBuilder, ContainerBuilder, ButtonBuilder, ThumbnailBuilder, type APIMessage } from 'discord.js'
+import { ComponentType, ButtonStyle, MessageType, ActivityType, PresenceUpdateStatus, Client, Options, Role, Routes, Partials, GatewayIntentBits, TextChannel, MessageFlags, subtext, GuildMember, GuildMemberFlags, Invite, SectionBuilder, TextDisplayBuilder, ContainerBuilder, ButtonBuilder, ThumbnailBuilder, type APIMessage, type APIContainerComponent } from 'discord.js'
 import { createHash } from 'crypto'
 interface xp { Id: string | GuildMember; channel?: TextChannel | string; guildId?: string };
 type DbInvite = Record<string, { uses: number; id: string; code: string }>;
-process.on("uncaughtException", async (err: any) => {
-    const intpid = parseInt(await Bun.file("./interpid.txt").text())
-    console.error('[root] Uncaught exception', err)
-    await client.destroy();
-    Bun.spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", "C:\\Users\\micha\\Desktop\\Bot\\restart.ps1", "-BotPid", `${process.pid}`, "-intpid", `${intpid}`], { stderr: "pipe", stdout: 'pipe', stdin: 'pipe' })
-})
-process.on("unhandledRejection", async (reason: any) => {
-    const intpid = parseInt(await Bun.file("./interpid.txt").text())
-    console.error('[root] Unhandled rejection', reason)
-    client.destroy();
-    Bun.spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", "C:\\Users\\micha\\Desktop\\Bot\\restart.ps1", "-BotPid", `${process.pid}`, "-intpid", `${intpid}`], { stderr: "pipe", stdout: 'pipe', stdin: 'pipe' });
-});
+process.on("uncaughtException", (err: any) => { console.error('[root] Uncaught exception', err) })
+process.on("unhandledRejection", (reason: any) => { console.error('[root] Unhandled rejection', reason) });
 const authProvider = new RefreshingAuthProvider({ clientId: Bun.env.TWITCH_ID!, clientSecret: Bun.env.TWITCH_SECRET! });
 const doc = await ws.findOne({}, { projection: { twitchaccess: 1, twitchrefresh: 1, twitchexpires: 1, twitchobtained: 1 } }) as any;
 if (!doc?.twitchaccess) throw new Error('No Twitch bot tokens found — run get-token.ts first.');
@@ -31,7 +22,6 @@ authProvider.onRefresh(async (_userId, newTokenData) => {
 authProvider.onRefreshFailure((userId, error) => { console.error(`[twitch] token refresh failed for ${userId}`, error) })
 
 const apiClient = new ApiClient({ authProvider: authProvider });
-const BROADCASTER_ID = '901114331';
 const twitchChatClient = new ChatClient({ authProvider: authProvider, channels: ['saltytbsl'] });
 twitchChatClient.onMessage(async (channel, user, text) => {
     if (text.startsWith('!lvl')) {
@@ -47,15 +37,10 @@ twitchChatClient.onMessage(async (channel, user, text) => {
 });
 twitchChatClient.onMessageFailed((channel, reason) => console.log('[twitch] message failed', channel, reason));
 twitchChatClient.onMessageRatelimit((channel, msg) => console.log('[twitch] ratelimited', channel, msg));
-function connectTwitchChat() {
-    if (!twitchChatClient.isConnected) { twitchChatClient.connect(); }
-    console.info('[twitch] chat connected')
-}
 const eventSubListener = new EventSubWsListener({ apiClient: apiClient });
 eventSubListener.start();
-eventSubListener.onStreamOnline(BROADCASTER_ID, () => connectTwitchChat());
-eventSubListener.onStreamOffline(BROADCASTER_ID, () => { twitchChatClient.quit(); console.info('[twitch] chat disconnected'); });
-if (await apiClient.streams.getStreamByUserId(BROADCASTER_ID)) connectTwitchChat();
+eventSubListener.onStreamOnline('901114331', () => { twitchChatClient.connect(); console.info('[twitch] chat connected'); });
+eventSubListener.onStreamOffline('901114331', () => { twitchChatClient.quit(); console.info('[twitch] chat disconnected'); });
 async function grantXp({ Id, channel, guildId }: xp) {
         const { baseMultiplier, exponent, flatOffset, roundToNearest } = await guildconfigs.findOne({ guildId: guildId }, { projection: { baseMultiplier: 1, exponent: 1, flatOffset: 1, roundToNearest: 1 } }
         ) as any;
@@ -66,13 +51,13 @@ async function grantXp({ Id, channel, guildId }: xp) {
         if (level < 100 && xp >= Math.round((level ** exponent * baseMultiplier + flatOffset) / roundToNearest)) {
             await usersCollection.updateOne(Id instanceof GuildMember ? { userId: Id.user.id, guildId: guildId } : { twitchChannelLogin: Id }, { $inc: { level: 1 }, $set: { xp: 0 } });
             const rank = await usersCollection.countDocuments({ guildId: guildId, $or: [{ level: { $gt: level + 1 } }, { level: level + 1, xp: { $gt: xp } }] });
-            if (Id instanceof GuildMember && channel instanceof TextChannel) {
+            if (typeof Id == 'string' && typeof channel == 'string') {
+                twitchChatClient!.say(channel! as string, `@${Id} reached level ${level + 1}! You are now #${rank + 1}!`)
+            }
+            else if (Id instanceof GuildMember && channel instanceof TextChannel) {
                 if (parseInt(level) + 1 > 2 && !Id.roles.cache!.has("1334238580914131026") && guildId == '1231453115937587270')
                     await client.rest.put(Routes.guildMemberRole(guildId, Id.id, '1334238580914131026'))
                 channel!.send({ embeds: [{ author: { name: Id?.user.username, icon_url: Id.user.avatarURL() ?? Id.user.defaultAvatarURL }, color: 0x00AE86, footer: { text: `${Id!.user.username} reached level ${level + 1}! You are now #${rank + 1} in the server` } }] })
-            }
-            else {
-                twitchChatClient!.say(channel! as string, `@${Id} reached level ${level + 1}! You are now #${rank + 1}!`)
             }
         }
 }
@@ -85,28 +70,24 @@ const client = new Client({
     sweepers: { ...Options.DefaultSweeperSettings }
 });
 async function inactiveusers() {
-    const list = await usersCollection.find({ level: 1, totalmessages: 0, guildId: '1231453115937587270' }, { projection: { userId: 1, _id: 0, verified: 1, totalmessages: 1 } }).toArray()
-    const entries: Array<{ userId: string, verified: boolean, totalmessages: number }> = list.map(doc => { return { userId: doc.userId, verified: doc.verified, totalmessages: doc.totalmessages } });
-    for (const { verified, userId, totalmessages } of entries) {
+    const list = await usersCollection.find({ level: 1, totalmessages: 0, guildId: '1231453115937587270' }, { projection: { userId: 1, _id: 0 } }).toArray()
+    const ids = list.flatMap(doc => doc.userId)
+    for (const userId of ids) {
         try {
-            if (!verified || totalmessages == 0) {
-                await client.rest.delete(Routes.guildMember('1231453115937587270', userId))
-                usersCollection.deleteOne({ userId: userId })
-                await Bun.sleep(750);
+            await client.rest.delete(Routes.guildMember('1231453115937587270', userId))
+            await Bun.sleep(750);
             }
-        } catch (error) {
+        catch (error) {
             console.warn(`[inactive users] Could not remove ${userId}; they may no longer be in the guild`, error)
         }
     }
+    await usersCollection.deleteMany({ guildId: '1231453115937587270', userId: { $in: ids } })
 }
-await Bun.write("./pid.txt", String(process.pid))
+async function getReactionRoleConfig(guildId: string, messageId: string) {
+    const doc = await guildconfigs.findOne({ guildId }, { projection: { messageConfigs: 1 } });
+    return Object.values(doc?.messageConfigs ?? {}).find((info: any) => info?.messageId === messageId) as { reactions: { emoji: string; roleId: string | string[] }[] } | undefined;
+}
 Bun.cron("0 0 * * 0", async () => { await inactiveusers() })
-const statusMap: Record<string, { cmd: string, log: string, dm: string, color: number }> = {
-    Ban: { cmd: 'was banned', log: 'banned a member', dm: `you were banned from`, color: 0xd10000 },
-    Kick: { cmd: 'was kicked', log: 'kicked a member', dm: `you were kicked from`, color: 0x838383 },
-    Mute: { cmd: 'was issued a mute', log: 'muted a member', dm: `you were given a`, color: 0xff4444 },
-    Warn: { cmd: 'was issued a warning', log: 'warned a member', dm: `you were given a warning`, color: 0xffcc00 }
-};
 let presenceInterval: NodeJS.Timeout | undefined;
 function startStatusLoop() {
     clearInterval(presenceInterval);
@@ -343,7 +324,7 @@ client.on('guildMemberAdd', async (member) => {
         return;
     }
     try {
-        user.send({
+        await user.send({
             flags: MessageFlags.IsComponentsV2,
             components: [{
                 type: ComponentType.Container,
@@ -579,10 +560,6 @@ client.on('inviteCreate', async (invite) => {
 client.on('inviteDelete', async (invite) => {
     await guildconfigs.updateOne({ guildId: invite.guild!.id }, { $unset: { [`Invites.${invite.code}`]: "" } });
 })
-async function getReactionRoleConfig(guildId: string, messageId: string) {
-    const doc = await guildconfigs.findOne({ guildId }, { projection: { messageConfigs: 1 } });
-    return Object.values(doc?.messageConfigs ?? {}).find((info: any) => info?.messageId === messageId) as { reactions: { emoji: string; roleId: string | string[] }[] } | undefined;
-}
 client.on('messageReactionAdd', async (reaction, user) => {
     if (user.bot) return;
     if (reaction.partial) reaction = await reaction.fetch();
@@ -616,36 +593,32 @@ client.on('messageReactionRemove', async (reaction, user) => {
 client.on('messageDelete', async (deletedData) => {
     const { id, channelId, guildId, stickers, attachments, author, content } = deletedData;
     if (deletedData.partial || !author || author.bot) return;
-    const imageAttachments = attachments
-        .filter(att => att.contentType?.startsWith('image/'))
-        .map(att => att.proxyURL);
+    const imageAttachments = attachments.filter(att => att.contentType?.startsWith('image/')).map(att => att.proxyURL);
     const { modChannels: { deletedlogChannel } } = await guildconfigs.findOne({ guildId }, { projection: { modChannels: 1 } }) as Document;
-    const bodyComponents: AnyComponentV2[] = [
+    const container: APIContainerComponent = 
         {
+        accent_color: 0xf03030,
+        type: ComponentType.Container,
+        components: [{
             type: ComponentType.Section,
             components: [{
-                type: ComponentType.TextDisplay,
-                content: `Message by ${author.username} was deleted in <#${channelId}>\n\n${content || 'No text content'}`
+                type: ComponentType.TextDisplay, content: `Message by ${author.username} was deleted in <#${channelId}>\n\n${content || 'No text content'}`
             }],
-            accessory: {
-                type: ComponentType.Thumbnail,
-                media: { url: author.avatarURL() ?? author.defaultAvatarURL }
-            }
-        }];
+            accessory: { type: ComponentType.Thumbnail, media: { url: author.avatarURL() ?? author.defaultAvatarURL } }
+        }]
+    };
 
     if (imageAttachments.length > 0) {
-        bodyComponents.push({
+        container.components.push({
             type: ComponentType.MediaGallery,
             items: stickers.size > 0 ? [{ media: { url: stickers.first()!.url } }] : imageAttachments.map(url => ({ media: { url } }))
         });
     }
-    bodyComponents.push({
+    container.components.push({
         type: ComponentType.ActionRow,
         components: [{ type: ComponentType.Button, style: ButtonStyle.Link, label: 'Event link', url: `https://discord.com/channels/${guildId}/${channelId}/${id}` }]
     })
-    await client.rest.post(Routes.channelMessages(deletedlogChannel), {
-        body: { flags: MessageFlags.IsComponentsV2, components: [{ type: ComponentType.Container, accent_color: 0xf03030, components: bodyComponents }] }
-    })
+    await client.rest.post(Routes.channelMessages(deletedlogChannel), { body: { flags: MessageFlags.IsComponentsV2, components: [container] } })
 })
 client.on('messageUpdate', async (oldMessage, newMessage) => {
     const { author, id, channelId, content, guildId } = newMessage;
@@ -720,7 +693,11 @@ client.on('messageCreate', async (message) => {
         {
             $set: {
                 previoustime: { $ifNull: ["$lastmessage", 0] },
-                markDuplicateSpam: { $gt: [{ $add: [{ $ifNull: [`$duplicateCounts.${key}`, 0] }, changed ? 1 : 0] }, Duplicatespamthreshold] },
+                markDuplicateSpam: {
+                    $gt: [
+                        { $add: [{ $ifNull: [`$duplicateCounts.${key}`, 0] }, changed ? 1 : 0] }
+                        , Duplicatespamthreshold]
+                },
                 markMessageThreshold: { $gte: [{ $add: ["$total", 1] }, messagethreshold] },
                 markInactive30: { $gte: [{ $subtract: [Date.now(), { $ifNull: ["$lastmessage", 0] }] }, 1800000] },
                 markMediaViolation: { $and: [hasMedia, { $gt: [{ $add: ["$mediaCount", hasMedia ? 1 : 0] }, mediathreshold] }, { $lt: [{ $add: ["$total", 1] }, messagethreshold] }] },
@@ -729,12 +706,7 @@ client.on('messageCreate', async (message) => {
                         {
                             $size: {
                                 $filter: {
-                                    input: {
-                                        $concatArrays: [
-                                            { $ifNull: ["$timestamps", []] },   // <-- fix
-                                            [Date.now().toString()]
-                                        ]
-                                    },
+                                    input: { $concatArrays: [{ $ifNull: ["$timestamps", []] }, [Date.now().toString()]] },
                                     cond: { $lt: [{ $subtract: [Date.now(), { $toLong: "$$this" }] }, 8000] }
                                 }
                             }
@@ -801,7 +773,7 @@ client.on('messageCreate', async (message) => {
     const caseHistory = [...punishments, newPunishment].filter((r: any) => warnType === 'Ban' ? r.type === "Ban" : r.type !== 'Kick').slice(0, 10).map((p: any, idx: number) => p.refrence ? `[Case ${idx + 1}](${p.refrence})` : null).filter(Boolean);
     let dm = true;
     try {
-        author.send({
+        await author.send({
             flags: MessageFlags.IsComponentsV2,
             components: [{
                 type: ComponentType.Container,
