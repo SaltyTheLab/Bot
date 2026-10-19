@@ -10,7 +10,7 @@ import { ed25519 } from '@noble/curves/ed25519.js'
 import { StatusCodes } from "http-status-codes";
 import { AppTokenAuthProvider } from "@twurple/auth"
 import { ApiClient } from '@twurple/api'
-import { type APIMessageComponentInteraction, InteractionType, ComponentType, type APIInteraction, type APIMessage, InteractionResponseType, MessageFlags, type APIGuild, type APIGuildMember, type APIModalSubmitInteraction, type APIUser, type APIActionRowComponent, type APIChannel, ButtonStyle, type APIChatInputApplicationCommandGuildInteraction, ChannelType, type APIRole, type APIAutoModerationRule, Collection, ApplicationCommandOptionType, subtext, bold, quote, type APIButtonComponentWithCustomId, ModalBuilder, REST, Routes, type APIDMChannel, type APIApplicationCommandInteractionDataOption, type APIApplicationCommandInteractionDataBasicOption, OAuth2Routes, type RESTPostOAuth2AccessTokenResult, type APIInteractionDataResolvedGuildMember, type APIApplicationCommandBasicOption, type APIMessageComponent, PermissionFlagsBits, ContainerBuilder, EmbedBuilder, ActionRowBuilder, MediaGalleryBuilder, TextDisplayBuilder, ButtonBuilder, SectionBuilder, ThumbnailBuilder, SeparatorBuilder, type APIMediaGalleryComponent, SeparatorSpacingSize } from "discord.js";
+import { type APIMessageComponentInteraction, InteractionType, ComponentType, type APIInteraction, type APIMessage, InteractionResponseType, MessageFlags, type APIGuild, type APIGuildMember, type APIModalSubmitInteraction, type APIUser, type APIActionRowComponent, type APIChannel, ButtonStyle, type APIChatInputApplicationCommandGuildInteraction, ChannelType, type APIRole, type APIAutoModerationRule, Collection, ApplicationCommandOptionType, subtext, bold, quote, type APIButtonComponentWithCustomId, ModalBuilder, REST, Routes, type APIDMChannel, type APIApplicationCommandInteractionDataOption, type APIApplicationCommandInteractionDataBasicOption, OAuth2Routes, type RESTPostOAuth2AccessTokenResult, type APIInteractionDataResolvedGuildMember, type APIMessageComponent, PermissionFlagsBits, ContainerBuilder, EmbedBuilder, ActionRowBuilder, MediaGalleryBuilder, TextDisplayBuilder, ButtonBuilder, SectionBuilder, ThumbnailBuilder, SeparatorBuilder, type APIMediaGalleryComponent, SeparatorSpacingSize } from "discord.js";
 const rest = new REST().setToken(`${Bun.env.TOKEN}`)
 const Client = new ApiClient({ authProvider: new AppTokenAuthProvider(Bun.env.TWITCH_ID!, Bun.env.TWITCH_SECRET!) })
 type CommandContext = {
@@ -23,7 +23,6 @@ type CommandContext = {
     restrictedToFullMod?: boolean;
 };
 type OptionValueMap = {
-    [ApplicationCommandOptionType.Subcommand]: APIApplicationCommandBasicOption
     [ApplicationCommandOptionType.String]: string;
     [ApplicationCommandOptionType.Integer]: number;
     [ApplicationCommandOptionType.Number]: number;
@@ -36,19 +35,19 @@ type OptionValueMap = {
 };
 const commands = new Collection<string, ((ctx: CommandContext) => Promise<Response | void>) & { cooldownMs?: number }>();
 const key = crypto.getRandomValues(new Uint8Array(32));
-function flattenLeafOptions(options: APIApplicationCommandInteractionDataOption[] | undefined): { path: string[]; leaves: APIApplicationCommandInteractionDataBasicOption[] } {
+function resolveOptions<T extends Record<string, keyof OptionValueMap>>(options: APIApplicationCommandInteractionDataOption[] | undefined, schema: T): { subcommandPath: string[] } & { [K in keyof T]?: OptionValueMap[T[K]] } {
     const path: string[] = [];
     let level = options;
+    let leaves: APIApplicationCommandInteractionDataBasicOption[] = [];
     while (level) {
         const sub = level.find(o => o.type === ApplicationCommandOptionType.Subcommand || o.type === ApplicationCommandOptionType.SubcommandGroup);
-        if (!sub) return { path, leaves: level as APIApplicationCommandInteractionDataBasicOption[] };
+        if (!sub) {
+            leaves = level as APIApplicationCommandInteractionDataBasicOption[];
+            break;
+        }
         path.push(sub.name);
         level = (sub as any).options;
     }
-    return { path, leaves: [] };
-}
-function resolveOptions<T extends Record<string, keyof OptionValueMap>>(options: APIApplicationCommandInteractionDataOption[] | undefined, schema: T): { subcommandPath: string[] } & { [K in keyof T]?: OptionValueMap[T[K]] } {
-    const { path, leaves } = flattenLeafOptions(options);
     const result: any = { subcommandPath: path };
     for (const key in schema) { const opt = leaves.find(o => o.name === key); result[key] = opt?.type === schema[key] ? opt?.value : undefined; }
     return result;
@@ -139,11 +138,12 @@ function generateButtons(board: string[], p1: string, p2: string, current: strin
             [0, 1, 2].map(j => {
                 const index = i * 3 + j;
                 const cell = board[index]!;
-                return new ButtonBuilder()
-                    .setCustomId(`ttt-${board.join('')}-${p1}-${p2}-${current}-${index}`)
-                    .setLabel(cell === '_' ? '\u200b' : cell)
-                    .setStyle(cell === 'X' ? ButtonStyle.Primary : cell === 'O' ? ButtonStyle.Danger : ButtonStyle.Secondary)
-                    .setDisabled(cell !== '_' || disabled);
+                return new ButtonBuilder({
+                    custom_id: `ttt-${board.join('')}-${p1}-${p2}-${current}-${index}`,
+                    label: cell === '_' ? '\u200b' : cell,
+                    style: cell === 'X' ? ButtonStyle.Primary : cell === 'O' ? ButtonStyle.Danger : ButtonStyle.Secondary,
+                    disabled: cell !== '_' || disabled
+                })
             }),
         ),
     );
@@ -230,10 +230,10 @@ async function runPunishment({ body, res, guildConfig }: CommandContext): Promis
             await rest.put(Routes.guildBan(guild_id!, targetUser!.id), { body: { delete_message_seconds: 604800 }, reason: `Ban Command: ${reason}` });
             break;
         case 'Mute':
-            await rest.patch(Routes.guildMember(guild_id!, targetUser!.id), { body: { communication_disabled_until: new Date(Date.now() + Math.min(durationMs, 2419200000)).toISOString() }, reason: reason });
+            await rest.patch(Routes.guildMember(guild_id!, targetUser!.id), { body: { communication_disabled_until: new Date(Date.now() + Math.min(durationMs, 2419200000)).toISOString() }, reason: `Mute Command: ${reason}` });
             break;
         case 'Kick':
-            await rest.delete(Routes.guildMember(guild_id!, targetUser!.id));
+            await rest.delete(Routes.guildMember(guild_id!, targetUser!.id), { reason: `Kick Command: ${reason}` });
             break;
     }
     await rest.post(Routes.channelMessages(warnType === 'Ban' ? modChannels.banlogChannel : modChannels.mutelogChannel), {
@@ -293,8 +293,9 @@ async function withGuards({ body, res, guildConfig, restrictedToFullMod = false 
     }
 };
 commands.set('dnd', async ({ body, res }) => {
-    const { subcommandPath } = resolveOptions(body.data.options, {})
-    res.data = { content: `you rolled a ${Math.ceil(Math.random() * parseInt(subcommandPath[0]!))}` };
+    const { data: { options } } = body
+    const { sides } = resolveOptions(options, { sides: ApplicationCommandOptionType.String })
+    res.data = { content: `you rolled a ${Math.ceil(Math.random() * parseInt(sides!))}` };
 })
 commands.set('games.rps', async ({ body, res }) => {
     const { member, guild_id, data: { options } } = body;
@@ -556,14 +557,16 @@ commands.set('member.ban', async ({ body, res, guildConfig, restrictedToFullMod 
     return Response.json(res);
 });
 commands.set('member.warn', async ({ body, res, guildConfig }) => {
-    await withGuards({ body, res, guildConfig })
+    const blocked = await withGuards({ body, res, guildConfig })
+    if (blocked) return blocked;
     runPunishment({ body, res, guildConfig })
     res.type = InteractionResponseType.DeferredChannelMessageWithSource
     return Response.json(res)
 });
 commands.set('member.unwarn', async ({ body, res, guildConfig, restrictedToFullMod = true, }) => {
     const { target } = resolveOptions(body.data.options, { target: ApplicationCommandOptionType.User })
-    await withGuards({ body, res, guildConfig, restrictedToFullMod })
+    const blocked = await withGuards({ body, res, guildConfig, restrictedToFullMod })
+    if (blocked) return blocked;
     const { punishments } = await usersCollection.findOne({ userId: target, guildId: body.guild_id }, { projection: { punishments: 1 } }) as Document;
     const removed = punishments?.filter((p: any) => p.type === 'Warn').sort((a: any, b: any) => b.timestamp - a.timestamp)[0];
     if (removed) { await usersCollection.updateOne({ userId: target, guildId: body.guild_id }, { $pull: { punishments: { _id: removed._id } } as any }); }
@@ -580,6 +583,13 @@ commands.set('member.unmute', async ({ body, res, guildConfig, targetmember, tar
     }
     return Response.json(res)
 })
+commands.set('member.kick', async ({ body, res, guildConfig }) => {
+    const blocked = await withGuards({ body, res, guildConfig });
+    if (blocked) return blocked;
+    runPunishment({ body, res, guildConfig }).catch(console.error);
+    res.type = InteractionResponseType.DeferredChannelMessageWithSource;
+    return Response.json(res);
+})
 commands.set('link', async ({ body, res }) => {
     const { member, data: { options } } = body;
     const { channel } = resolveOptions(options, { channel: ApplicationCommandOptionType.String })
@@ -592,30 +602,29 @@ commands.set('link', async ({ body, res }) => {
     res.data = { embeds: [{ description: `Level Linked to Twitch channel **${twitchUser.displayName}**.` }], flags: MessageFlags.Ephemeral };
 });
 const activeCooldowns = new Collection<string, number>(); // userId -> expiry timestamp
-function checkCooldown(userId: string, isStaff: boolean, cooldownMs: number): Response | null {
-    if (isStaff || cooldownMs <= 0) return null;
-    const expiry = activeCooldowns.get(userId);
-    if (expiry && expiry > Date.now()) {
-        return Response.json({
-            type: InteractionResponseType.ChannelMessageWithSource,
-            data: { embeds: [{ description: `<@${userId}>, you are using commands too fast!` }], flags: MessageFlags.Ephemeral }
-        });
-    }
-    activeCooldowns.set(userId, Date.now() + cooldownMs);
-    return null;
-}
 async function handleCommands(body: APIChatInputApplicationCommandGuildInteraction) {
     const { guild_id, member, data: { name, options } } = body;
     const guildConfig = await guildconfigs.findOne({ guildId: guild_id }, { projection: { modChannels: 1, publicChannel: 1, staffroles: 1, guildname: 1, exponent: 1, baseMultiplier: 1, roundToNearest: 1, flatOffset: 1, icon: 1, Stages: 1 }, });
-    const { subcommandPath } = resolveOptions(options, { subcommand: ApplicationCommandOptionType.Subcommand })
-    const key = subcommandPath.length > 0 && name != "dnd" ? `${name}.${subcommandPath}` : name;
+    const { subcommandPath } = resolveOptions(options, {})
+    const key = subcommandPath.length > 0 ? `${name}.${subcommandPath}` : name;
     const handler = commands.get(key);
-    if (!handler) return Response.json({ type: InteractionResponseType.ChannelMessageWithSource, data: { content: `Unhandled command: ${key}`, flags: MessageFlags.Ephemeral } });
+    if (!handler) return ephemeral(`Unhandled command: ${key}`);
     if (member?.user.id) {
         const { staffroles } = guildConfig as WithId<Document>;
         const isStaff = member.roles.some((r: string) => staffroles.includes(r));
-        const blocked = checkCooldown(member.user.id, isStaff, handler.cooldownMs ?? 3000);
-        if (blocked) return blocked;
+        const cooldownMs = handler.cooldownMs ?? 3000;
+        if (!isStaff && cooldownMs > 0) {
+            const cooldownKey = `${member.user.id}.${key}`;
+            const now = Date.now();
+            const expiry = activeCooldowns.get(cooldownKey);
+            if (expiry && expiry > now) {
+                return Response.json({
+                    type: InteractionResponseType.ChannelMessageWithSource,
+                    data: { embeds: [{ description: `<@${member.user.id}>, you can use ${key} in <t:${Math.floor(expiry / 1000)}:R>` }], flags: MessageFlags.Ephemeral }
+                });
+            }
+            activeCooldowns.set(cooldownKey, now + cooldownMs);
+        }
     }
     const res: { type: InteractionResponseType; data: any } = { type: InteractionResponseType.ChannelMessageWithSource, data: {} };
     return await handler({ body, res, guildConfig }) ?? Response.json(res);

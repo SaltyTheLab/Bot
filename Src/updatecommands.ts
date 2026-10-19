@@ -61,15 +61,18 @@ const commands: RESTPostAPIChatInputApplicationCommandsJSONBody[] = [
         name: 'dnd',
         description: 'Roll DND dice',
         contexts: [InteractionContextType.Guild],
-        options: [
-            { name: '4', description: 'Roll a D4', type: ApplicationCommandOptionType.Subcommand },
-            { name: '6', description: 'Roll a D6', type: ApplicationCommandOptionType.Subcommand },
-            { name: '8', description: 'Roll a D8', type: ApplicationCommandOptionType.Subcommand },
-            { name: '10', description: 'Roll a D10', type: ApplicationCommandOptionType.Subcommand },
-            { name: '12', description: 'Roll a D12', type: ApplicationCommandOptionType.Subcommand },
-            { name: '20', description: 'Roll a D20', type: ApplicationCommandOptionType.Subcommand },
-            { name: '100', description: 'Roll a D100', type: ApplicationCommandOptionType.Subcommand }
-        ]
+        options: [{
+            type: ApplicationCommandOptionType.String, required: true, name: 'sides', description: 'number of sides',
+            choices: [
+                { name: '4', value: '4' },
+                { name: '6', value: '6' },
+                { name: '8', value: '8' },
+                { name: '10', value: '10' },
+                { name: '12', value: '12' },
+                { name: '20', value: '20' },
+                { name: '100', value: '100' }
+            ]
+        }]
     },
     {
         name: 'games',
@@ -214,12 +217,6 @@ const commands: RESTPostAPIChatInputApplicationCommandsJSONBody[] = [
         contexts: [InteractionContextType.Guild],
         type: ApplicationCommandType.ChatInput,
         options: [{ name: 'target', description: 'The Member', type: ApplicationCommandOptionType.User }]
-    },
-    {
-        name: 'restart',
-        description: 'Restart the bot',
-        default_member_permissions: String(PermissionFlagsBits.Administrator),
-        contexts: [InteractionContextType.Guild]
     },
     {
         name: 'link',
