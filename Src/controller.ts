@@ -70,7 +70,6 @@ interface GuildConfigDoc {
     responses?: Record<string, string>;
     automodsettings?: AutomodSettings;
     messageConfigs?: Record<string, MessageConfig>;
-    // added by GET /api/guilds/:guildId
     _viewerRole: Role;
     guildChannels: GuildChannel[];
     rules: AutomodRule[];
@@ -1121,7 +1120,8 @@ async function refreshGuildSelect() {
     const { guildSelect, addServerBtn, deleteConfigBtn, loginBtn, authStatus, logoutBtn, guilds } = elements;
     guildSelect.innerHTML = '<option value="">-- Select a Guild --</option>';
     const response = await fetch(`/api/auth/me`, { credentials: 'include' });
-    const res: { user: APIUser } = await response.json();
+    const res: { user?: APIUser; guilds?: { id: string; name: string; icon: string | null }[]; staffGuilds?: GuildSummary[]; loggedIn?: boolean } = await response.json();
+    console.log(res)
     if (res.user) {
         guilds.classList.remove('hidden')
         loginBtn.classList.add('hidden');
@@ -1137,14 +1137,7 @@ async function refreshGuildSelect() {
         return;
     }
     try {
-        const resGuilds = await fetch(`/api/guilds`, { credentials: 'include' });
-        if (!resGuilds.ok) throw new Error(`Failed to list guilds (${resGuilds.status})`);
-        if (resGuilds.status === 401) {
-            elements.loginBtn.classList.remove('hidden');
-            elements.logoutBtn.classList.add('hidden');
-            elements.authStatus.textContent = 'Not logged in'; return;
-        }
-        const summaries: GuildSummary[] = await resGuilds.json();
+        const summaries = res.staffGuilds ?? [];
         if (summaries.length === 0) {
             showMessage('No guilds found where you hold a staff role.', 'bg-yellow-500');
             await loadSelectedGuild(null);
@@ -1193,7 +1186,7 @@ async function loadSelectedGuild(guildId: string | null = null) {
         deleteConfigBtn.classList.remove('hidden');
         buttonColumnText.textContent = '';
         try {
-            const res = await fetch(`/api/guilds/${encodeURIComponent(guildId)}`, { method: 'GET', credentials: 'include', cache: 'no-store' });
+            const res = await fetch(`/api/${encodeURIComponent(guildId)}`, { method: 'GET', credentials: 'include', cache: 'no-store' });
             if (!res.ok) throw new Error(`Failed to load guild ${guildId} (${res.status})`);
             const doc: GuildConfigDoc = await res.json();
             currentAutomodRules = doc.rules
@@ -1582,7 +1575,7 @@ elements.saveConfigBtn.addEventListener('click', async () => {
     }
     const config = getFormValues();
     try {
-        const res = await fetch(`/api/guilds/${encodeURIComponent(elements.guildSelect.value)}`, {
+        const res = await fetch(`/api/${encodeURIComponent(elements.guildSelect.value)}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
@@ -1599,7 +1592,7 @@ elements.saveConfigBtn.addEventListener('click', async () => {
 elements.deleteConfigBtn.addEventListener('click', async () => {
     const shouldDelete = await confirmModal(`Are you sure you want to permanently delete the config for Guild ID: ${elements.guildSelect.value} from the database?`);
     if (!shouldDelete) return;
-    const res = await fetch(`/api/guilds/${encodeURIComponent(elements.guildSelect.value)}`, { method: 'DELETE', credentials: 'include', });
+    const res = await fetch(`/api/${encodeURIComponent(elements.guildSelect.value)}`, { method: 'DELETE', credentials: 'include', });
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `Failed to delete guild ${elements.guildSelect.value} (${res.status})`);

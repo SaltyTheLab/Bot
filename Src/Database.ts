@@ -5,4 +5,6 @@ const usersCollection = client.db("Database").collection('users');
 const guildconfigs = client.db("Database").collection("guildconfigs")
 const logos = client.db("Database").collection("logos")
 const ws = client.db("Database").collection("websocket")
-export { usersCollection, guildconfigs, logos, ws }
+const oauthSessions = client.db("Database").collection("oauthSessions")
+await oauthSessions.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+export { usersCollection, guildconfigs, logos, ws, oauthSessions }
