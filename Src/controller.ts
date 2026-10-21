@@ -117,6 +117,7 @@ const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const elements = {
     guildSelect: el<HTMLSelectElement>('guildSelect'),
     loginBtn: el<HTMLButtonElement>('loginBtn'),
+    connectTwitchBtn: el<HTMLButtonElement>('connectTwitchBtn'),
     logoutBtn: el<HTMLButtonElement>('logoutBtn'),
     authStatus: el('authStatus'),
     modChannelsSection: el('modChannelsSection'),
@@ -1117,8 +1118,12 @@ function showMessage(message: string, colorClass: string) {
 // --- Guild list / selection ------------------------------------------------
 
 async function refreshGuildSelect() {
-    const { guildSelect, addServerBtn, deleteConfigBtn, loginBtn, authStatus, logoutBtn, guilds } = elements;
+    const { guildSelect, addServerBtn, deleteConfigBtn, loginBtn, connectTwitchBtn, authStatus, logoutBtn, guilds } = elements;
     guildSelect.innerHTML = '<option value="">-- Select a Guild --</option>';
+    if (new URLSearchParams(location.search).get('twitch') === 'connected') {
+        showMessage('Twitch bot account connected.', 'bg-green-500');
+        history.replaceState({}, document.title, location.pathname);
+    }
     const response = await fetch(`/api/auth/me`, { credentials: 'include' });
     const res: { user?: APIUser; guilds?: { id: string; name: string; icon: string | null }[]; staffGuilds?: GuildSummary[]; loggedIn?: boolean } = await response.json();
     console.log(res)
@@ -1126,10 +1131,12 @@ async function refreshGuildSelect() {
         guilds.classList.remove('hidden')
         loginBtn.classList.add('hidden');
         logoutBtn.classList.remove('hidden');
+        connectTwitchBtn.classList.toggle('hidden', !res.staffGuilds?.some(guild => guild.role == 'admin' || guild.role == 'owner'));
         authStatus.textContent = `Logged in as ${res.user.username}`;
     } else {
         guilds.classList.add('hidden')
         loginBtn.classList.remove('hidden');
+        connectTwitchBtn.classList.add('hidden');
         logoutBtn.classList.add('hidden');
         addServerBtn.classList.remove('hidden');
         deleteConfigBtn.classList.add('hidden');
@@ -1551,6 +1558,7 @@ function initSubtabs() {
 // --- Wiring --------------------------------------------------------------------
 elements.guildSelect!.addEventListener('change', async () => { await loadSelectedGuild(elements.guildSelect.value) });
 elements.loginBtn!.addEventListener('click', () => { window.location.href = `/api/auth/discord/login`; });
+elements.connectTwitchBtn!.addEventListener('click', () => { window.location.href = `/api/auth/twitch/login`; });
 elements.logoutBtn!.addEventListener('click', async () => {
     await fetch(`/api/auth/logout`, { method: 'POST', credentials: 'include' });
     const { loginBtn, logoutBtn, authStatus, saveConfigBtn, channelsContainer } = elements;

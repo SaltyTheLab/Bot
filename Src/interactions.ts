@@ -1,4 +1,4 @@
-import { guildconfigs, usersCollection, logos, oauthSessions } from "./Database";
+import { guildconfigs, usersCollection, logos, oauthSessions, ws } from "./Database";
 import statusMap from "./statusMap";
 import { syncEmbed } from "./syncEmbed";
 import { buildApplicationHub } from "./applicationUi";
@@ -8,9 +8,9 @@ import { Resvg } from '@resvg/resvg-js'
 import { SignJWT, jwtVerify } from 'jose'
 import { ed25519 } from '@noble/curves/ed25519.js'
 import { StatusCodes } from "http-status-codes";
-import { AppTokenAuthProvider } from "@twurple/auth"
+import { AppTokenAuthProvider, RefreshingAuthProvider } from "@twurple/auth"
 import { ApiClient } from '@twurple/api'
-import { type APIMessageComponentInteraction, InteractionType, ComponentType, type APIInteraction, type APIMessage, InteractionResponseType, MessageFlags, type APIGuild, type APIGuildMember, type APIModalSubmitInteraction, type APIUser, type APIActionRowComponent, type APIChannel, ButtonStyle, type APIChatInputApplicationCommandGuildInteraction, ChannelType, type APIRole, type APIAutoModerationRule, Collection, ApplicationCommandOptionType, subtext, bold, quote, type APIButtonComponentWithCustomId, ModalBuilder, REST, Routes, type APIDMChannel, type APIApplicationCommandInteractionDataOption, type APIApplicationCommandInteractionDataBasicOption, OAuth2Routes, type RESTPostOAuth2AccessTokenResult, type APIInteractionDataResolvedGuildMember, type APIMessageComponent, PermissionFlagsBits, ContainerBuilder, EmbedBuilder, ActionRowBuilder, MediaGalleryBuilder, TextDisplayBuilder, ButtonBuilder, SectionBuilder, ThumbnailBuilder, SeparatorBuilder, type APIMediaGalleryComponent, SeparatorSpacingSize } from "discord.js";
+import { type APIMessageComponentInteraction, InteractionType, ComponentType, type APIInteraction, type APIMessage, InteractionResponseType, MessageFlags, type APIGuild, type APIGuildMember, type APIModalSubmitInteraction, type APIUser, type APIActionRowComponent, type APIChannel, ButtonStyle, type APIChatInputApplicationCommandGuildInteraction, ChannelType, type APIRole, type APIAutoModerationRule, Collection, ApplicationCommandOptionType, subtext, bold, quote, type APIButtonComponentWithCustomId, ModalBuilder, REST, Routes, type APIDMChannel, type APIApplicationCommandInteractionDataOption, type APIApplicationCommandInteractionDataBasicOption, OAuth2Routes, type RESTPostOAuth2AccessTokenResult, type APIMessageComponent, PermissionFlagsBits, ContainerBuilder, EmbedBuilder, ActionRowBuilder, MediaGalleryBuilder, TextDisplayBuilder, ButtonBuilder, SectionBuilder, ThumbnailBuilder, SeparatorBuilder, type APIMediaGalleryComponent, SeparatorSpacingSize } from "discord.js";
 const rest = new REST().setToken(`${Bun.env.TOKEN}`)
 const Client = new ApiClient({ authProvider: new AppTokenAuthProvider(Bun.env.TWITCH_ID!, Bun.env.TWITCH_SECRET!) })
 type CommandContext = {
@@ -18,8 +18,7 @@ type CommandContext = {
     res: { type: InteractionResponseType; data: APIMessage | {} };
     guildConfig: WithId<Document> | null; // lazy — only fetched if a handler actually calls it
     target?: string
-    targetuser?: APIUser;
-    targetmember?: APIInteractionDataResolvedGuildMember;
+
     restrictedToFullMod?: boolean;
 };
 type OptionValueMap = {
@@ -608,19 +607,21 @@ commands.set('member.warn', async ({ body, res, guildConfig }) => {
     return Response.json(res)
 });
 commands.set('member.unwarn', async ({ body, res, guildConfig, restrictedToFullMod = true, }) => {
-    const { target } = resolveOptions(body.data.options, { target: ApplicationCommandOptionType.User })
     const blocked = await withGuards({ body, res, guildConfig, restrictedToFullMod })
     if (blocked) return blocked;
+    const { target } = resolveOptions(body.data.options, { target: ApplicationCommandOptionType.User })
     const { punishments } = await usersCollection.findOne({ userId: target, guildId: body.guild_id }, { projection: { punishments: 1 } }) as Document;
     const removed = punishments?.filter((p: any) => p.type === 'Warn').sort((a: any, b: any) => b.timestamp - a.timestamp)[0];
     if (removed) { await usersCollection.updateOne({ userId: target, guildId: body.guild_id }, { $pull: { punishments: { _id: removed._id } } as any }); }
     res.data = removed ? { embeds: [notice(`Recent warn removed from <@${target}>`)] } : { embeds: [{ description: `no recent warns found for <@${target}>` }] };
     return Response.json(res)
 })
-commands.set('member.unmute', async ({ body, res, guildConfig, targetmember, targetuser, restrictedToFullMod = true }) => {
+commands.set('member.unmute', async ({ body, res, guildConfig, restrictedToFullMod = true }) => {
     await withGuards({ body, res, guildConfig, restrictedToFullMod })
-    if (targetmember?.communication_disabled_until) {
-        await rest.patch(Routes.guildMember(body.guild_id!, targetuser!.id), { body: { communication_disabled_until: null } });
+    const { data: { resolved, options } } = body
+    const { target } = resolveOptions(options, { target: ApplicationCommandOptionType.User })
+    if (resolved?.members![target!]?.communication_disabled_until) {
+        await rest.patch(Routes.guildMember(body.guild_id!, target), { body: { communication_disabled_until: null } });
         res.data = { embeds: [notice('⚠️ User has been unmuted.')] };
     } else {
         res.data = { embeds: [notice('⚠️ User is not muted.')] };
@@ -771,9 +772,7 @@ async function handleComponents(body: APIMessageComponentInteraction) {
                 .setAccentColor(0xd10000)
                 .addSectionComponents(new SectionBuilder({ components: [{ type: ComponentType.TextDisplay, content: `<@${targetUser.id}>, you were banned from [${guildname}](https://discord.com/channels/${guild_id}). To appeal this decision, please join our dedicated appeal server using the button below.\n${bold('Reason:')} ${quote('troll')}` }], accessory: { type: ComponentType.Thumbnail, media: { url: icon } } }))
                 .addSeparatorComponents(new SeparatorBuilder({ spacing: SeparatorSpacingSize.Small }))
-                .addActionRowComponents(new ActionRowBuilder<ButtonBuilder>().addComponents(
-                    new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Appeal').setURL('https://discord.gg/qMjjyXyYbr'),
-                ));
+                .addActionRowComponents(new ActionRowBuilder<ButtonBuilder>({ components: [{ type: ComponentType.Button, style: ButtonStyle.Link, label: 'Apeal', url: 'https://discord.gg/qMjjyXyYbr' }] }));
             await rest.post(Routes.channelMessages(dmchannel.id), { body: v2(dmContainer) });
         } catch { dm = false; }
 
@@ -855,19 +854,20 @@ async function handleComponents(body: APIMessageComponentInteraction) {
             ['Harassment via DM response:', 'dmmember'], ['General chat argument step:', 'arguments'],
             ['Rulebreaking DM response:', 'rulebreakdm'], ['Mod breaking rules step:', 'staffrulebreak'], ['Illegal content step:', 'illegal'],
         ];
-        const embed = new EmbedBuilder()
-            .setColor(0x13b6df)
-            .setTitle('Mod Application')
-            .setAuthor({ name: `@${member!.user.username}`, iconURL: avatarOf(member!.user) })
-            .addFields(APP_FIELDS.map(([name, key]) => ({ name, value: String(application[key] ?? 'N/A').slice(0, 1024) })))
-            .setTimestamp();
+        const embed = new EmbedBuilder({
+            color: 0x13b6df,
+            title: 'Mod Application',
+            author: { name: `@${member!.user.username}`, iconURL: avatarOf(member!.user) },
+            fields: APP_FIELDS.map(([name, key]) => ({ name, value: String(application[key] ?? 'N/A').slice(0, 1024) })),
+            timestamp: Date.now()
+        })
         await rest.post(Routes.channelMessages(modChannels.applicationChannel), { body: { embeds: [embed.toJSON()] } });
         await usersCollection.updateOne({ userId: member?.user.id, guildId: guild_id }, { $set: { application: {} } });
 
-        res.data = v2(new ContainerBuilder().setAccentColor(0x2ecc71).addTextDisplayComponents(
-            new TextDisplayBuilder().setContent('## Application submitted!\nThanks for applying — the mod team will review it soon.'),
-        ));
-        // assuming you meant to clear the user's hub message, not the staff-channel post:
+        res.data = v2(new ContainerBuilder({
+            accent_color: 0x2ecc71,
+            components: [new TextDisplayBuilder({ content: '## Application submitted!\nThanks for applying — the mod team will review it soon.' }).setContent('## Application submitted!\nThanks for applying — the mod team will review it soon.').toJSON()]
+        }));
         setTimeout(() => { rest.delete(Routes.webhookMessage(application_id, token)).catch(() => null); }, 60_000);
     }
     else if (custom_id.startsWith('note-') || custom_id.startsWith('modlog-')) {
@@ -946,9 +946,7 @@ async function handleComponents(body: APIMessageComponentInteraction) {
         res.data = v2(
             new ContainerBuilder()
                 .setAccentColor(win ? 0xceab10 : tie ? 0x555555 : 0x0000ff)
-                .addTextDisplayComponents(new TextDisplayBuilder().setContent(
-                    `${bold('TicTacToe')}\n${win ? `<@${currentplayer}> wins!` : tie ? "It's a draw!" : `It's <@${nextPl}> turn!`}`,
-                ))
+                .addTextDisplayComponents(new TextDisplayBuilder({ content: `${bold('TicTacToe')}\n${win ? `<@${currentplayer}> wins!` : tie ? "It's a draw!" : `It's <@${nextPl}> turn!`}` }))
                 .addActionRowComponents(...generateButtons(board, player1!, player2!, nextPl!, win || tie)),
         );
     }
@@ -1041,6 +1039,47 @@ Bun.serve({
     websocket: { open() { }, message() { }, close() { } },
     routes: {
         "/": () => new Response(Bun.file('./.dist/index.html')),
+        "/api/auth/twitch/login": async (req) => {
+            const session = await getSession(req);
+            if (!session) return new Response('Not logged in', { status: StatusCodes.UNAUTHORIZED });
+            const state = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url');
+            req.cookies.set('twitch_oauth_state', state, { httpOnly: true, secure: true, sameSite: 'lax', path: '/api/auth/twitch/redirect', maxAge: 300 });
+            const params = new URLSearchParams({
+                client_id: Bun.env.TWITCH_ID!,
+                redirect_uri: `${Bun.env.DISCORD_REDIRECT!}/api/auth/twitch/redirect`,
+                response_type: 'code',
+                scope: 'chat:read chat:edit',
+                state,
+            });
+            return new Response(null, { status: StatusCodes.MOVED_TEMPORARILY, headers: { Location: `https://id.twitch.tv/oauth2/authorize?${params}` } });
+        },
+        "/api/auth/twitch/redirect": async (req) => {
+            const session = await getSession(req);
+            if (!session) return new Response('Not logged in', { status: StatusCodes.UNAUTHORIZED });
+            const url = new URL(req.url);
+            const state = url.searchParams.get('state');
+            const code = url.searchParams.get('code');
+            const expectedState = req.cookies.get('twitch_oauth_state');
+            req.cookies.delete('twitch_oauth_state');
+            if (state !== expectedState) return new Response('Invalid Twitch OAuth state', { status: StatusCodes.BAD_REQUEST });
+            const auth = new RefreshingAuthProvider({
+                clientId: Bun.env.TWITCH_ID!,
+                clientSecret: Bun.env.TWITCH_SECRET!,
+                redirectUri: `${Bun.env.DISCORD_REDIRECT!}/api/auth/twitch/redirect`,
+            });
+            const userId = await auth.addUserForCode(code!, ['chat:read', 'chat:edit']);
+            const token = await auth.getAccessTokenForUser(userId);
+            if (!token) return new Response('Twitch did not return an access token.', { status: StatusCodes.BAD_GATEWAY });
+            await ws.updateOne({}, {
+                $set: {
+                    twitchaccess: token.accessToken,
+                    twitchrefresh: token.refreshToken,
+                    twitchexpires: token.expiresIn,
+                    twitchobtained: token.obtainmentTimestamp,
+                },
+            }, { upsert: true });
+            return new Response(null, { status: StatusCodes.MOVED_TEMPORARILY, headers: { Location: '/?twitch=connected' } });
+        },
         "/api/auth/discord/login": (req) => {
             const state = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
             req.cookies.set("oauth_state", state, { httpOnly: true, secure: true, sameSite: "lax", path: "/", maxAge: 300, });
