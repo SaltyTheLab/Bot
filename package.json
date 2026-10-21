@@ -4,7 +4,7 @@
   "devDependencies": {
     "@types/bun": "latest",
     "bun-types": "^1.4.3",
-    "discord-api-types": "^0.38.56",
+    "discord-api-types": "^0.38.57",
     "http-status-codes": "^2.3.0"
   },
   "peerDependencies": {
@@ -19,13 +19,12 @@
     "@twurple/chat": "^8.2.0",
     "@twurple/eventsub-ws": "^8.2.0",
     "discord.js": "^14.27.0",
-    "jose": "^6.2.12",
+    "jose": "^6.2.13",
     "lru-cache": "^11.5.3",
     "mongodb": "^7.7.0",
     "tailwindcss": "^4.3.3"
   },
   "scripts": {
-    "dev:css": "bunx @tailwindcss/cli -i ./input.css -o ./dist/output.css --watch=always --minify",
-    "get-token": "bun run gettoken.ts"
+    "dev:css": "bunx @tailwindcss/cli -i ./Src/input.css -o ./Src/output.css --watch=always --minify"
   }
 }

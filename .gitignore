@@ -141,9 +141,8 @@ vite.config.ts.timestamp-*
 # enviroment 
 .vscode/settings.json
 
-#logging 
-pid.txt
-interpid.txt
 #outputs
+output.css
+.dist/
 *.map
 *.exe
