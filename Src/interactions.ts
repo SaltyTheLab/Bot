@@ -13,6 +13,7 @@ import { ApiClient } from '@twurple/api'
 import { type APIMessageComponentInteraction, InteractionType, ComponentType, type APIInteraction, type APIMessage, InteractionResponseType, MessageFlags, type APIGuild, type APIGuildMember, type APIModalSubmitInteraction, type APIUser, type APIActionRowComponent, type APIChannel, ButtonStyle, type APIChatInputApplicationCommandGuildInteraction, ChannelType, type APIRole, type APIAutoModerationRule, Collection, ApplicationCommandOptionType, subtext, bold, quote, type APIButtonComponentWithCustomId, ModalBuilder, REST, Routes, type APIDMChannel, type APIApplicationCommandInteractionDataOption, type APIApplicationCommandInteractionDataBasicOption, OAuth2Routes, type RESTPostOAuth2AccessTokenResult, type APIMessageComponent, PermissionFlagsBits, ContainerBuilder, EmbedBuilder, ActionRowBuilder, MediaGalleryBuilder, TextDisplayBuilder, ButtonBuilder, SectionBuilder, ThumbnailBuilder, SeparatorBuilder, type APIMediaGalleryComponent, SeparatorSpacingSize } from "discord.js";
 const rest = new REST().setToken(`${Bun.env.TOKEN}`)
 const Client = new ApiClient({ authProvider: new AppTokenAuthProvider(Bun.env.TWITCH_ID!, Bun.env.TWITCH_SECRET!) })
+const auth = new RefreshingAuthProvider({ clientId: Bun.env.TWITCH_ID!, clientSecret: Bun.env.TWITCH_SECRET!, redirectUri: `${Bun.env.DISCORD_REDIRECT!}/api/auth/twitch/redirect`, });
 type CommandContext = {
     body: APIChatInputApplicationCommandGuildInteraction;
     res: { type: InteractionResponseType; data: APIMessage | {} };
@@ -1062,16 +1063,12 @@ Bun.serve({
             const expectedState = req.cookies.get('twitch_oauth_state');
             req.cookies.delete('twitch_oauth_state');
             if (state !== expectedState) return new Response('Invalid Twitch OAuth state', { status: StatusCodes.BAD_REQUEST });
-            const auth = new RefreshingAuthProvider({
-                clientId: Bun.env.TWITCH_ID!,
-                clientSecret: Bun.env.TWITCH_SECRET!,
-                redirectUri: `${Bun.env.DISCORD_REDIRECT!}/api/auth/twitch/redirect`,
-            });
             const userId = await auth.addUserForCode(code!, ['chat:read', 'chat:edit']);
             const token = await auth.getAccessTokenForUser(userId);
             if (!token) return new Response('Twitch did not return an access token.', { status: StatusCodes.BAD_GATEWAY });
             await ws.updateOne({}, {
                 $set: {
+                    twitchuserid: userId,
                     twitchaccess: token.accessToken,
                     twitchrefresh: token.refreshToken,
                     twitchexpires: token.expiresIn,
@@ -1184,17 +1181,39 @@ Bun.serve({
             GET: async (req) => {
                 const session = await getSession(req)
                 const headers = { ...corsHeaders, "Cache-Control": "no-store" };
-                if (!session) return Response.json({ loggedIn: false }, { headers });
+                if (!session) return Response.json({ loggedIn: false, twitchConnected: false }, { headers });
                 try {
+                    const twitch = await ws.findOne({}, { projection: { twitchaccess: 1 } }) as { twitchaccess?: string } | null;
                     const docs = await guildconfigs.find({ guildId: { $in: session.guilds.map(guild => guild.id) } }, { projection: { guildId: 1, name: 1, staffroles: 1, _id: 0, ownerId: 1 } }).toArray();
-                    const staffGuilds = (await Promise.all(docs.map(async doc => {
+                    const staffGuilds = Object.fromEntries((await Promise.all(docs.map(async doc => {
                         const role = await roleFromStaffroles(session.user.id, doc.guildId, doc.staffroles as string[], doc.ownerId as string);
                         return role ? { guildId: doc.guildId as string, name: (doc.name as string) ?? session.guilds.find(guild => guild.id === doc.guildId)?.name ?? null, role } : null;
-                    }))).filter((guild): guild is NonNullable<typeof guild> => guild !== null);
-                    return Response.json({ user: session.user, guilds: session.guilds, staffGuilds }, { headers });
+                    }))).filter((guild): guild is NonNullable<typeof guild> => guild !== null).map(({ guildId, ...info }) => [guildId, info]));
+                    return Response.json({ user: session.user, guilds: session.guilds, staffGuilds, twitchConnected: Boolean(twitch?.twitchaccess) }, { headers });
                 } catch {
                     return Response.json({ error: "Could not resolve user" }, { status: StatusCodes.NOT_FOUND, headers });
                 }
+            }
+        },
+        "/api/auth/twitch": {
+            DELETE: async (req) => {
+                const session = await getSession(req);
+                if (!session) return Response.json({ error: "Not logged in" }, { status: StatusCodes.UNAUTHORIZED, headers: corsHeaders });
+                const docs = await guildconfigs.find({ guildId: { $in: session.guilds.map(guild => guild.id) } }, { projection: { guildId: 1, staffroles: 1, ownerId: 1 } }).toArray();
+                const roles = await Promise.all(docs.map(doc => roleFromStaffroles(session.user.id, doc.guildId, doc.staffroles as string[], doc.ownerId as string)));
+                if (!roles.includes('owner')) return Response.json({ error: "Only a configured guild owner can unlink Twitch" }, { status: StatusCodes.FORBIDDEN, headers: corsHeaders });
+                const twitch = await ws.findOne({}, { projection: { twitchaccess: 1, twitchuserid: 1 } }) as { twitchaccess?: string, twitchuserid: string } | null;
+                if (twitch?.twitchaccess) {
+                    auth.removeUser(twitch.twitchuserid)
+                    const revoke = await fetch('https://id.twitch.tv/oauth2/revoke', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({ client_id: Bun.env.TWITCH_ID!, token: twitch.twitchaccess }),
+                    });
+                    if (!revoke.ok) return Response.json({ error: 'Twitch could not revoke the connection' }, { status: StatusCodes.BAD_GATEWAY, headers: corsHeaders });
+                }
+                await ws.updateOne({}, { $unset: { twitchuserid: '', twitchaccess: '', twitchrefresh: '', twitchexpires: '', twitchobtained: '' } });
+                return Response.json({ ok: true }, { headers: corsHeaders });
             }
         },
         "/api/auth/logout": {

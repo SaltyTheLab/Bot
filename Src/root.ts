@@ -1,67 +1,13 @@
-import { usersCollection, guildconfigs, ws } from './Database';
+import { usersCollection, guildconfigs } from './Database';
 import statusMap from './statusMap';
-import { ObjectId, type Document, type WithId } from 'mongodb';
-import { ApiClient } from '@twurple/api'
-import { EventSubWsListener } from '@twurple/eventsub-ws'
-import { ChatClient } from '@twurple/chat';
-import { RefreshingAuthProvider } from '@twurple/auth';
+import { ObjectId, type Document } from 'mongodb';
 import { ComponentType, ButtonStyle, MessageType, ActivityType, PresenceUpdateStatus, Client, Options, Role, Routes, Partials, GatewayIntentBits, TextChannel, MessageFlags, subtext, GuildMember, GuildMemberFlags, Invite, SectionBuilder, TextDisplayBuilder, ContainerBuilder, ButtonBuilder, ThumbnailBuilder, type APIMessage, type APIContainerComponent } from 'discord.js'
 import { createHash } from 'crypto'
-interface xp { Id: string | GuildMember; channel?: TextChannel | string; guildId?: string };
+import { awardXp } from './xp';
+import { startTwitchIntegration } from './twitch';
 type DbInvite = Record<string, { uses: number; id: string; code: string }>;
 process.on("uncaughtException", (err: any) => { console.error('[root] Uncaught exception', err) })
 process.on("unhandledRejection", (reason: any) => { console.error('[root] Unhandled rejection', reason) });
-const authProvider = new RefreshingAuthProvider({ clientId: Bun.env.TWITCH_ID!, clientSecret: Bun.env.TWITCH_SECRET! });
-const doc = await ws.findOne({}, { projection: { twitchaccess: 1, twitchrefresh: 1, twitchexpires: 1, twitchobtained: 1 } }) as any;
-if (!doc?.twitchaccess) throw new Error('No Twitch bot tokens found — run get-token.ts first.');
-
-authProvider.addUser("901114331", { accessToken: doc.twitchaccess, scope: ['chat:read', 'chat:edit'], refreshToken: doc.twitchrefresh, expiresIn: doc.twitchexpires, obtainmentTimestamp: doc.twitchobtained, }, ['chat']);
-authProvider.onRefresh(async (_userId, newTokenData) => {
-    await ws.updateOne({}, { $set: { twitchaccess: newTokenData.accessToken, twitchrefresh: newTokenData.refreshToken, twitchexpires: newTokenData.expiresIn, twitchobtained: newTokenData.obtainmentTimestamp } });
-});
-authProvider.onRefreshFailure((userId, error) => { console.error(`[twitch] token refresh failed for ${userId}`, error) })
-
-const apiClient = new ApiClient({ authProvider: authProvider });
-const twitchChatClient = new ChatClient({ authProvider: authProvider, channels: ['saltytbsl'] });
-twitchChatClient.onMessage(async (channel, user, text) => {
-    if (text.startsWith('!lvl')) {
-        const doc = await usersCollection.findOne({ twitchChannelLogin: user }, { projection: { xp: 1, level: 1, } }) as any;
-        if (!doc) { twitchChatClient!.say(channel, "Your Twitch channel is not linked, please link it using /link in my server"); return; }
-        const { level, xp } = doc as any
-        await twitchChatClient!.say(channel, `@${user}, your level is currently ${level}, with ${xp} xp.`)
-    }
-    else if (text.startsWith("!discord")) {
-        await twitchChatClient!.say(channel, "I have a discord at https://discord.gg/f7ru3KcPy5")
-    } else
-    grantXp({ Id: user, guildId: "1231453115937587270" })
-});
-twitchChatClient.onMessageFailed((channel, reason) => console.log('[twitch] message failed', channel, reason));
-twitchChatClient.onMessageRatelimit((channel, msg) => console.log('[twitch] ratelimited', channel, msg));
-const eventSubListener = new EventSubWsListener({ apiClient: apiClient });
-eventSubListener.start();
-eventSubListener.onStreamOnline('901114331', () => { twitchChatClient.connect(); console.info('[twitch] chat connected'); });
-eventSubListener.onStreamOffline('901114331', () => { twitchChatClient.quit(); console.info('[twitch] chat disconnected'); });
-async function grantXp({ Id, channel, guildId }: xp) {
-        const { baseMultiplier, exponent, flatOffset, roundToNearest } = await guildconfigs.findOne({ guildId: guildId }, { projection: { baseMultiplier: 1, exponent: 1, flatOffset: 1, roundToNearest: 1 } }
-        ) as any;
-    const doc = await usersCollection.findOneAndUpdate(
-            Id instanceof GuildMember ? { userId: Id.user.id, guildId: guildId } : { twitchChannelLogin: Id }, { $inc: { xp: 20 } }, { returnDocument: 'after', projection: { xp: 1, level: 1, } }) as any;
-    if (!doc) return;
-    const { level, xp } = doc
-        if (level < 100 && xp >= Math.round((level ** exponent * baseMultiplier + flatOffset) / roundToNearest)) {
-            await usersCollection.updateOne(Id instanceof GuildMember ? { userId: Id.user.id, guildId: guildId } : { twitchChannelLogin: Id }, { $inc: { level: 1 }, $set: { xp: 0 } });
-            const rank = await usersCollection.countDocuments({ guildId: guildId, $or: [{ level: { $gt: level + 1 } }, { level: level + 1, xp: { $gt: xp } }] });
-            if (typeof Id == 'string' && typeof channel == 'string') {
-                twitchChatClient!.say(channel! as string, `@${Id} reached level ${level + 1}! You are now #${rank + 1}!`)
-            }
-            else if (Id instanceof GuildMember && channel instanceof TextChannel) {
-                if (parseInt(level) + 1 > 2 && !Id.roles.cache!.has("1334238580914131026") && guildId == '1231453115937587270')
-                    await client.rest.put(Routes.guildMemberRole(guildId, Id.id, '1334238580914131026'))
-                channel!.send({ embeds: [{ author: { name: Id?.user.username, icon_url: Id.user.avatarURL() ?? Id.user.defaultAvatarURL }, color: 0x00AE86, footer: { text: `${Id!.user.username} reached level ${level + 1}! You are now #${rank + 1} in the server` } }] })
-            }
-        }
-}
-let massban = 0;
 const client = new Client({
     intents: GatewayIntentBits.Guilds | GatewayIntentBits.GuildMembers | GatewayIntentBits.GuildModeration | GatewayIntentBits.GuildExpressions | GatewayIntentBits.GuildIntegrations | GatewayIntentBits.GuildWebhooks | GatewayIntentBits.GuildVoiceStates | GatewayIntentBits.GuildMessages | GatewayIntentBits.GuildMessageReactions | GatewayIntentBits.MessageContent,
     partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.User],
@@ -69,25 +15,40 @@ const client = new Client({
     makeCache: Options.cacheWithLimits({ ...Options.DefaultMakeCacheSettings }),
     sweepers: { ...Options.DefaultSweeperSettings }
 });
-async function inactiveusers() {
+async function grantDiscordXp(member: GuildMember, channel: TextChannel) {
+    const guildId = member.guild.id;
+    const levelUp = await awardXp({ userId: member.user.id, guildId }, guildId);
+    if (!levelUp) return;
+    if (levelUp.level > 2 && !member.roles.cache.has('1334238580914131026') && guildId === '1231453115937587270') {
+        await client.rest.put(Routes.guildMemberRole(guildId, member.id, '1334238580914131026'));
+    }
+    await channel.send({
+        embeds: [{
+            author: { name: member.user.username, icon_url: member.user.avatarURL() ?? member.user.defaultAvatarURL },
+            color: 0x00AE86,
+            footer: { text: `${member.user.username} reached level ${levelUp.level}! You are now #${levelUp.rank + 1} in the server` },
+        }]
+    });
+}
+let massban = 0;
+async function getReactionRoleConfig(guildId: string, messageId: string) {
+    const doc = await guildconfigs.findOne({ guildId }, { projection: { messageConfigs: 1 } });
+    return Object.values(doc?.messageConfigs ?? {}).find((info: any) => info?.messageId === messageId) as { reactions: { emoji: string; roleId: string | string[] }[] } | undefined;
+}
+Bun.cron("0 0 * * 0", async () => {
     const list = await usersCollection.find({ level: 1, totalmessages: 0, guildId: '1231453115937587270' }, { projection: { userId: 1, _id: 0 } }).toArray()
     const ids = list.flatMap(doc => doc.userId)
     for (const userId of ids) {
         try {
             await client.rest.delete(Routes.guildMember('1231453115937587270', userId))
             await Bun.sleep(750);
-            }
+        }
         catch (error) {
             console.warn(`[inactive users] Could not remove ${userId}; they may no longer be in the guild`, error)
         }
     }
     await usersCollection.deleteMany({ guildId: '1231453115937587270', userId: { $in: ids } })
-}
-async function getReactionRoleConfig(guildId: string, messageId: string) {
-    const doc = await guildconfigs.findOne({ guildId }, { projection: { messageConfigs: 1 } });
-    return Object.values(doc?.messageConfigs ?? {}).find((info: any) => info?.messageId === messageId) as { reactions: { emoji: string; roleId: string | string[] }[] } | undefined;
-}
-Bun.cron("0 0 * * 0", async () => { await inactiveusers() })
+})
 let presenceInterval: NodeJS.Timeout | undefined;
 function startStatusLoop() {
     clearInterval(presenceInterval);
@@ -119,7 +80,7 @@ client.on('clientReady', async (ready) => {
 })
 client.on('autoModerationActionExecution', async (action) => {
     const { guild, channel, ruleId, user, member } = action;
-    const { level, punishments } = await usersCollection.findOne({ userId: user!.id, guildId: guild.id }, { projection: { level: 1, punishments: 1 } }) as Document;;
+    const { level, punishments } = await usersCollection.findOne({ userId: user!.id, guildId: guild.id }, { projection: { level: 1, punishments: 1 } }) as Document;
     const { automodsettings: { automodreasonsandweights }, Stages, modChannels } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { automodsettings: 1, Stages: 1, modChannels: 1 } }) as Document;
     let totalWeight = automodreasonsandweights[ruleId].Weight;
     let reason = `AutoMod: ${automodreasonsandweights[ruleId].reason}`;
@@ -159,23 +120,24 @@ client.on('autoModerationActionExecution', async (action) => {
         .map((p: any, idx: number) => p.refrence ? `[Case ${idx + 1}](${p.refrence})` : null)
         .filter(Boolean);
     let dm = true
-    const section = new SectionBuilder()
-        .addTextDisplayComponents(new TextDisplayBuilder().setContent(`<@${user!.id}>,${statusMap[warnType]!.dm} ${warnType === 'Ban' ? ` [${guild.name}](https://discord.com/channels/${guild.id}). To appeal this decision, please join our dedicated appeal server using the button below.` : warnType === 'Mute' ? `\`${durationStr}\` in ${guild.name}` : `in ${guild.name}`}`))
-        .setThumbnailAccessory(new ThumbnailBuilder({ media: { url: guild.iconURL()! } }))
-
-    const section2 = new SectionBuilder()
-        .addTextDisplayComponents(new TextDisplayBuilder().setContent('Click on the right side/below to go to the server:'))
-        .setButtonAccessory(new ButtonBuilder({
-            type: ComponentType.Button as const,
-            style: ButtonStyle.Link,
-            label: "Appeal",
-            url: 'https://discord.gg/qMjjyXyYbr'
-        }))
     const container = new ContainerBuilder()
         .setAccentColor(statusMap[warnType]!.color)
-        .addSectionComponents(section)
-        .addTextDisplayComponents(new TextDisplayBuilder().setContent(`Reason: \`${reason}\` ${(['Ban', 'Kick'].includes(warnType)) ? '' : `Punishment: \`${!bannable ? totalWeight : 1} warn\`${durationStr ? `, \`${durationStr}\`` : ''}\nActive Warnings:\`${totalWarns}\`\nWarn expires: <t:${Math.floor((Date.now() + 86400000) / 1000)}:F>`}`))
-    warnType == 'Ban' ? container.addSectionComponents(section2) : null
+        .addSectionComponents(new SectionBuilder()
+            .addTextDisplayComponents(new TextDisplayBuilder({
+                content: `<@${user!.id}>,${statusMap[warnType]!.dm} ${warnType === 'Ban' ? ` [${guild.name}](https://discord.com/channels/${guild.id}). To appeal this decision, please join our dedicated appeal server using the button below.` : warnType === 'Mute' ? `\`${durationStr}\` in ${guild.name}` : `in ${guild.name}`}`
+            }))
+            .setThumbnailAccessory(new ThumbnailBuilder({ media: { url: guild.iconURL()! } })))
+        .addTextDisplayComponents(new TextDisplayBuilder(
+            {
+                content: `Reason: \`${reason}\` ${(['Ban', 'Kick'].includes(warnType)) ? '' : `Punishment: \`${!bannable ? totalWeight : 1} warn\`${durationStr ? `, \`${durationStr}\`` : ''}\nActive Warnings:\`${totalWarns}\`\nWarn expires: <t:${Math.floor((Date.now() + 86400000) / 1000)}:F>`}`
+            }
+        ))
+    if (warnType == 'Ban')
+        container.addSectionComponents(
+            new SectionBuilder()
+                .addTextDisplayComponents(new TextDisplayBuilder({ content: 'Click on the right side/below to go to the server:' }))
+                .setButtonAccessory(new ButtonBuilder({ type: ComponentType.Button as const, style: ButtonStyle.Link, label: "Appeal", url: 'https://discord.gg/qMjjyXyYbr' }))
+        )
 
     try { user!.send({ flags: MessageFlags.IsComponentsV2, components: [container.toJSON()] }) }
     catch { dm = false; }
@@ -276,7 +238,7 @@ client.on('guildDelete', async (guild) => {
 })
 client.on('guildMemberAdd', async (member) => {
     const { guild, user, joinedTimestamp, flags } = member;
-    const { modChannels: { welcomeChannel, mutelogChannel }, generalchannels, Invites } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { modChannels: 1, staffroles: 1, generalchannels: 1, Invites: 1 } }) as WithId<Document>;
+    const { modChannels: { welcomeChannel, mutelogChannel }, generalchannels, Invites } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { modChannels: 1, staffroles: 1, generalchannels: 1, Invites: 1 } }) as Document;
     const currentInvites = await guild.invites.fetch();
     const invite = currentInvites.find((i: any) => i.uses > (Invites[i.code]?.uses || 0)) ?? Object.values(Invites)?.find((i: any) => !currentInvites.get(i!.code!)) as DbInvite ?? undefined;
     const inviter: string | undefined | { uses: number; id: string; code: string } = invite instanceof Invite ? invite?.inviter?.id : invite && invite satisfies DbInvite ? invite!.id : undefined;
@@ -734,7 +696,7 @@ client.on('messageCreate', async (message) => {
         },
         { $unset: ["isModReset", "markDuplicateSpam", "markMessageThreshold", "markInactive30", "markMediaViolation", "markGeneralSpam"] }
     ], { returnDocument: 'after', projection: { automodMarks: 1, punishments: 1, level: 1 }, upsert: true }) as Document;
-    await grantXp({ Id: member!, guildId: guild.id, channel: channel as TextChannel });
+    await grantDiscordXp(member!, channel as TextChannel);
     const isNewUser = Date.now() - member?.joinedTimestamp! < 2 * 24 * 60 * 60 * 1000 && level < 3
     if (isstaff) return;
     if (mentions.everyone) await message.delete();
@@ -874,4 +836,5 @@ client.on('shardDisconnect', async (event, shardId) => {
 client.on('shardResume', async (shardId, replayedEvents) => {
     console.info(`[root] Shard ${shardId} resumed, replayed ${replayedEvents} events`)
 })
+startTwitchIntegration().catch(error => console.error('[twitch] startup failed', error));
 client.login(Bun.env.TOKEN)

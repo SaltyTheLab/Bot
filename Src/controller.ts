@@ -83,6 +83,8 @@ let currentAutomodRules: AutomodRule[] = [];
 let currentGuildRoles: APIRole[] = []
 let currentGuildChannels: GuildChannel[] = [];
 let staffRoles: APIRole[] = []
+let summary: GuildSummary | undefined = undefined
+let staffGuildSummaries: Record<string, GuildSummary> = {};
 
 function queueEmbedUpload(file: File): File {
     const extension = file.name.match(/\.[a-z0-9]{1,10}$/i)?.[0] || '';
@@ -1119,19 +1121,21 @@ function showMessage(message: string, colorClass: string) {
 
 async function refreshGuildSelect() {
     const { guildSelect, addServerBtn, deleteConfigBtn, loginBtn, connectTwitchBtn, authStatus, logoutBtn, guilds } = elements;
+    const selectedGuildId = guildSelect.value;
     guildSelect.innerHTML = '<option value="">-- Select a Guild --</option>';
     if (new URLSearchParams(location.search).get('twitch') === 'connected') {
         showMessage('Twitch bot account connected.', 'bg-green-500');
         history.replaceState({}, document.title, location.pathname);
     }
     const response = await fetch(`/api/auth/me`, { credentials: 'include' });
-    const res: { user?: APIUser; guilds?: { id: string; name: string; icon: string | null }[]; staffGuilds?: GuildSummary[]; loggedIn?: boolean } = await response.json();
-    console.log(res)
+    const res: { user?: APIUser; guilds?: { id: string; name: string; icon: string | null }[]; staffGuilds?: Record<string, Omit<GuildSummary, 'guildId'>>; loggedIn?: boolean; twitchConnected?: boolean } = await response.json();
+    connectTwitchBtn.dataset.connected = String(res.twitchConnected === true);
+    connectTwitchBtn.textContent = res.twitchConnected ? 'Unlink Twitch Module' : 'Connect Twitch Bot';
     if (res.user) {
         guilds.classList.remove('hidden')
         loginBtn.classList.add('hidden');
         logoutBtn.classList.remove('hidden');
-        connectTwitchBtn.classList.toggle('hidden', !res.staffGuilds?.some(guild => guild.role == 'admin' || guild.role == 'owner'));
+
         authStatus.textContent = `Logged in as ${res.user.username}`;
     } else {
         guilds.classList.add('hidden')
@@ -1144,39 +1148,45 @@ async function refreshGuildSelect() {
         return;
     }
     try {
-        const summaries = res.staffGuilds ?? [];
-        if (summaries.length === 0) {
+        const guildMap: Record<string, GuildSummary> = Object.fromEntries(
+            Object.entries(res.staffGuilds ?? {}).map(([guildId, info]) => [guildId, { guildId, ...info }])
+        );
+        staffGuildSummaries = guildMap;
+        Object.entries(guildMap).forEach(([string, summary]) => {
+            const option = document.createElement('option');
+            option.value = string;
+            option.textContent = `${summary.name} (${summary.role})`;
+            guildSelect.appendChild(option);
+        })
+        if (Object.keys(guildMap).length == 0) {
+            summary = undefined;
             showMessage('No guilds found where you hold a staff role.', 'bg-yellow-500');
             await loadSelectedGuild(null);
             return;
         }
-        summaries.sort((a, b) => a.guildId.localeCompare(b.guildId))
-            .forEach(g => {
-                const option = document.createElement('option');
-                option.value = g.guildId;
-                option.textContent = `${g.name} (${g.role})`;
-                guildSelect.appendChild(option);
-            });
+        console.log(Object.keys(guildMap)[0]!)
         addServerBtn.classList.remove('hidden');
-        guildSelect.value = summaries.some(g => g.guildId === guildSelect.value) ? guildSelect.value : summaries[0]!.guildId;;
+        guildSelect.value = guildMap[selectedGuildId] ? selectedGuildId : Object.keys(guildMap)[0]!;
+        summary = guildMap[guildSelect.value];
     } catch (error) {
         showMessage(`Could not reach the config API: ${errMsg(error)}`, 'bg-red-500');
         return;
     }
-    await loadSelectedGuild(guildSelect.value || null);
+    await loadSelectedGuild(guildSelect.value || null, summary);
 }
 function setGuildRoles(roles: APIRole[]) {
     rolePickers.admin.setRoles(roles);
     rolePickers.mod.setRoles(roles);
     rolePickers.jr.setRoles(roles);
 }
-async function loadSelectedGuild(guildId: string | null = null) {
-    const { deleteConfigBtn, addServerBtn, orText, saveConfigBtn, buttonColumnText, channelsContainer, adminRoleInput, modRoleInput, jrRoleInput } = elements;
+async function loadSelectedGuild(guildId: string | null = null, guildconfig?: GuildSummary | undefined) {
+    const { deleteConfigBtn, addServerBtn, orText, saveConfigBtn, buttonColumnText, channelsContainer, adminRoleInput, modRoleInput, jrRoleInput, connectTwitchBtn } = elements;
     deleteConfigBtn.classList.toggle('hidden', !guildId);
     saveConfigBtn.classList.toggle('hidden', !guildId);
     addServerBtn.classList.toggle('hidden', !guildId)
     orText.classList.toggle('hidden', !guildId)
-    if (!guildId) {
+    if (!guildId && !guildconfig) {
+        connectTwitchBtn.classList.add('hidden');
         currentGuildChannels = [];
         currentGuildRoles = [];
         currentAutomodRules = [];
@@ -1186,6 +1196,7 @@ async function loadSelectedGuild(guildId: string | null = null) {
         channelsContainer.classList.add('hidden')
         return;
     } else {
+        connectTwitchBtn.classList.toggle('hidden', guildconfig!.role !== 'owner');
         addServerBtn.classList.add('hidden');
         orText.classList.add('hidden');
         channelsContainer.classList.remove('hidden')
@@ -1193,7 +1204,7 @@ async function loadSelectedGuild(guildId: string | null = null) {
         deleteConfigBtn.classList.remove('hidden');
         buttonColumnText.textContent = '';
         try {
-            const res = await fetch(`/api/${encodeURIComponent(guildId)}`, { method: 'GET', credentials: 'include', cache: 'no-store' });
+            const res = await fetch(`/api/${encodeURIComponent(guildId!)}`, { method: 'GET', credentials: 'include', cache: 'no-store' });
             if (!res.ok) throw new Error(`Failed to load guild ${guildId} (${res.status})`);
             const doc: GuildConfigDoc = await res.json();
             currentAutomodRules = doc.rules
@@ -1556,9 +1567,29 @@ function initSubtabs() {
     });
 }
 // --- Wiring --------------------------------------------------------------------
-elements.guildSelect!.addEventListener('change', async () => { await loadSelectedGuild(elements.guildSelect.value) });
+elements.guildSelect!.addEventListener('change', async () => {
+    await loadSelectedGuild(elements.guildSelect.value || null, staffGuildSummaries[elements.guildSelect.value]);
+});
 elements.loginBtn!.addEventListener('click', () => { window.location.href = `/api/auth/discord/login`; });
-elements.connectTwitchBtn!.addEventListener('click', () => { window.location.href = `/api/auth/twitch/login`; });
+elements.connectTwitchBtn!.addEventListener('click', async () => {
+    if (elements.connectTwitchBtn.dataset.connected !== 'true') {
+        window.location.href = `/api/auth/twitch/login`;
+        return;
+    }
+    elements.connectTwitchBtn.disabled = true;
+    try {
+        const response = await fetch('/api/auth/twitch', { method: 'DELETE', credentials: 'include' });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || 'Could not unlink Twitch');
+        elements.connectTwitchBtn.dataset.connected = 'false';
+        elements.connectTwitchBtn.textContent = 'Connect Twitch Bot';
+        showMessage('Twitch account unlinked.', 'bg-green-500');
+    } catch (error) {
+        showMessage(`Twitch unlink failed: ${errMsg(error)}`, 'bg-red-500');
+    } finally {
+        elements.connectTwitchBtn.disabled = false;
+    }
+});
 elements.logoutBtn!.addEventListener('click', async () => {
     await fetch(`/api/auth/logout`, { method: 'POST', credentials: 'include' });
     const { loginBtn, logoutBtn, authStatus, saveConfigBtn, channelsContainer } = elements;
