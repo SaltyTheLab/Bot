@@ -16,6 +16,8 @@ interface GuildSummary { guildId: string; name: string | null; role: Role }
 interface GuildChannel { id: string; name: string; type: number; position?: number; parent_id?: string | null; categoryName?: string }
 interface AutomodRule { id: string; name: string }
 interface ReasonWeight { reason: string; weight: number }
+interface PunishmentStage { label: string; minutes: number }
+interface XpCurveSettings { baseMultiplier: number; exponent: number; flatOffset: number; roundToNearest: number }
 interface ReactionRole { emoji: string; roleId: string }
 interface V2ApiComponent {
     type: number;
@@ -69,6 +71,11 @@ interface GuildConfigDoc {
     guildRoles?: APIRole[]
     responses?: Record<string, string>;
     automodsettings?: AutomodSettings;
+    Stages?: PunishmentStage[];
+    baseMultiplier?: number;
+    exponent?: number;
+    flatOffset?: number;
+    roundToNearest?: number;
     messageConfigs?: Record<string, MessageConfig>;
     _viewerRole: Role;
     guildChannels: GuildChannel[];
@@ -143,6 +150,9 @@ const elements = {
     addReasonWeightBtn: el<HTMLButtonElement>('addReasonWeightBtn'),
     messageReasonsWeightsSection: el('messageReasonsWeightsSection'),
     addMessageReasonButtons: el('addMessageReasonButtons'),
+    automodStagesSection: el('automodStagesSection'),
+    addAutomodStageBtn: el<HTMLButtonElement>('addAutomodStageBtn'),
+    xpSection: el('xpSection'),
     addServerBtn: el<HTMLButtonElement>('addToServerBtn'),
     orText: el('orText'),
     buttonColumnText: el('buttoncolumnMessage'),
@@ -953,6 +963,99 @@ function getMessageReasonsWeightsValues(container: HTMLElement) {
     });
     return result;
 }
+function createAutomodStageInput(container: HTMLElement, stage: PunishmentStage = { label: '', minutes: 0 }) {
+    const row = document.createElement('div');
+    row.classList.add('row', 'items-center');
+    row.innerHTML = `
+        <span class="field-label" data-stage-index></span>
+        <input type="text" class="field" data-stage-label aria-label="Next punishment label" placeholder="Next punishment label">
+        <input type="number" class="field" data-stage-minutes aria-label="Mute minutes at this stage" min="0" step="1" placeholder="Mute minutes at this stage">
+        <button type="button" class="add-btn" data-stage-up title="Move stage up" aria-label="Move stage up">&#8593;</button>
+        <button type="button" class="add-btn" data-stage-down title="Move stage down" aria-label="Move stage down">&#8595;</button>
+        <button type="button" class="remove-btn" data-stage-remove title="Remove stage" aria-label="Remove stage">&times;</button>`;
+    row.querySelector<HTMLInputElement>('[data-stage-label]')!.value = stage.label;
+    row.querySelector<HTMLInputElement>('[data-stage-minutes]')!.value = String(stage.minutes);
+    row.querySelector<HTMLButtonElement>('[data-stage-up]')!.addEventListener('click', () => {
+        const previous = row.previousElementSibling;
+        if (previous) container.insertBefore(row, previous);
+        updateAutomodStageControls(container);
+    });
+    row.querySelector<HTMLButtonElement>('[data-stage-down]')!.addEventListener('click', () => {
+        const next = row.nextElementSibling;
+        if (next) container.insertBefore(next, row);
+        updateAutomodStageControls(container);
+    });
+    row.querySelector<HTMLButtonElement>('[data-stage-remove]')!.addEventListener('click', () => {
+        row.remove();
+        updateAutomodStageControls(container);
+    });
+    container.appendChild(row);
+    updateAutomodStageControls(container);
+}
+function updateAutomodStageControls(container: HTMLElement) {
+    const rows = Array.from(container.children) as HTMLElement[];
+    rows.forEach((row, index) => {
+        row.querySelector<HTMLElement>('[data-stage-index]')!.textContent = `Stage ${index + 1}`;
+        row.querySelector<HTMLButtonElement>('[data-stage-up]')!.disabled = index === 0;
+        row.querySelector<HTMLButtonElement>('[data-stage-down]')!.disabled = index === rows.length - 1;
+    });
+}
+function getAutomodStageValues(container: HTMLElement): PunishmentStage[] {
+    return Array.from(container.children).map(row => ({
+        label: row.querySelector<HTMLInputElement>('[data-stage-label]')!.value.trim(),
+        minutes: Number(row.querySelector<HTMLInputElement>('[data-stage-minutes]')!.value),
+    }));
+}
+function hasValidAutomodStages(container: HTMLElement) {
+    const rows = Array.from(container.children);
+    return rows.length > 0 && rows.every(row => {
+        const label = row.querySelector<HTMLInputElement>('[data-stage-label]')!.value.trim();
+        const minutesInput = row.querySelector<HTMLInputElement>('[data-stage-minutes]')!;
+        const minutes = Number(minutesInput.value);
+        return label !== '' && minutesInput.value !== '' && Number.isInteger(minutes) && minutes >= 0;
+    });
+}
+function renderXpCurveSection(container: HTMLElement, settings: Partial<XpCurveSettings>) {
+    const fields: { key: keyof XpCurveSettings; label: string; min?: string; fallback: number }[] = [
+        { key: 'baseMultiplier', label: 'Base multiplier', min: '0', fallback: 0 },
+        { key: 'exponent', label: 'Exponent', min: '0', fallback: 0 },
+        { key: 'flatOffset', label: 'Flat offset', fallback: 0 },
+        { key: 'roundToNearest', label: 'Rounding divisor', min: '0.000001', fallback: 1 },
+    ];
+    container.innerHTML = '';
+    fields.forEach(({ key, label, min, fallback }) => {
+        const row = document.createElement('label');
+        row.classList.add('row', 'items-center');
+        const fieldLabel = document.createElement('span');
+        fieldLabel.className = 'field-label';
+        fieldLabel.textContent = label;
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.step = 'any';
+        input.className = 'field';
+        input.dataset.xpField = key;
+        input.setAttribute('aria-label', label);
+        if (min !== undefined) input.min = min;
+        const value = settings[key];
+        input.value = String(key === 'roundToNearest' && (!value || value <= 0) ? fallback : value ?? fallback);
+        row.append(fieldLabel, input);
+        container.appendChild(row);
+    });
+}
+function getXpCurveValues(container: HTMLElement): XpCurveSettings {
+    const values = {} as XpCurveSettings;
+    container.querySelectorAll<HTMLInputElement>('[data-xp-field]').forEach(input => {
+        values[input.dataset.xpField as keyof XpCurveSettings] = Number(input.value);
+    });
+    return values;
+}
+function hasValidXpCurve(container: HTMLElement) {
+    const values = getXpCurveValues(container);
+    return Object.values(values).every(Number.isFinite)
+        && values.baseMultiplier >= 0
+        && values.exponent >= 0
+        && values.roundToNearest > 0;
+}
 type SectionValue = string | number | boolean | string[];
 function getSectionValues(container: HTMLElement, type: SectionType) {
     const values: Record<string, SectionValue> = {};
@@ -1102,7 +1205,7 @@ function getFormValues() {
     const responses = getSectionValues(Responses, 'response');
     const staffroles = [adminRoleInput.value.trim(), modRoleInput.value.trim(), jrRoleInput.value.trim()];
 
-    const config = { modChannels, publicChannels, generalchannels, reactions, automodsettings: { ...automodThresholds, messagereasonsandweights, automodreasonsandweights, }, responses, staffroles };
+    const config = { modChannels, publicChannels, generalchannels, reactions, automodsettings: { ...automodThresholds, messagereasonsandweights, automodreasonsandweights, }, Stages: getAutomodStageValues(elements.automodStagesSection), ...getXpCurveValues(elements.xpSection), responses, staffroles };
     return config;
 }
 function showMessage(message: string, colorClass: string) {
@@ -1242,6 +1345,10 @@ function renderConfig(config: GuildConfigDoc) {
     // automodsettings is now consolidated: flat thresholds + two nested reason/weight maps.
     const { messagereasonsandweights, automodreasonsandweights, ...automodThresholds } = config.automodsettings ?? ({} as AutomodSettings);
     renderSection(elements.automodSection, automodThresholds, 'automod');
+    elements.automodStagesSection.innerHTML = '';
+    const stages = config.Stages?.length ? config.Stages : [{ label: 'Warning', minutes: 0 }];
+    stages.forEach(stage => createAutomodStageInput(elements.automodStagesSection, stage));
+    renderXpCurveSection(elements.xpSection, config);
     renderMessageReasonsWeightsSection(elements.messageReasonsWeightsSection, elements.addMessageReasonButtons, messagereasonsandweights || {});
     renderReasonsAndWeightsSection(elements.reasonsWeightsSection, automodreasonsandweights, currentAutomodRules);
     renderArraySection(elements.GeneralChannelsSection, config.generalchannels || []);
@@ -1607,9 +1714,18 @@ elements.addMediaBtn.addEventListener('click', () => createArrayInput(elements.G
 elements.addReactionBtn.addEventListener('click', () => createChannelInput(elements.reactionsSection, '', '', 'reaction'));
 elements.addStringBtn.addEventListener('click', () => createChannelInput(elements.Responses, '', '', 'response'));
 elements.addReasonWeightBtn.addEventListener('click', () => createReasonWeightInput(elements.reasonsWeightsSection, currentAutomodRules, '', '', 1));
+elements.addAutomodStageBtn.addEventListener('click', () => createAutomodStageInput(elements.automodStagesSection, { label: '', minutes: 0 }));
 elements.saveConfigBtn.addEventListener('click', async () => {
     if (!elements.adminRoleInput!.value.trim() || !elements.modRoleInput!.value.trim()) {
         showMessage('Admin and Mod Role IDs are both required (Staff Roles tab).', 'bg-red-500');
+        return;
+    }
+    if (!hasValidAutomodStages(elements.automodStagesSection)) {
+        showMessage('Add at least one stage, and give each stage a label and a whole-number mute duration of 0 or more.', 'bg-red-500');
+        return;
+    }
+    if (!hasValidXpCurve(elements.xpSection)) {
+        showMessage('XP curve values must be valid numbers; base multiplier and exponent must be nonnegative, and rounding divisor must be greater than 0.', 'bg-red-500');
         return;
     }
     const config = getFormValues();

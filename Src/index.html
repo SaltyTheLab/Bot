@@ -25,7 +25,7 @@
           <span id="authStatus" class="text-gray-300">Checking login status...</span>
           <div>
             <button id="loginBtn" class="auth-btn hidden bg-indigo-500 hover:bg-indigo-600">Login with
-              Discord</button>
+            <p class="text-sm text-gray-400"></p>
             <button id="connectTwitchBtn" class="auth-btn hidden bg-purple-500">Connect Twitch Bot</button>
             <button id="logoutBtn" class=" auth-btn hidden bg-gray-500 hover:bg-gray-600">Logout</button>
           </div>
@@ -55,6 +55,7 @@
           <button id="publicChannelsTab" class="tab-btn" data-target="publicChannelsContent">Public Channels</button>
           <button id="GeneralTab" class="tab-btn" data-target="GeneralContent">General Channels</button>
           <button id="StaffRoles" class="tab-btn " data-target="StaffRolesContent">Staff Roles</button>
+          <button id="xpCurveTab" class="tab-btn" data-target="xpcurve">XP Curve</button>
           <button id="stringReactionsTab" class="tab-btn" data-target="stringReactionsContent">String Reactions</button>
           <button id="EmbedContentTab" class="tab-btn" data-target="embedContent">Embeds</button>
         </div>
@@ -102,6 +103,8 @@
                 <button id="automodWeightsSubtab" class="subtab-btn tab-btn" data-subtarget="automodWeightsSubcontent">Rule Reasons
                   &amp;
                   Weights</button>
+                <button id="automodStagesSubtab" class="subtab-btn tab-btn" data-subtarget="automodStagesSubcontent">Punishment
+                  Stages</button>
               </div>
           <div id="automodSettingsSubcontent" class="subtab-content space-y-4">
             <div id="AutomodSection"></div>
@@ -116,6 +119,16 @@
     <div id="reasonsWeightsSection" class="space-y-2"></div>
     <button id="addReasonWeightBtn" class="add-btn">Add Rule Weight</button>
   </div>
+  <div id="automodStagesSubcontent" class="subtab-content space-y-4 hidden">
+    <p class="text-sm text-gray-400">Stages are applied in order as active warnings accumulate. A mute duration of 0 means
+      warning only; warnings beyond the last stage use the final stage.</p>
+    <div id="automodStagesSection" class="space-y-2"></div>
+    <button id="addAutomodStageBtn" type="button" class="add-btn">Add Stage</button>
+  </div>
+  </div>
+  <div id="xpcurve" class="tab-content bg-gray-700 p-4 rounded-xl space-y-4 shadow-inner hidden">
+    <p class="text-sm text-gray-400">Required XP per level is calculated as round((level ^ exponent × base multiplier + flat offset) ÷ rounding divisor). A base multiplier of 0 disables XP awards.</p>
+    <div id="xpSection" class="space-y-2"></div>
   </div>
   <template id="rolePickerTemplate">
     <div class="relative" data-role-picker>
