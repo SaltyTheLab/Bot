@@ -1680,7 +1680,10 @@ elements.guildSelect!.addEventListener('change', async () => {
 elements.loginBtn!.addEventListener('click', () => { window.location.href = `/api/auth/discord/login`; });
 elements.connectTwitchBtn!.addEventListener('click', async () => {
     if (elements.connectTwitchBtn.dataset.connected !== 'true') {
-        window.location.href = `/api/auth/twitch/login`;
+        const guildId = elements.guildSelect.value;
+        if (!guildId) return;
+        const params = new URLSearchParams({ guildId });
+        window.location.href = `/api/auth/twitch/login?${params}`;
         return;
     }
     elements.connectTwitchBtn.disabled = true;

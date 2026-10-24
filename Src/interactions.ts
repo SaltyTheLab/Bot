@@ -1,4 +1,4 @@
-import { guildconfigs, usersCollection, logos, oauthSessions, ws } from "./Database";
+import { guildconfigs, usersCollection, logos, oauthSessions, twitchconfig } from "./Database";
 import statusMap from "./statusMap";
 import { syncEmbed } from "./syncEmbed";
 import { buildApplicationHub } from "./applicationUi";
@@ -10,7 +10,7 @@ import { ed25519 } from '@noble/curves/ed25519.js'
 import { StatusCodes } from "http-status-codes";
 import { AppTokenAuthProvider, RefreshingAuthProvider } from "@twurple/auth"
 import { ApiClient } from '@twurple/api'
-import { type APIMessageComponentInteraction, InteractionType, ComponentType, type APIInteraction, type APIMessage, InteractionResponseType, MessageFlags, type APIGuild, type APIGuildMember, type APIModalSubmitInteraction, type APIUser, type APIActionRowComponent, type APIChannel, ButtonStyle, type APIChatInputApplicationCommandGuildInteraction, ChannelType, type APIRole, type APIAutoModerationRule, Collection, ApplicationCommandOptionType, subtext, bold, quote, type APIButtonComponentWithCustomId, ModalBuilder, REST, Routes, type APIDMChannel, type APIApplicationCommandInteractionDataOption, type APIApplicationCommandInteractionDataBasicOption, OAuth2Routes, type RESTPostOAuth2AccessTokenResult, type APIMessageComponent, PermissionFlagsBits, ContainerBuilder, EmbedBuilder, ActionRowBuilder, MediaGalleryBuilder, TextDisplayBuilder, ButtonBuilder, SectionBuilder, ThumbnailBuilder, SeparatorBuilder, type APIMediaGalleryComponent, SeparatorSpacingSize } from "discord.js";
+import { type APIMessageComponentInteraction, InteractionType, ComponentType, type APIInteraction, type APIMessage, InteractionResponseType, MessageFlags, type APIGuild, type APIGuildMember, type APIModalSubmitInteraction, type APIUser, type APIActionRowComponent, type APIChannel, ButtonStyle, type APIChatInputApplicationCommandGuildInteraction, ChannelType, type APIRole, type APIAutoModerationRule, Collection, ApplicationCommandOptionType, subtext, bold, quote, type APIButtonComponentWithCustomId, ModalBuilder, REST, Routes, type APIDMChannel, type APIApplicationCommandInteractionDataOption, type APIApplicationCommandInteractionDataBasicOption, OAuth2Routes, type RESTPostOAuth2AccessTokenResult, type APIMessageComponent, PermissionFlagsBits, ContainerBuilder, EmbedBuilder, ActionRowBuilder, MediaGalleryBuilder, TextDisplayBuilder, ButtonBuilder, SectionBuilder, ThumbnailBuilder, SeparatorBuilder, type APIMediaGalleryComponent, SeparatorSpacingSize, DiscordAPIError } from "discord.js";
 const rest = new REST().setToken(`${Bun.env.TOKEN}`)
 const Client = new ApiClient({ authProvider: new AppTokenAuthProvider(Bun.env.TWITCH_ID!, Bun.env.TWITCH_SECRET!) })
 const auth = new RefreshingAuthProvider({ clientId: Bun.env.TWITCH_ID!, clientSecret: Bun.env.TWITCH_SECRET!, redirectUri: `${Bun.env.DISCORD_REDIRECT!}/api/auth/twitch/redirect`, });
@@ -168,9 +168,9 @@ async function runPunishment({ body, res, guildConfig }: CommandContext): Promis
     const { punishments } = await usersCollection.findOne({ userId: target, guildId: guild_id }, { projection: { punishments: 1 } }) as any;
     const activeWarns = punishments.length > 0 ? punishments.filter((p: any) => p.active === 1).reduce((acc: number, cur: any) => acc + (cur.weight || 1), 0) : 0;
     let warnType = subcommandPath[0] === 'ban' ? 'Ban' : subcommandPath[0] === 'kick' ? 'Kick' : subcommandPath[0] === 'mute' ? 'Mute' : 'Warn';
-    const stage = Stages[activeWarns]
+    const stage = Stages[Math.min(activeWarns, Stages.length - 1)] ?? { label: 'Warning', minutes: 0 };
     let durationMs: number = 0, durationStr: string | null = null
-    if ((Stages[activeWarns].minutes > 0 && warnType === 'Warn') || warnType == 'Mute') {
+    if ((stage.minutes > 0 && warnType === 'Warn') || warnType == 'Mute') {
         const { unit, duration } = resolveOptions(options, { unit: ApplicationCommandOptionType.String, duration: ApplicationCommandOptionType.String })
         const unitMap: Record<string, number> = { min: 60000, hour: 3600000, day: 86400000 };
         durationMs = stage.minutes > 0 ? stage.minutes * 60000 : parseInt(duration!) * unitMap[unit!]!
@@ -1043,7 +1043,8 @@ Bun.serve({
         "/api/auth/twitch/login": async (req) => {
             const session = await getSession(req);
             if (!session) return new Response('Not logged in', { status: StatusCodes.UNAUTHORIZED });
-            const state = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url');
+            const guildId = new URL(req.url).searchParams.get('guildId')
+            const state = `${guildId}.${crypto.randomUUID()}`;
             req.cookies.set('twitch_oauth_state', state, { httpOnly: true, secure: true, sameSite: 'lax', path: '/api/auth/twitch/redirect', maxAge: 300 });
             const params = new URLSearchParams({
                 client_id: Bun.env.TWITCH_ID!,
@@ -1063,16 +1064,18 @@ Bun.serve({
             const expectedState = req.cookies.get('twitch_oauth_state');
             req.cookies.delete('twitch_oauth_state');
             if (state !== expectedState) return new Response('Invalid Twitch OAuth state', { status: StatusCodes.BAD_REQUEST });
+            const guildId = url.searchParams.get('state')?.split('.')[0]
             const userId = await auth.addUserForCode(code!, ['chat:read', 'chat:edit']);
             const token = await auth.getAccessTokenForUser(userId);
             if (!token) return new Response('Twitch did not return an access token.', { status: StatusCodes.BAD_GATEWAY });
-            await ws.updateOne({}, {
+            await twitchconfig.updateOne({}, {
                 $set: {
                     twitchuserid: userId,
                     twitchaccess: token.accessToken,
                     twitchrefresh: token.refreshToken,
                     twitchexpires: token.expiresIn,
                     twitchobtained: token.obtainmentTimestamp,
+                    guildId: guildId
                 },
             }, { upsert: true });
             return new Response(null, { status: StatusCodes.MOVED_TEMPORARILY, headers: { Location: '/?twitch=connected' } });
@@ -1142,7 +1145,8 @@ Bun.serve({
                     if (!guildId || !embedName || !config) return Response.json({ error: 'Guild, embed name, and config are required' }, { status: StatusCodes.BAD_REQUEST, headers: corsHeaders });
                     const result = await syncEmbed(rest, guildId, embedName, config, files);
                     return new Response(JSON.stringify(result), { headers: corsHeaders });
-                } catch {
+                } catch (error) {
+                    console.error('POST /api/embed failed:', error);
                     return new Response(JSON.stringify({ error: 'Failed to sync embed' }), { status: StatusCodes.INTERNAL_SERVER_ERROR, headers: corsHeaders });
                 }
             },
@@ -1172,9 +1176,27 @@ Bun.serve({
                 const { guildId, key } = req.params
                 const doc = await guildconfigs.findOne({ guildId: guildId }, { projection: { [`messageConfigs.${key}`]: 1 } }) as any;
                 const { channelid, messageId } = doc?.messageConfigs?.[key] || {};
-                if (channelid && messageId) await rest.delete(Routes.channelMessage(channelid, messageId));
-                await guildconfigs.findOneAndUpdate({ guildId: guildId }, { $unset: { [`messageConfigs.${key}`]: '' } })
-                return Response.json({ status: 200 })
+                if (channelid && messageId)
+                    try {
+                        await rest.delete(Routes.channelMessage(channelid, messageId));
+                        await guildconfigs.findOneAndUpdate({ guildId: guildId }, { $unset: { [`messageConfigs.${key}`]: '' } })
+                    }
+                    catch (err: any) {
+                        if (err satisfies DiscordAPIError) {
+                            switch (err.code) {
+                                case 50013:
+                                    return Response.json(err.rawError.message, { status: StatusCodes.FORBIDDEN })
+                                case 10008:
+                                    return Response.json(err.rawError.message, { status: StatusCodes.NOT_FOUND })
+                                case 50006:
+                                    return Response.json(err.rawError.message, { status: StatusCodes.BAD_REQUEST })
+                            }
+                        }
+                        else
+                            console.error(err)
+                        return Response.json(err, { status: StatusCodes.NOT_FOUND })
+                    }
+                return Response.json({ status: StatusCodes.OK })
             }
         },
         "/api/auth/me": {
@@ -1183,7 +1205,7 @@ Bun.serve({
                 const headers = { ...corsHeaders, "Cache-Control": "no-store" };
                 if (!session) return Response.json({ loggedIn: false, twitchConnected: false }, { headers });
                 try {
-                    const twitch = await ws.findOne({}, { projection: { twitchaccess: 1 } }) as { twitchaccess?: string } | null;
+                    const twitch = await twitchconfig.findOne({}, { projection: { twitchaccess: 1 } }) as { twitchaccess?: string } | null;
                     const docs = await guildconfigs.find({ guildId: { $in: session.guilds.map(guild => guild.id) } }, { projection: { guildId: 1, name: 1, staffroles: 1, _id: 0, ownerId: 1 } }).toArray();
                     const staffGuilds = Object.fromEntries((await Promise.all(docs.map(async doc => {
                         const role = await roleFromStaffroles(session.user.id, doc.guildId, doc.staffroles as string[], doc.ownerId as string);
@@ -1202,7 +1224,7 @@ Bun.serve({
                 const docs = await guildconfigs.find({ guildId: { $in: session.guilds.map(guild => guild.id) } }, { projection: { guildId: 1, staffroles: 1, ownerId: 1 } }).toArray();
                 const roles = await Promise.all(docs.map(doc => roleFromStaffroles(session.user.id, doc.guildId, doc.staffroles as string[], doc.ownerId as string)));
                 if (!roles.includes('owner')) return Response.json({ error: "Only a configured guild owner can unlink Twitch" }, { status: StatusCodes.FORBIDDEN, headers: corsHeaders });
-                const twitch = await ws.findOne({}, { projection: { twitchaccess: 1, twitchuserid: 1 } }) as { twitchaccess?: string, twitchuserid: string } | null;
+                const twitch = await twitchconfig.findOne({}, { projection: { twitchaccess: 1, twitchuserid: 1 } }) as { twitchaccess?: string, twitchuserid: string } | null;
                 if (twitch?.twitchaccess) {
                     auth.removeUser(twitch.twitchuserid)
                     const revoke = await fetch('https://id.twitch.tv/oauth2/revoke', {
@@ -1212,7 +1234,7 @@ Bun.serve({
                     });
                     if (!revoke.ok) return Response.json({ error: 'Twitch could not revoke the connection' }, { status: StatusCodes.BAD_GATEWAY, headers: corsHeaders });
                 }
-                await ws.updateOne({}, { $unset: { twitchuserid: '', twitchaccess: '', twitchrefresh: '', twitchexpires: '', twitchobtained: '' } });
+                await twitchconfig.updateOne({}, { $unset: { twitchuserid: '', twitchaccess: '', twitchrefresh: '', twitchexpires: '', twitchobtained: '' } });
                 return Response.json({ ok: true }, { headers: corsHeaders });
             }
         },
@@ -1257,13 +1279,12 @@ Bun.serve({
             },
             DELETE: async (req) => {
                 try {
-                const session = await getSession(req);
-                if (!session) return Response.json({ error: "Not logged in" }, { status: StatusCodes.UNAUTHORIZED, headers: corsHeaders });
-                const { guildId } = req.params;
-                await rest.delete(Routes.guildMember(guildId, '1420927654701301951'))
-                await guildconfigs.deleteOne({ guildId: guildId });
-                await usersCollection.deleteMany({ guildId: guildId });
-                return Response.json({ ok: true }, { headers: corsHeaders });
+                    const session = await getSession(req);
+                    if (!session) return Response.json({ error: "Not logged in" }, { status: StatusCodes.UNAUTHORIZED, headers: corsHeaders });
+                    const { guildId } = req.params;
+                    await guildconfigs.deleteOne({ guildId: guildId });
+                    await usersCollection.deleteMany({ guildId: guildId });
+                    return Response.json({ ok: true }, { headers: corsHeaders });
                 } catch (err) {
                     console.log(err)
                 }

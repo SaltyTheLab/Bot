@@ -2,19 +2,15 @@ import { ApiClient } from '@twurple/api';
 import { ChatClient } from '@twurple/chat';
 import { RefreshingAuthProvider } from '@twurple/auth';
 import { EventSubWsListener } from '@twurple/eventsub-ws';
-import { usersCollection, ws } from './Database';
+import { usersCollection, twitchconfig } from './Database';
 import { awardXp } from './xp';
-
-const TWITCH_GUILD_ID = '1231453115937587270';
-
 export async function startTwitchIntegration() {
     const authProvider = new RefreshingAuthProvider({ clientId: Bun.env.TWITCH_ID!, clientSecret: Bun.env.TWITCH_SECRET! });
-    const doc = await ws.findOne({}, { projection: { twitchuserid: 1, twitchaccess: 1, twitchrefresh: 1, twitchexpires: 1, twitchobtained: 1 } }) as any;
+    const doc = await twitchconfig.findOne({}, { projection: { twitchuserid: 1, twitchaccess: 1, twitchrefresh: 1, twitchexpires: 1, twitchobtained: 1 } }) as any;
     if (!doc?.twitchuserid || !doc?.twitchaccess) {
         console.info('[twitch] No bot account connected; Twitch integration is disabled.');
         return;
     }
-
     authProvider.addUser(doc.twitchuserid, {
         accessToken: doc.twitchaccess,
         scope: ['chat:read', 'chat:edit'],
@@ -23,7 +19,7 @@ export async function startTwitchIntegration() {
         obtainmentTimestamp: doc.twitchobtained,
     }, ['chat']);
     authProvider.onRefresh(async (_userId, newTokenData) => {
-        await ws.updateOne({}, {
+        await twitchconfig.updateOne({}, {
             $set: {
                 twitchaccess: newTokenData.accessToken,
                 twitchrefresh: newTokenData.refreshToken,
@@ -55,8 +51,8 @@ export async function startTwitchIntegration() {
             await twitchChatClient.say(channel, 'I have a discord at https://discord.gg/f7ru3KcPy5');
             return;
         }
-
-        const levelUp = await awardXp({ twitchChannelLogin: user }, TWITCH_GUILD_ID);
+        const guildId = await twitchconfig.findOne({}, { projection: { guildId: 1 } })
+        const levelUp = await awardXp({ twitchChannelLogin: user }, guildId!.guildId);
         if (levelUp) await twitchChatClient.say(channel, `@${user} reached level ${levelUp.level}! You are now #${levelUp.rank + 1}!`);
     });
     twitchChatClient.onMessageFailed((channel, reason) => console.log('[twitch] message failed', channel, reason));

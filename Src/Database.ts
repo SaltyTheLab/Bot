@@ -4,7 +4,7 @@ await client.connect().catch(error => { console.error("Failed to connect to Mong
 const usersCollection = client.db("Database").collection('users');
 const guildconfigs = client.db("Database").collection("guildconfigs")
 const logos = client.db("Database").collection("logos")
-const ws = client.db("Database").collection("websocket")
+const twitchconfig = client.db("Database").collection("websocket")
 const oauthSessions = client.db("Database").collection("oauthSessions")
 await oauthSessions.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-export { usersCollection, guildconfigs, logos, ws, oauthSessions }
+export { usersCollection, guildconfigs, logos, twitchconfig, oauthSessions }
