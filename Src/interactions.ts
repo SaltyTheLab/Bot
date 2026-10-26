@@ -1,25 +1,21 @@
 import { guildconfigs, usersCollection, logos, oauthSessions, twitchconfig } from "./Database";
 import statusMap from "./statusMap";
+import { env, file, Image, type BunRequest, serve } from 'bun'
 import { syncEmbed } from "./syncEmbed";
-import { buildApplicationHub } from "./applicationUi";
-import { PART_CONFIG } from "./applicationConfig";
+import { PART_CONFIG, buildApplicationHub } from "./applicationConfig";
 import { type Document, type WithId, ObjectId } from "mongodb";
 import { Resvg } from '@resvg/resvg-js'
 import { SignJWT, jwtVerify } from 'jose'
 import { ed25519 } from '@noble/curves/ed25519.js'
 import { StatusCodes } from "http-status-codes";
-import { AppTokenAuthProvider, RefreshingAuthProvider } from "@twurple/auth"
-import { ApiClient } from '@twurple/api'
+import { apiClient, authProvider } from './twitch'
 import { type APIMessageComponentInteraction, InteractionType, ComponentType, type APIInteraction, type APIMessage, InteractionResponseType, MessageFlags, type APIGuild, type APIGuildMember, type APIModalSubmitInteraction, type APIUser, type APIActionRowComponent, type APIChannel, ButtonStyle, type APIChatInputApplicationCommandGuildInteraction, ChannelType, type APIRole, type APIAutoModerationRule, Collection, ApplicationCommandOptionType, subtext, bold, quote, type APIButtonComponentWithCustomId, ModalBuilder, REST, Routes, type APIDMChannel, type APIApplicationCommandInteractionDataOption, type APIApplicationCommandInteractionDataBasicOption, OAuth2Routes, type RESTPostOAuth2AccessTokenResult, type APIMessageComponent, PermissionFlagsBits, ContainerBuilder, EmbedBuilder, ActionRowBuilder, MediaGalleryBuilder, TextDisplayBuilder, ButtonBuilder, SectionBuilder, ThumbnailBuilder, SeparatorBuilder, type APIMediaGalleryComponent, SeparatorSpacingSize, DiscordAPIError } from "discord.js";
-const rest = new REST().setToken(`${Bun.env.TOKEN}`)
-const Client = new ApiClient({ authProvider: new AppTokenAuthProvider(Bun.env.TWITCH_ID!, Bun.env.TWITCH_SECRET!) })
-const auth = new RefreshingAuthProvider({ clientId: Bun.env.TWITCH_ID!, clientSecret: Bun.env.TWITCH_SECRET!, redirectUri: `${Bun.env.DISCORD_REDIRECT!}/api/auth/twitch/redirect`, });
+const rest = new REST().setToken(`${env.TOKEN}`)
+
 type CommandContext = {
     body: APIChatInputApplicationCommandGuildInteraction;
     res: { type: InteractionResponseType; data: APIMessage | {} };
     guildConfig: WithId<Document> | null; // lazy — only fetched if a handler actually calls it
-    target?: string
-
     restrictedToFullMod?: boolean;
 };
 type OptionValueMap = {
@@ -267,13 +263,12 @@ async function runPunishment({ body, res, guildConfig }: CommandContext): Promis
 }
 async function withGuards({ body, res, guildConfig, restrictedToFullMod = false }: CommandContext): Promise<Response | void> {
     const { member, data: { options, resolved } } = body;
-    const { subcommandPath, target } = resolveOptions(options, { target: ApplicationCommandOptionType.User } as const);
+    const { subcommandPath, target, duration } = resolveOptions(options, { target: ApplicationCommandOptionType.User, duration: ApplicationCommandOptionType.Integer } as const);
     const targetuser = resolved?.users?.[target!];
     const targetmember = resolved?.members?.[target!];
     const { modChannels, staffroles } = guildConfig as WithId<Document>;
     if (subcommandPath[0] === 'mute') {
-        const { duration } = resolveOptions(options, { duration: ApplicationCommandOptionType.Integer });
-        if (duration === undefined || duration <= 0) {
+        if (duration! <= 0) {
             res.data = { embeds: [notice('❌ Invalid duration')], flags: MessageFlags.Ephemeral };
             return Response.json(res);
         }
@@ -288,14 +283,14 @@ async function withGuards({ body, res, guildConfig, restrictedToFullMod = false 
     }
     if (restrictedToFullMod && member?.roles.includes(staffroles[2])) {
         await rest.post(Routes.channelMessages(modChannels.adminChannel), {
-            body: { embeds: [{ description: `Jr. mod ${member?.user} tried to use a mod only command.` }] }
+            body: { embeds: [notice(`Jr. mod ${member?.user} tried to use a mod only command.`)] }
         });
         res.data = { embeds: [notice('Jr mods do not have access to this command.')], flags: MessageFlags.Ephemeral };
         return Response.json(res);
     }
     if (targetmember?.roles.some((r: string) => staffroles.includes(r))) {
         await rest.post(Routes.channelMessages(modChannels.adminChannel), {
-            body: { embeds: [{ description: `<@${member?.user.id}> tried to moderate <@${targetuser!.id}>.` }] }
+            body: { embeds: [notice(`<@${member?.user.id}> tried to moderate <@${targetuser!.id}>.`)] }
         });
         res.data = { embeds: [notice('You cannot moderate other staff members.')], flags: MessageFlags.Ephemeral };
         return Response.json(res);
@@ -314,10 +309,7 @@ commands.set('games.rps', async ({ body, res }) => {
     const beats: Record<string, string> = { rock: 'scissors', paper: 'rock', scissors: 'paper' };
     const result = beats[opp] === choice!.toLowerCase() ? 'you win!!!' : beats[choice!] === opp ? 'Febot Wins!!!' : "It's a tie!";
     if (result === 'you win!!!') await usersCollection.findOneAndUpdate({ userId: member?.user.id, guildId: guild_id }, { $inc: { coins: 20 } });
-    const embed = new EmbedBuilder()
-        .setColor(0xffa500)
-        .setTitle(result)
-        .setDescription(`You chose **${choice!}**.\nOpponent chose **${opp}**.`)
+    const embed = new EmbedBuilder({ color: 0xffa500, title: result, description: `You chose **${choice!}**.\nOpponent chose **${opp}**.` })
     res.data = { embeds: [embed.toJSON()] };
 })
 commands.set('games.logos', async ({ body }) => {
@@ -326,40 +318,30 @@ commands.set('games.logos', async ({ body }) => {
     const logo = logolist[Math.floor(Math.random() * logolist.length)];
     const distractors = shuffle(logolist.filter((l: any) => l.brand !== logo.brand)).slice(0, 3).map((l: any) => l.brand);
     const comps = shuffle([logo.brand, ...distractors]).map((opt: string) =>
-        new ButtonBuilder()
-            .setCustomId(`logos-${opt}-${logo.brand}`)
-            .setLabel(opt)
-            .setStyle(ButtonStyle.Primary)
+        new ButtonBuilder({ custom_id: `logos-${opt}-${logo.brand}`, label: opt, style: ButtonStyle.Primary })
     )
     const form = new FormData();
-    form.append('files[0]', new Blob([await Bun.file(logo.image).arrayBuffer()]), 'logo.png');
-    const container = new ContainerBuilder()
-        .setAccentColor(Math.floor(Math.random() * 16777215))
-        .addTextDisplayComponents(new TextDisplayBuilder({ content: `Guess this logo ${member?.user.username}` }))
-        .addMediaGalleryComponents(new MediaGalleryBuilder({ items: [{ media: { url: 'attachment://logo.png' } }] }))
-        .addActionRowComponents(new ActionRowBuilder<ButtonBuilder>().addComponents(comps))
-    form.append('payload_json', JSON.stringify({
-        type: 4,
-        data: {
-            flags: MessageFlags.IsComponentsV2,
-            components: [container.toJSON()],
-            attachments: [{ id: 0, filename: 'logo.png' }]
-        }
-    }));
+    form.append('files[0]', new Blob([await file(logo.image).arrayBuffer()]), 'logo.png');
+    const container = new ContainerBuilder({
+        accent_color: Math.floor(Math.random() * 16777215),
+        components: [
+            new TextDisplayBuilder({ content: `Guess this logo ${member?.user.username}` }).toJSON(),
+            new MediaGalleryBuilder({ items: [{ media: { url: 'attachment://logo.png' } }] }).toJSON(),
+            new ActionRowBuilder<ButtonBuilder>().addComponents(comps).toJSON()
+        ]
+    })
+    form.append('payload_json', JSON.stringify({ type: 4, data: { flags: MessageFlags.IsComponentsV2, components: [container.toJSON()], attachments: [{ id: 0, filename: 'logo.png' }] } }));
     return new Response(form);
 })
 commands.set('games.tictactoe', async ({ body, res }) => {
     const { member, data: { options } } = body;
     const { opponent } = resolveOptions(options, { opponent: ApplicationCommandOptionType.User });
     const me = member!.user.id;
-    if (me === opponent) {
-        res.data = { content: "You can't play against yourself.", flags: MessageFlags.Ephemeral };
-        return;
-    }
+    if (me === opponent) { res.data = ephemeral("You can't play against yourself."); return; }
     const current = Math.random() < 0.5 ? me : opponent!;
     const container = new ContainerBuilder()
         .setAccentColor(0x0000ff)
-        .addTextDisplayComponents(new TextDisplayBuilder().setContent(`<@${opponent}>, <@${me}> wants to play tictactoe`))
+        .addTextDisplayComponents(new TextDisplayBuilder({ content: `<@${opponent}>, <@${me}> wants to play tictactoe` }))
         .addActionRowComponents(...generateButtons(Array(9).fill('_'), me, opponent!, current, false));
     res.data = { flags: MessageFlags.IsComponentsV2, components: [container.toJSON()] };
 });
@@ -430,7 +412,7 @@ commands.set('rank', async ({ body, guildConfig }) => {
     const { exponent, baseMultiplier, roundToNearest, flatOffset } = guildConfig as Document
     const rank = await usersCollection.countDocuments({ guildId: guild_id, $or: [{ level: { $gt: level } }, { level: level, xp: { $gt: xp } }] });
     const avRes = await fetch(avatarOf({ id: targetUser!.id!, avatar: targetUser!.avatar! }));
-    const resizedAvatarBuf = await new Bun.Image(await avRes.arrayBuffer()).resize(100, 100).png().toBase64();
+    const resizedAvatarBuf = await new Image(await avRes.arrayBuffer()).resize(100, 100).png().toBase64();
     const reqXp = Math.round(((level < 100 ? level : 100) ** exponent * baseMultiplier + flatOffset) / roundToNearest);
     const rankCardSvg = `<svg width="500" height="150" xmlns="http://www.w3.org/2000/svg"><defs><clipPath id="avatarClip"><circle cx="70" cy="75" r="50"/></clipPath></defs><rect width="500" height="150" rx="16" fill="#2c2f33"/><circle cx="70" cy="75" r="52" stroke="#3ba55d" stroke-width="3" fill="none" /><image href="data:image/png;base64,${resizedAvatarBuf}" x="20" y="25" width="100" height="100" clip-path="url(#avatarClip)"/><text x="130" y="60" fill="white" font-size="20" font-family="Arial" font-weight="bold">${targetUser?.username.slice(0, 15) + (targetUser?.username.length! > 15 ? "..." : "")}</text><text x="300" y="35" fill="white" font-size="16" font-family="Arial" font-weight="bold" text-anchor="middle">Level ${level}</text><text x="440" y="35" fill="white" font-size="16" font-family="Arial" font-weight="bold" text-anchor="end">Rank #${rank + 1}</text><rect x="130" y="85" width="350" height="20" rx="10" fill="#484b4e"/><rect x="130" y="85" width="${Math.min(Math.max(350 * (xp / reqXp), 25), 350)}" height="20" rx="10" fill="#3ba55d"/><text x="480" y="75" fill="#ccc" font-size="16" font-family="Arial" text-anchor="end">${xp} / ${reqXp} xp</text><text x="150" y="130" fill="#ccc" font-size="18" font-family="Arial">Coins: ${coins} | Messages: ${totalmessages}</text></svg>`;
     const renderer = new Resvg(rankCardSvg, {font: { loadSystemFonts: true } });
@@ -614,7 +596,7 @@ commands.set('member.unwarn', async ({ body, res, guildConfig, restrictedToFullM
     const { punishments } = await usersCollection.findOne({ userId: target, guildId: body.guild_id }, { projection: { punishments: 1 } }) as Document;
     const removed = punishments?.filter((p: any) => p.type === 'Warn').sort((a: any, b: any) => b.timestamp - a.timestamp)[0];
     if (removed) { await usersCollection.updateOne({ userId: target, guildId: body.guild_id }, { $pull: { punishments: { _id: removed._id } } as any }); }
-    res.data = removed ? { embeds: [notice(`Recent warn removed from <@${target}>`)] } : { embeds: [{ description: `no recent warns found for <@${target}>` }] };
+    res.data = { embeds: [notice(removed ? `Recent warn removed from <@${target}>` : `no recent warns found for <@${target}>`)] };
     return Response.json(res)
 })
 commands.set('member.unmute', async ({ body, res, guildConfig, restrictedToFullMod = true }) => {
@@ -629,8 +611,8 @@ commands.set('member.unmute', async ({ body, res, guildConfig, restrictedToFullM
     }
     return Response.json(res)
 })
-commands.set('member.kick', async ({ body, res, guildConfig }) => {
-    const blocked = await withGuards({ body, res, guildConfig });
+commands.set('member.kick', async ({ body, res, guildConfig, restrictedToFullMod = true }) => {
+    const blocked = await withGuards({ body, res, guildConfig, restrictedToFullMod });
     if (blocked) return blocked;
     runPunishment({ body, res, guildConfig }).catch(console.error);
     res.type = InteractionResponseType.DeferredChannelMessageWithSource;
@@ -639,10 +621,10 @@ commands.set('member.kick', async ({ body, res, guildConfig }) => {
 commands.set('link', async ({ body, res }) => {
     const { member, data: { options } } = body;
     const { channel } = resolveOptions(options, { channel: ApplicationCommandOptionType.String })
-    const twitchUser = await Client.users.getUserByName(channel!)
+    const twitchUser = await apiClient.users.getUserByName(channel!)
     if (!twitchUser) { res.data = ephemeral(`No Twitch channel found for \`${channel}\`.`); return; }
-    await usersCollection.updateOne({ userId: member?.user.id, guildId: '1231453115937587270' }, { $set: { twitchChannelId: twitchUser.id, twitchChannelLogin: twitchUser.name } });
-    res.data = { embeds: [{ description: `Level Linked to Twitch channel **${twitchUser.displayName}**.` }], flags: MessageFlags.Ephemeral };
+    await usersCollection.updateOne({ userId: member?.user.id, guildId: body.guild_id }, { $set: { twitchChannelId: twitchUser.id, twitchChannelLogin: twitchUser.name } });
+    res.data = ephemeral(`Level Linked to Twitch channel ${bold(twitchUser.displayName)}.`);
 });
 commands.set('admin.clear', async ({ body, res }) => {
     const { channel, data: { options } } = body
@@ -1013,10 +995,10 @@ async function handleComponents(body: APIMessageComponentInteraction) {
 }
 
 const corsHeaders = {
-    "Access-Control-Allow-Origin": Bun.env.DISCORD_REDIRECT!, "Access-Control-Allow-Methods": "GET, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Origin": env.DISCORD_REDIRECT!, "Access-Control-Allow-Methods": "GET, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type", "Access-Control-Allow-Credentials": "true"
 };
-async function getSession(req: Bun.BunRequest) {
+async function getSession(req: BunRequest) {
     const token = req.cookies.get('session');
     if (!token) return null
     try {
@@ -1035,11 +1017,11 @@ async function roleFromStaffroles(userId: string, guildId: string, staffroles: s
     if (member.roles.includes(modRoleId!)) return "mod";
     return null;
 }
-Bun.serve({
+serve({
     port: 3000,
     websocket: { open() { }, message() { }, close() { } },
     routes: {
-        "/": () => new Response(Bun.file('./.dist/index.html')),
+        "/": () => new Response(file('./.dist/index.html')),
         "/api/auth/twitch/login": async (req) => {
             const session = await getSession(req);
             if (!session) return new Response('Not logged in', { status: StatusCodes.UNAUTHORIZED });
@@ -1047,8 +1029,8 @@ Bun.serve({
             const state = `${guildId}.${crypto.randomUUID()}`;
             req.cookies.set('twitch_oauth_state', state, { httpOnly: true, secure: true, sameSite: 'lax', path: '/api/auth/twitch/redirect', maxAge: 300 });
             const params = new URLSearchParams({
-                client_id: Bun.env.TWITCH_ID!,
-                redirect_uri: `${Bun.env.DISCORD_REDIRECT!}/api/auth/twitch/redirect`,
+                client_id: env.TWITCH_ID!,
+                redirect_uri: `${env.DISCORD_REDIRECT!}/api/auth/twitch/redirect`,
                 response_type: 'code',
                 scope: 'chat:read chat:edit',
                 state,
@@ -1064,9 +1046,8 @@ Bun.serve({
             const expectedState = req.cookies.get('twitch_oauth_state');
             req.cookies.delete('twitch_oauth_state');
             if (state !== expectedState) return new Response('Invalid Twitch OAuth state', { status: StatusCodes.BAD_REQUEST });
-            const guildId = url.searchParams.get('state')?.split('.')[0]
-            const userId = await auth.addUserForCode(code!, ['chat:read', 'chat:edit']);
-            const token = await auth.getAccessTokenForUser(userId);
+            const userId = await authProvider.addUserForCode(code!, ['chat:read', 'chat:edit']);
+            const token = await authProvider.getAccessTokenForUser(userId);
             if (!token) return new Response('Twitch did not return an access token.', { status: StatusCodes.BAD_GATEWAY });
             await twitchconfig.updateOne({}, {
                 $set: {
@@ -1075,7 +1056,7 @@ Bun.serve({
                     twitchrefresh: token.refreshToken,
                     twitchexpires: token.expiresIn,
                     twitchobtained: token.obtainmentTimestamp,
-                    guildId: guildId
+                    guildId: state?.split('.')[0]
                 },
             }, { upsert: true });
             return new Response(null, { status: StatusCodes.MOVED_TEMPORARILY, headers: { Location: '/?twitch=connected' } });
@@ -1083,7 +1064,7 @@ Bun.serve({
         "/api/auth/discord/login": (req) => {
             const state = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
             req.cookies.set("oauth_state", state, { httpOnly: true, secure: true, sameSite: "lax", path: "/", maxAge: 300, });
-            const params = new URLSearchParams({ client_id: Bun.env.CLIENT_ID!, redirect_uri: `${Bun.env.DISCORD_REDIRECT!}/api/auth/discord/redirect`, response_type: "code", scope: "identify guilds", state: state });
+            const params = new URLSearchParams({ client_id: env.CLIENT_ID!, redirect_uri: `${env.DISCORD_REDIRECT!}/api/auth/discord/redirect`, response_type: "code", scope: "identify guilds", state: state });
             return new Response(null, { status: StatusCodes.MOVED_TEMPORARILY, headers: { Location: `${OAuth2Routes.authorizationURL}?${params}` } });
         },
         "/api/auth/discord/redirect": async (req) => {
@@ -1097,11 +1078,11 @@ Bun.serve({
                 headers: { "Content-Type": "application/x-www-form-urlencoded" },
                 passThroughBody: true,
                 body: new URLSearchParams({
-                    client_id: Bun.env.CLIENT_ID!,
-                    client_secret: Bun.env.DISCORD_SECRET!,
+                    client_id: env.CLIENT_ID!,
+                    client_secret: env.DISCORD_SECRET!,
                     grant_type: "authorization_code",
                     code: code!,
-                    redirect_uri: `${Bun.env.DISCORD_REDIRECT!}/api/auth/discord/redirect`,
+                    redirect_uri: `${env.DISCORD_REDIRECT!}/api/auth/discord/redirect`,
                 })
             }) as RESTPostOAuth2AccessTokenResult;
             const [discordGuilds, discordUser] = await Promise.all([
@@ -1226,11 +1207,11 @@ Bun.serve({
                 if (!roles.includes('owner')) return Response.json({ error: "Only a configured guild owner can unlink Twitch" }, { status: StatusCodes.FORBIDDEN, headers: corsHeaders });
                 const twitch = await twitchconfig.findOne({}, { projection: { twitchaccess: 1, twitchuserid: 1 } }) as { twitchaccess?: string, twitchuserid: string } | null;
                 if (twitch?.twitchaccess) {
-                    auth.removeUser(twitch.twitchuserid)
+                    authProvider.removeUser(twitch.twitchuserid)
                     const revoke = await fetch('https://id.twitch.tv/oauth2/revoke', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: new URLSearchParams({ client_id: Bun.env.TWITCH_ID!, token: twitch.twitchaccess }),
+                        body: new URLSearchParams({ client_id: env.TWITCH_ID!, token: twitch.twitchaccess }),
                     });
                     if (!revoke.ok) return Response.json({ error: 'Twitch could not revoke the connection' }, { status: StatusCodes.BAD_GATEWAY, headers: corsHeaders });
                 }
@@ -1294,7 +1275,7 @@ Bun.serve({
             const rawBody = await req.text();
             const data = new TextEncoder().encode(req.headers.get('X-Signature-Timestamp') + rawBody);
             const signature = new Uint8Array(Buffer.from(req.headers.get('x-signature-ed25519')!, 'hex'));
-            const publickey = new Uint8Array(Buffer.from(`${Bun.env.DISCORD_PKEY}`, 'hex'));
+            const publickey = new Uint8Array(Buffer.from(`${env.DISCORD_PKEY}`, 'hex'));
             if (!ed25519.verify(signature, data, publickey)) return new Response('Unauthorized', { status: StatusCodes.UNAUTHORIZED });
             const body: APIInteraction = JSON.parse(rawBody);
             if (body.type == InteractionType.Ping) return Response.json({ type: InteractionResponseType.Pong });

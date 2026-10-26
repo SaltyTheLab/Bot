@@ -1,11 +1,11 @@
-import { usersCollection, guildconfigs } from './Database';
+import { cron, sleep, env } from 'bun'
+import { usersCollection, guildconfigs, twitchconfig, type DbInvite } from './Database';
 import statusMap from './statusMap';
 import { ObjectId, type Document } from 'mongodb';
 import { ComponentType, ButtonStyle, MessageType, ActivityType, PresenceUpdateStatus, Client, Options, Role, Routes, Partials, GatewayIntentBits, TextChannel, MessageFlags, subtext, GuildMember, GuildMemberFlags, Invite, SectionBuilder, TextDisplayBuilder, ContainerBuilder, ButtonBuilder, ThumbnailBuilder, type APIMessage, type APIContainerComponent } from 'discord.js'
 import { createHash } from 'crypto'
 import { awardXp } from './xp';
-import { startTwitchIntegration } from './twitch';
-type DbInvite = Record<string, { uses: number; id: string; code: string }>;
+import { eventSubListener, twitchChatClient, doc } from './twitch';
 process.on("uncaughtException", (err: any) => { console.error('[root] Uncaught exception', err) })
 process.on("unhandledRejection", (reason: any) => { console.error('[root] Unhandled rejection', reason) });
 const client = new Client({
@@ -15,13 +15,43 @@ const client = new Client({
     makeCache: Options.cacheWithLimits({ ...Options.DefaultMakeCacheSettings }),
     sweepers: { ...Options.DefaultSweeperSettings }
 });
+twitchChatClient.onMessage(async (channel, user, text) => {
+    if (text.startsWith('!lvl')) {
+        const record = await usersCollection.findOne({ twitchChannelLogin: user }, { projection: { xp: 1, level: 1 } }) as any;
+        if (!record) {
+            await twitchChatClient.say(channel, 'Your Twitch channel is not linked, please link it using /link in my server');
+            return;
+        }
+        await twitchChatClient.say(channel, `@${user}, your level is currently ${record.level}, with ${record.xp} xp.`);
+        return;
+    }
+    if (text.startsWith('!discord')) {
+        await twitchChatClient.say(channel, 'I have a discord at https://discord.gg/f7ru3KcPy5');
+        return;
+    }
+    const guildId = await twitchconfig.findOne({}, { projection: { guildId: 1 } })
+    const levelUp = await awardXp({ twitchChannelLogin: user }, guildId!.guildId);
+    if (levelUp) await twitchChatClient.say(channel, `@${user} reached level ${levelUp.level}! You are now #${levelUp.rank + 1}!`);
+});
+twitchChatClient.onMessageFailed((channel, reason) => console.log('[twitch] message failed', channel, reason));
+twitchChatClient.onMessageRatelimit((channel, msg) => console.log('[twitch] ratelimited', channel, msg));
+eventSubListener.start();
+eventSubListener.onStreamOnline(doc.twitchuserid, () => {
+    twitchChatClient.connect();
+    console.info('[twitch] chat connected');
+});
+eventSubListener.onStreamOffline(doc.twitchuserid, () => {
+    twitchChatClient.quit();
+    console.info('[twitch] chat disconnected');
+});
 async function grantDiscordXp(member: GuildMember, channel: TextChannel) {
     const guildId = member.guild.id;
-    const levelUp = await awardXp({ userId: member.user.id, guildId }, guildId);
+    const levelUp = await awardXp({ userId: member.user.id, guildId: guildId }, guildId);
     if (!levelUp) return;
     if (levelUp.level > 2 && !member.roles.cache.has('1334238580914131026') && guildId === '1231453115937587270') {
         await client.rest.put(Routes.guildMemberRole(guildId, member.id, '1334238580914131026'));
     }
+
     await channel.send({
         embeds: [{
             author: { name: member.user.username, icon_url: member.user.avatarURL() ?? member.user.defaultAvatarURL },
@@ -35,13 +65,13 @@ async function getReactionRoleConfig(guildId: string, messageId: string) {
     const doc = await guildconfigs.findOne({ guildId }, { projection: { messageConfigs: 1 } });
     return Object.values(doc?.messageConfigs ?? {}).find((info: any) => info?.messageId === messageId) as { reactions: { emoji: string; roleId: string | string[] }[] } | undefined;
 }
-Bun.cron("0 0 * * 0", async () => {
+cron("0 0 * * 0", async () => {
     const list = await usersCollection.find({ level: 1, totalmessages: 0, guildId: '1231453115937587270' }, { projection: { userId: 1, _id: 0 } }).toArray()
     const ids = list.flatMap(doc => doc.userId)
     for (const userId of ids) {
         try {
             await client.rest.delete(Routes.guildMember('1231453115937587270', userId))
-            await Bun.sleep(750);
+            await sleep(750);
         }
         catch (error) {
             console.warn(`[inactive users] Could not remove ${userId}; they may no longer be in the guild`, error)
@@ -49,7 +79,7 @@ Bun.cron("0 0 * * 0", async () => {
     }
     await usersCollection.deleteMany({ guildId: '1231453115937587270', userId: { $in: ids } })
 })
-let presenceInterval: NodeJS.Timeout | undefined;
+let presenceInterval: NodeJS.Timeout;
 function startStatusLoop() {
     clearInterval(presenceInterval);
     presenceInterval = setInterval(() => {
@@ -231,6 +261,17 @@ client.on('guildCreate', async (guild) => {
     };
     const guildinvites = await guild.invites.fetch();
     await guildconfigs.updateOne({ guildId: id }, { $set: { icon: guild.iconURL(), name: name, ownerId: ownerId, Invites: Object.fromEntries(guildinvites.map(i => [i.code, { uses: i.uses, inviter: i.inviter!.id, code: i.code }])) } })
+    const owner = await guild.fetchOwner()
+    const channel = await owner.user.createDM();
+    const embed = new ContainerBuilder({
+        accent_color: 0xf03030,
+        components: [
+            new TextDisplayBuilder({
+                content: `Hello <@${owner}, thank you for adding febot to your sever, be sure to setup your config in the [dashboard]{${env.DISCORD_REDIRECT}.`
+            }).toJSON()
+        ]
+    })
+    await channel.send({ flags: MessageFlags.IsComponentsV2, components: [embed] })
 })
 client.on('guildDelete', async (guild) => {
     await usersCollection.deleteMany({ guildId: guild.id })
@@ -428,14 +469,14 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
 client.on('guildBanAdd', async (ban) => {
     const { user, guild } = ban;
     let dmed = true;
-    await Bun.sleep(250);
+    await sleep(250);
     const { Ban, modChannels: { banlogChannel } } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { Ban: 1, modChannels: 1 } }) as Document
     if (Ban === user.id) { await guildconfigs.updateOne({ guildId: guild.id }, { $set: { Ban: '' } }); return; }
     else {
         massban += 1;
         const { punishments } = await usersCollection.findOne({ guildId: guild.id, userId: user.id }, { projection: { punishments: 1 } }) as Document
         const sortedpunishments = punishments.filter((p: any) => p.type === "Ban").sort((a: any, b: any) => b.timestamp - a.timestamp)
-        await Bun.sleep(massban * 1000)
+        await sleep(massban * 1000)
         try {
             await user.send({
                 flags: MessageFlags.IsComponentsV2,
@@ -569,11 +610,24 @@ client.on('messageDelete', async (deletedData) => {
             accessory: { type: ComponentType.Thumbnail, media: { url: author.avatarURL() ?? author.defaultAvatarURL } }
         }]
     };
-
-    if (imageAttachments.length > 0) {
+    if (stickers.size > 0) {
+        container.components.push({
+            type: ComponentType.TextDisplay,
+            content: 'stickers deleted:'
+        })
         container.components.push({
             type: ComponentType.MediaGallery,
-            items: stickers.size > 0 ? [{ media: { url: stickers.first()!.url } }] : imageAttachments.map(url => ({ media: { url } }))
+            items: [{ media: { url: stickers.first()!.url } }]
+        })
+    }
+    if (imageAttachments.length > 0) {
+        container.components.push({
+            type: ComponentType.TextDisplay,
+            content: 'Images deleted:'
+        })
+        container.components.push({
+            type: ComponentType.MediaGallery,
+            items: imageAttachments.map(url => ({ media: { url } }))
         });
     }
     container.components.push({
@@ -836,5 +890,4 @@ client.on('shardDisconnect', async (event, shardId) => {
 client.on('shardResume', async (shardId, replayedEvents) => {
     console.info(`[root] Shard ${shardId} resumed, replayed ${replayedEvents} events`)
 })
-startTwitchIntegration().catch(error => console.error('[twitch] startup failed', error));
-client.login(Bun.env.TOKEN)
+client.login(env.TOKEN)
