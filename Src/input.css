@@ -1,4 +1,20 @@
 @import "tailwindcss";
+@media (max-width: 767px) {
+  #hamburgerBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  #tabBar {
+    display: none;
+    flex-direction: column;
+  }
+
+  #tabBar.mobile-open {
+    display: flex;
+  }
+}
 @layer components {
   .panel {
     @apply bg-gray-700 p-2 rounded-xl shadow-inner;
@@ -41,5 +57,8 @@
 }
 .field-value {
   @apply bg-gray-900 text-gray-200 border border-gray-600 rounded-lg p-2 flex-1 min-w-0 max-w-[300px];
+}
+#hamburgerBtn {
+  display: none;
 }
 }
