@@ -1,4 +1,3 @@
-
 import { REST } from 'discord.js'
 import { ApplicationCommandOptionType, ApplicationCommandType, InteractionContextType, PermissionFlagsBits, Routes, type RESTPostAPIChatInputApplicationCommandsJSONBody } from 'discord-api-types/v10';
 const commands: RESTPostAPIChatInputApplicationCommandsJSONBody[] = [
@@ -13,9 +12,7 @@ const commands: RESTPostAPIChatInputApplicationCommandsJSONBody[] = [
         description: 'Open/close applications',
         contexts: [InteractionContextType.Guild],
         default_member_permissions: String(PermissionFlagsBits.Administrator),
-        options: [
-            { name: 'open', description: 'Open applications', type: ApplicationCommandOptionType.Subcommand },
-            { name: 'close', description: 'Close Applications', type: ApplicationCommandOptionType.Subcommand }
+        options: [{ name: 'decision', description: 'open or close apps', type: ApplicationCommandOptionType.String, choices: [{ name: 'open', value: 'open' }, { name: 'close', value: 'close' }] }
         ]
     },
     {
@@ -30,10 +27,15 @@ const commands: RESTPostAPIChatInputApplicationCommandsJSONBody[] = [
         default_member_permissions: String(PermissionFlagsBits.ModerateMembers),
         options: [
             {
-                name: 'add',
-                description: 'add a role ',
+                name: 'modify',
+                description: 'modify a user\'s blacklist',
                 type: ApplicationCommandOptionType.Subcommand,
-                options: [
+                options: [{
+                    name: 'action', description: 'the action', required: true, type: ApplicationCommandOptionType.String,
+                    choices: [
+                        { name: 'add', value: 'add' },
+                        { name: 'remove', value: 'remove' }]
+                },
                     { name: 'target', description: 'User', required: true, type: ApplicationCommandOptionType.User },
                     { name: 'role', description: 'role', required: true, type: ApplicationCommandOptionType.Role }
                 ]
@@ -46,15 +48,6 @@ const commands: RESTPostAPIChatInputApplicationCommandsJSONBody[] = [
                     { name: 'target', description: 'user to show', required: true, type: ApplicationCommandOptionType.User }
                 ]
             },
-            {
-                name: 'remove',
-                description: 'remove a role',
-                type: ApplicationCommandOptionType.Subcommand,
-                options: [
-                    { name: 'target', description: 'User', required: true, type: ApplicationCommandOptionType.User },
-                    { name: 'role', description: 'Role', required: true, type: ApplicationCommandOptionType.Role }
-                ]
-            }
         ]
     },
     {
@@ -120,27 +113,24 @@ const commands: RESTPostAPIChatInputApplicationCommandsJSONBody[] = [
         contexts: [InteractionContextType.Guild],
         options: [
             {
-                name: 'warn',
-                description: 'Warn a user',
-                type: ApplicationCommandOptionType.Subcommand,
+                name: 'create', description: 'Create a missing database record', type: ApplicationCommandOptionType.Subcommand,
+                options: [{ name: 'target', description: 'The member', required: true, type: ApplicationCommandOptionType.User }],
+            },
+            {
+                name: 'warn', description: 'Warn a user', type: ApplicationCommandOptionType.Subcommand,
                 options: [
                     { name: 'target', description: 'The user', required: true, type: ApplicationCommandOptionType.User },
                     { name: 'reason', description: 'The reason', required: true, type: ApplicationCommandOptionType.String }
                 ]
             },
             {
-                name: 'mute',
-                description: 'Mute a user',
-                type: ApplicationCommandOptionType.Subcommand,
+                name: 'mute', description: 'Mute a user', type: ApplicationCommandOptionType.Subcommand,
                 options: [
                     { name: 'target', description: 'The user', required: true, type: ApplicationCommandOptionType.User },
                     { name: 'reason', description: 'Reason', required: true, type: ApplicationCommandOptionType.String },
                     { name: 'duration', description: 'Duration', required: true, type: ApplicationCommandOptionType.Integer },
                     {
-                        name: 'unit',
-                        description: 'Unit',
-                        required: true,
-                        type: ApplicationCommandOptionType.String,
+                        name: 'unit', description: 'Unit', required: true, type: ApplicationCommandOptionType.String,
                         choices: [
                             { name: 'Minute', value: 'min' },
                             { name: 'Hour', value: 'hour' },
@@ -150,27 +140,21 @@ const commands: RESTPostAPIChatInputApplicationCommandsJSONBody[] = [
                 ]
             },
             {
-                name: 'ban',
-                description: 'Ban a user',
-                type: ApplicationCommandOptionType.Subcommand,
+                name: 'ban', description: 'Ban a user', type: ApplicationCommandOptionType.Subcommand,
                 options: [
                     { name: 'target', description: 'The user', required: true, type: ApplicationCommandOptionType.User },
                     { name: 'reason', description: 'Reason', required: true, type: ApplicationCommandOptionType.String }
                 ]
             },
             {
-                name: 'kick',
-                description: 'Kick a user',
-                type: ApplicationCommandOptionType.Subcommand,
+                name: 'kick', description: 'Kick a user', type: ApplicationCommandOptionType.Subcommand,
                 options: [
                     { name: 'target', description: 'The user', required: true, type: ApplicationCommandOptionType.User },
                     { name: 'reason', description: 'Reason', required: true, type: ApplicationCommandOptionType.String }
                 ]
             },
             {
-                name: 'unwarn',
-                description: "Removes a user's warn",
-                type: ApplicationCommandOptionType.Subcommand,
+                name: 'unwarn', description: "Removes a user's warn", type: ApplicationCommandOptionType.Subcommand,
                 options: [{ name: 'target', description: 'The User', required: true, type: ApplicationCommandOptionType.User }]
             },
             {
@@ -182,16 +166,12 @@ const commands: RESTPostAPIChatInputApplicationCommandsJSONBody[] = [
         ]
     },
     {
-        name: 'modlogs',
-        description: 'View a user\'s moderation history.',
-        default_member_permissions: String(PermissionFlagsBits.ModerateMembers),
+        name: 'modlogs', description: 'View a user\'s moderation history.', default_member_permissions: String(PermissionFlagsBits.ModerateMembers),
         contexts: [InteractionContextType.Guild],
         options: [{ name: 'target', description: 'The user to view', required: true, type: ApplicationCommandOptionType.User }]
     },
     {
-        name: 'note',
-        description: "add/show a user's notes",
-        default_member_permissions: String(PermissionFlagsBits.ModerateMembers),
+        name: 'note', description: "add/show a user's notes", default_member_permissions: String(PermissionFlagsBits.ModerateMembers), 
         contexts: [InteractionContextType.Guild],
         options: [
             {
@@ -212,18 +192,31 @@ const commands: RESTPostAPIChatInputApplicationCommandsJSONBody[] = [
         ]
     },
     {
-        name: 'rank',
-        description: 'view a users xp and Level',
-        contexts: [InteractionContextType.Guild],
-        type: ApplicationCommandType.ChatInput,
+        name: 'rank', description: 'view a users xp and Level', contexts: [InteractionContextType.Guild], type: ApplicationCommandType.ChatInput,
         options: [{ name: 'target', description: 'The Member', type: ApplicationCommandOptionType.User }]
     },
     {
-        name: 'link',
-        type: ApplicationCommandType.ChatInput,
-        description: 'Link your twitch',
-        contexts: [InteractionContextType.Guild],
+        name: 'link', type: ApplicationCommandType.ChatInput, description: 'Link your twitch', contexts: [InteractionContextType.Guild],
         options: [{ name: 'channel', description: 'Twitch channel to link', type: ApplicationCommandOptionType.String }]
+    },
+    {
+        name: 'admin', description: 'all admin commands', contexts: [InteractionContextType.Guild],
+        default_member_permissions: String(PermissionFlagsBits.Administrator),
+        options: [
+            {
+                name: 'clear', type: ApplicationCommandOptionType.Subcommand, description: 'clear a number of messages',
+                options: [{
+                    name: 'count',
+                    type: ApplicationCommandOptionType.Integer,
+                    description: 'number of messages to clear',
+                    required: true,
+                    min_value: 2,
+                    max_value: 100
+
+                }]
+            }
+
+        ]
     }
 ];
 const rest = new REST().setToken(`${Bun.env.TOKEN}`)
