@@ -1,11 +1,11 @@
 import { cron, sleep, env } from 'bun'
-import { usersCollection, guildconfigs, twitchconfig, type DbInvite } from './Database';
+import { usersCollection, guildconfigs, type DbInvite } from './Database';
 import statusMap from './statusMap';
 import { ObjectId, type Document } from 'mongodb';
 import { ComponentType, ButtonStyle, MessageType, ActivityType, PresenceUpdateStatus, Client, Options, Role, Routes, Partials, GatewayIntentBits, TextChannel, MessageFlags, subtext, GuildMember, GuildMemberFlags, Invite, SectionBuilder, TextDisplayBuilder, ContainerBuilder, ButtonBuilder, ThumbnailBuilder, type APIMessage, type APIContainerComponent } from 'discord.js'
 import { createHash } from 'crypto'
 import { awardXp } from './xp';
-import { eventSubListener, twitchChatClient, doc } from './twitch';
+import { syncTwitchConfigs } from './twitch';
 process.on("uncaughtException", (err: any) => { console.error('[root] Uncaught exception', err) })
 process.on("unhandledRejection", (reason: any) => { console.error('[root] Unhandled rejection', reason) });
 const client = new Client({
@@ -15,35 +15,7 @@ const client = new Client({
     makeCache: Options.cacheWithLimits({ ...Options.DefaultMakeCacheSettings }),
     sweepers: { ...Options.DefaultSweeperSettings }
 });
-twitchChatClient.onMessage(async (channel, user, text) => {
-    if (text.startsWith('!lvl')) {
-        const record = await usersCollection.findOne({ twitchChannelLogin: user }, { projection: { xp: 1, level: 1 } }) as any;
-        if (!record) {
-            await twitchChatClient.say(channel, 'Your Twitch channel is not linked, please link it using /link in my server');
-            return;
-        }
-        await twitchChatClient.say(channel, `@${user}, your level is currently ${record.level}, with ${record.xp} xp.`);
-        return;
-    }
-    if (text.startsWith('!discord')) {
-        await twitchChatClient.say(channel, 'I have a discord at https://discord.gg/f7ru3KcPy5');
-        return;
-    }
-    const guildId = await twitchconfig.findOne({}, { projection: { guildId: 1 } })
-    const levelUp = await awardXp({ twitchChannelLogin: user }, guildId!.guildId);
-    if (levelUp) await twitchChatClient.say(channel, `@${user} reached level ${levelUp.level}! You are now #${levelUp.rank + 1}!`);
-});
-twitchChatClient.onMessageFailed((channel, reason) => console.log('[twitch] message failed', channel, reason));
-twitchChatClient.onMessageRatelimit((channel, msg) => console.log('[twitch] ratelimited', channel, msg));
-eventSubListener.start();
-eventSubListener.onStreamOnline(doc.twitchuserid, () => {
-    twitchChatClient.connect();
-    console.info('[twitch] chat connected');
-});
-eventSubListener.onStreamOffline(doc.twitchuserid, () => {
-    twitchChatClient.quit();
-    console.info('[twitch] chat disconnected');
-});
+void syncTwitchConfigs().catch(error => console.error('[twitch] initial config sync failed', error));
 async function grantDiscordXp(member: GuildMember, channel: TextChannel) {
     const guildId = member.guild.id;
     const levelUp = await awardXp({ userId: member.user.id, guildId: guildId }, guildId);
