@@ -1,3 +1,3 @@
-Bun.build({ entrypoints: ['./main.ts'], packages: 'bundle', compile: { outfile: 'bot', target: 'bun-windows-x64-modern' }, target: 'bun', minify: true, tsconfig: './tsconfig.json', throw: true, env: "inline", sourcemap: "linked" });
+Bun.build({ entrypoints: ['./main.ts'], packages: 'bundle', compile: { outfile: 'bot', target: 'bun-windows-x64-modern' }, target: 'bun', outdir: 'C:/Users/micha/Desktop/test/.dist', minify: true, tsconfig: './tsconfig.json', throw: true, env: "inline", sourcemap: "linked" });
 
-Bun.build({ entrypoints: ['./Src/index.html'], target: 'browser', compile: true, outdir: '.dist', minify: true, throw: true, tsconfig: './tsconfig.json', sourcemap: "linked" });
+Bun.build({ entrypoints: ['./Src/index.html'], target: 'browser', compile: true, outdir: 'C:/Users/micha/Desktop/test/.dist', minify: true, throw: true, tsconfig: './tsconfig.json', sourcemap: "linked" });

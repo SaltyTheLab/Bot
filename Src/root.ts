@@ -1,4 +1,4 @@
-import { cron, sleep, env } from 'bun'
+import { cron, sleep } from 'bun'
 import { usersCollection, guildconfigs, type DbInvite } from './Database';
 import statusMap from './statusMap';
 import { ObjectId, type Document } from 'mongodb';
@@ -239,7 +239,7 @@ client.on('guildCreate', async (guild) => {
         accent_color: 0xf03030,
         components: [
             new TextDisplayBuilder({
-                content: `Hello <@${owner}, thank you for adding febot to your sever, be sure to setup your config in the [dashboard]{${env.DISCORD_REDIRECT}.`
+                content: `Hello <@${owner}, thank you for adding febot to your sever, be sure to setup your config in the [dashboard]{${process.env.DISCORD_REDIRECT}.`
             }).toJSON()
         ]
     })
@@ -862,4 +862,4 @@ client.on('shardDisconnect', async (event, shardId) => {
 client.on('shardResume', async (shardId, replayedEvents) => {
     console.info(`[root] Shard ${shardId} resumed, replayed ${replayedEvents} events`)
 })
-client.login(env.TOKEN)
+client.login(process.env.TOKEN)

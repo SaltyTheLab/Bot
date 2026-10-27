@@ -1,6 +1,6 @@
 import { guildconfigs, usersCollection, logos, oauthSessions, twitchconfig } from "./Database";
 import statusMap from "./statusMap";
-import { env, file, Image, type BunRequest, serve } from 'bun'
+import { file, Image, type BunRequest, serve } from 'bun'
 import { syncEmbed } from "./syncEmbed";
 import { PART_CONFIG, buildApplicationHub } from "./applicationConfig";
 import { type Document, type WithId, ObjectId } from "mongodb";
@@ -10,7 +10,7 @@ import { ed25519 } from '@noble/curves/ed25519.js'
 import { StatusCodes } from "http-status-codes";
 import { apiClient, authProvider, syncTwitchConfigs } from './twitch'
 import { type APIMessageComponentInteraction, InteractionType, ComponentType, type APIInteraction, type APIMessage, InteractionResponseType, MessageFlags, type APIGuild, type APIGuildMember, type APIModalSubmitInteraction, type APIUser, type APIActionRowComponent, type APIChannel, ButtonStyle, type APIChatInputApplicationCommandGuildInteraction, ChannelType, type APIRole, type APIAutoModerationRule, Collection, ApplicationCommandOptionType, subtext, bold, quote, type APIButtonComponentWithCustomId, ModalBuilder, REST, Routes, type APIDMChannel, type APIApplicationCommandInteractionDataOption, type APIApplicationCommandInteractionDataBasicOption, OAuth2Routes, type RESTPostOAuth2AccessTokenResult, type APIMessageComponent, PermissionFlagsBits, ContainerBuilder, EmbedBuilder, ActionRowBuilder, MediaGalleryBuilder, TextDisplayBuilder, ButtonBuilder, SectionBuilder, ThumbnailBuilder, SeparatorBuilder, type APIMediaGalleryComponent, SeparatorSpacingSize, DiscordAPIError } from "discord.js";
-const rest = new REST().setToken(`${env.TOKEN}`)
+const rest = new REST().setToken(`${process.env.TOKEN}`)
 
 type CommandContext = {
     body: APIChatInputApplicationCommandGuildInteraction;
@@ -995,7 +995,7 @@ async function handleComponents(body: APIMessageComponentInteraction) {
 }
 
 const corsHeaders = {
-    "Access-Control-Allow-Origin": env.DISCORD_REDIRECT!, "Access-Control-Allow-Methods": "GET, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Origin": process.env.DISCORD_REDIRECT!, "Access-Control-Allow-Methods": "GET, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type", "Access-Control-Allow-Credentials": "true"
 };
 async function getSession(req: BunRequest) {
@@ -1036,8 +1036,8 @@ serve({
             const state = `${guildId}.${crypto.randomUUID()}`;
             req.cookies.set('twitch_oauth_state', state, { httpOnly: true, secure: true, sameSite: 'lax', path: '/api/auth/twitch/redirect', maxAge: 300 });
             const params = new URLSearchParams({
-                client_id: env.TWITCH_ID!,
-                redirect_uri: `${env.DISCORD_REDIRECT!}/api/auth/twitch/redirect`,
+                client_id: process.env.TWITCH_ID!,
+                redirect_uri: `${process.env.DISCORD_REDIRECT!}/api/auth/twitch/redirect`,
                 response_type: 'code',
                 scope: 'chat:read chat:edit',
                 state,
@@ -1076,7 +1076,7 @@ serve({
         "/api/auth/discord/login": (req) => {
             const state = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
             req.cookies.set("oauth_state", state, { httpOnly: true, secure: true, sameSite: "lax", path: "/", maxAge: 300, });
-            const params = new URLSearchParams({ client_id: env.CLIENT_ID!, redirect_uri: `${env.DISCORD_REDIRECT!}/api/auth/discord/redirect`, response_type: "code", scope: "identify guilds", state: state });
+            const params = new URLSearchParams({ client_id: process.env.CLIENT_ID!, redirect_uri: `${process.env.DISCORD_REDIRECT!}/api/auth/discord/redirect`, response_type: "code", scope: "identify guilds", state: state });
             return new Response(null, { status: StatusCodes.MOVED_TEMPORARILY, headers: { Location: `${OAuth2Routes.authorizationURL}?${params}` } });
         },
         "/api/auth/discord/redirect": async (req) => {
@@ -1090,11 +1090,11 @@ serve({
                 headers: { "Content-Type": "application/x-www-form-urlencoded" },
                 passThroughBody: true,
                 body: new URLSearchParams({
-                    client_id: env.CLIENT_ID!,
-                    client_secret: env.DISCORD_SECRET!,
+                    client_id: process.env.CLIENT_ID!,
+                    client_secret: process.env.DISCORD_SECRET!,
                     grant_type: "authorization_code",
                     code: code!,
-                    redirect_uri: `${env.DISCORD_REDIRECT!}/api/auth/discord/redirect`,
+                    redirect_uri: `${process.env.DISCORD_REDIRECT!}/api/auth/discord/redirect`,
                 })
             }) as RESTPostOAuth2AccessTokenResult;
             const [discordGuilds, discordUser] = await Promise.all([
@@ -1224,7 +1224,7 @@ serve({
                     const revoke = await fetch('https://id.twitch.tv/oauth2/revoke', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: new URLSearchParams({ client_id: env.TWITCH_ID!, token: twitch.twitchaccess }),
+                        body: new URLSearchParams({ client_id: process.env.TWITCH_ID!, token: twitch.twitchaccess }),
                     });
                     if (!revoke.ok) return Response.json({ error: 'Twitch could not revoke the connection' }, { status: StatusCodes.BAD_GATEWAY, headers: corsHeaders });
                 }
@@ -1289,7 +1289,7 @@ serve({
             const rawBody = await req.text();
             const data = new TextEncoder().encode(req.headers.get('X-Signature-Timestamp') + rawBody);
             const signature = new Uint8Array(Buffer.from(req.headers.get('x-signature-ed25519')!, 'hex'));
-            const publickey = new Uint8Array(Buffer.from(`${env.DISCORD_PKEY}`, 'hex'));
+            const publickey = new Uint8Array(Buffer.from(`${process.env.DISCORD_PKEY}`, 'hex'));
             if (!ed25519.verify(signature, data, publickey)) return new Response('Unauthorized', { status: StatusCodes.UNAUTHORIZED });
             const body: APIInteraction = JSON.parse(rawBody);
             if (body.type == InteractionType.Ping) return Response.json({ type: InteractionResponseType.Pong });
