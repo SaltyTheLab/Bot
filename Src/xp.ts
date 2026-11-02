@@ -1,7 +1,7 @@
 import { type Document, type Filter } from 'mongodb';
 import { guildconfigs, usersCollection } from './Database';
 
-export async function awardXp(filter: Filter<Document>, guildId: string): Promise<{ level: number; rank: number } | null> {
+export default async function awardXp(filter: Filter<Document>, guildId: string): Promise<{ level: number; rank: number } | null> {
     const config = await guildconfigs.findOne({guildId: guildId},
         { projection: { baseMultiplier: 1, exponent: 1, flatOffset: 1, roundToNearest: 1 } },
     ) as { baseMultiplier: number; exponent: number; flatOffset: number; roundToNearest: number } | null;

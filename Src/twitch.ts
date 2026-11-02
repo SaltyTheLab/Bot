@@ -3,7 +3,7 @@ import { ChatClient } from '@twurple/chat';
 import { RefreshingAuthProvider } from '@twurple/auth';
 import { EventSubWsListener } from '@twurple/eventsub-ws';
 import { twitchconfig, usersCollection } from './Database';
-import { awardXp } from './xp';
+import awardXp from './xp';
 
 const authConfig = { clientId: process.env.TWITCH_ID!, clientSecret: process.env.TWITCH_SECRET!, redirectUri: `${process.env.DISCORD_REDIRECT!}/api/auth/twitch/redirect` };
 const authProvider = new RefreshingAuthProvider(authConfig);
