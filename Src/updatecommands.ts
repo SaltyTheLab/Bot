@@ -1,224 +1,215 @@
-import { REST } from 'discord.js'
-import { ApplicationCommandOptionType, ApplicationCommandType, InteractionContextType, PermissionFlagsBits, Routes, type RESTPostAPIChatInputApplicationCommandsJSONBody } from 'discord-api-types/v10';
+import { REST, InteractionContextType, PermissionFlagsBits, Routes, SlashCommandBuilder, SlashCommandStringOption, SlashCommandSubcommandBuilder, SlashCommandUserOption, SlashCommandRoleOption, type RESTPostAPIChatInputApplicationCommandsJSONBody, SlashCommandIntegerOption } from 'discord.js'
 const commands: RESTPostAPIChatInputApplicationCommandsJSONBody[] = [
-    {
-        name: 'appeal',
-        description: 'appeal a ban',
-        contexts: [InteractionContextType.Guild], // Instead of [0]
-        type: ApplicationCommandType.ChatInput // Instead of 1
-    },
-    {
-        name: 'applications',
-        description: 'Open/close applications',
-        contexts: [InteractionContextType.Guild],
-        default_member_permissions: String(PermissionFlagsBits.Administrator),
-        options: [{ name: 'decision', description: 'open or close apps', type: ApplicationCommandOptionType.String, choices: [{ name: 'open', value: 'open' }, { name: 'close', value: 'close' }] }
-        ]
-    },
-    {
-        name: 'apply',
-        description: 'Apply to be on the mod team',
-        type: ApplicationCommandType.ChatInput
-    },
-    {
-        name: 'blacklist',
-        description: 'edit/show a users blacklist',
-        contexts: [InteractionContextType.Guild],
-        default_member_permissions: String(PermissionFlagsBits.ModerateMembers),
-        options: [
-            {
-                name: 'modify',
-                description: 'modify a user\'s blacklist',
-                type: ApplicationCommandOptionType.Subcommand,
-                options: [{
-                    name: 'action', description: 'the action', required: true, type: ApplicationCommandOptionType.String,
-                    choices: [
-                        { name: 'add', value: 'add' },
-                        { name: 'remove', value: 'remove' }]
-                },
-                    { name: 'target', description: 'User', required: true, type: ApplicationCommandOptionType.User },
-                    { name: 'role', description: 'role', required: true, type: ApplicationCommandOptionType.Role }
-                ]
-            },
-            {
-                name: 'show',
-                description: 'show blacklist',
-                type: ApplicationCommandOptionType.Subcommand,
-                options: [
-                    { name: 'target', description: 'user to show', required: true, type: ApplicationCommandOptionType.User }
-                ]
-            },
-        ]
-    },
-    {
-        name: 'dnd',
-        description: 'Roll DND dice',
-        contexts: [InteractionContextType.Guild],
-        options: [{
-            type: ApplicationCommandOptionType.String, required: true, name: 'sides', description: 'number of sides',
-            choices: [
-                { name: '4', value: '4' },
-                { name: '6', value: '6' },
-                { name: '8', value: '8' },
-                { name: '10', value: '10' },
-                { name: '12', value: '12' },
-                { name: '20', value: '20' },
-                { name: '100', value: '100' }
-            ]
-        }]
-    },
-    {
-        name: 'games',
-        description: 'Play a game',
-        type: ApplicationCommandType.ChatInput,
-        contexts: [InteractionContextType.Guild],
-        options: [
-            {
-                name: 'tictactoe',
-                description: 'Play Tictactoe',
-                type: ApplicationCommandOptionType.Subcommand,
-                options: [{ name: 'opponent', description: 'Your Opponent', required: true, type: ApplicationCommandOptionType.User }]
-            },
-            {
-                name: 'rps',
-                description: 'Play Rock, Paper, Scissors',
-                type: ApplicationCommandOptionType.Subcommand,
-                options: [{
-                    name: 'choice',
-                    description: 'Your move',
-                    type: ApplicationCommandOptionType.String,
-                    required: true,
-                    choices: [
-                        { name: 'Rock', value: 'rock' },
-                        { name: 'Paper', value: 'paper' },
-                        { name: 'Scissors', value: 'scissors' }
-                    ]
-                }]
-            },
-            { name: 'logos', description: 'Play the Logo Game', type: ApplicationCommandOptionType.Subcommand },
-            {
-                name: 'bet',
-                description: 'bet coins',
-                type: ApplicationCommandOptionType.Subcommand,
-                options: [{ name: 'amount', description: 'The amount', required: true, type: ApplicationCommandOptionType.Integer }]
-            },
-            { name: 'highlow', description: 'Guess a number between 1 and 100', type: ApplicationCommandOptionType.Subcommand }
-        ]
-    },
-    { name: 'leaderboard', type: ApplicationCommandType.ChatInput, description: 'Show the top ten users', contexts: [InteractionContextType.Guild] },
-    {
-        name: 'member',
-        description: 'Warn/Mute/Ban/kick/unwarn/unmute a user',
-        default_member_permissions: String(PermissionFlagsBits.ModerateMembers),
-        contexts: [InteractionContextType.Guild],
-        options: [
-            {
-                name: 'create', description: 'Create a missing database record', type: ApplicationCommandOptionType.Subcommand,
-                options: [{ name: 'target', description: 'The member', required: true, type: ApplicationCommandOptionType.User }],
-            },
-            {
-                name: 'warn', description: 'Warn a user', type: ApplicationCommandOptionType.Subcommand,
-                options: [
-                    { name: 'target', description: 'The user', required: true, type: ApplicationCommandOptionType.User },
-                    { name: 'reason', description: 'The reason', required: true, type: ApplicationCommandOptionType.String }
-                ]
-            },
-            {
-                name: 'mute', description: 'Mute a user', type: ApplicationCommandOptionType.Subcommand,
-                options: [
-                    { name: 'target', description: 'The user', required: true, type: ApplicationCommandOptionType.User },
-                    { name: 'reason', description: 'Reason', required: true, type: ApplicationCommandOptionType.String },
-                    { name: 'duration', description: 'Duration', required: true, type: ApplicationCommandOptionType.Integer },
-                    {
-                        name: 'unit', description: 'Unit', required: true, type: ApplicationCommandOptionType.String,
-                        choices: [
-                            { name: 'Minute', value: 'min' },
-                            { name: 'Hour', value: 'hour' },
-                            { name: 'Day', value: 'day' }
-                        ]
-                    }
-                ]
-            },
-            {
-                name: 'ban', description: 'Ban a user', type: ApplicationCommandOptionType.Subcommand,
-                options: [
-                    { name: 'target', description: 'The user', required: true, type: ApplicationCommandOptionType.User },
-                    { name: 'reason', description: 'Reason', required: true, type: ApplicationCommandOptionType.String }
-                ]
-            },
-            {
-                name: 'kick', description: 'Kick a user', type: ApplicationCommandOptionType.Subcommand,
-                options: [
-                    { name: 'target', description: 'The user', required: true, type: ApplicationCommandOptionType.User },
-                    { name: 'reason', description: 'Reason', required: true, type: ApplicationCommandOptionType.String }
-                ]
-            },
-            {
-                name: 'unwarn', description: "Removes a user's warn", type: ApplicationCommandOptionType.Subcommand,
-                options: [{ name: 'target', description: 'The User', required: true, type: ApplicationCommandOptionType.User }]
-            },
-            {
-                name: 'unmute',
-                description: 'Unmute a user',
-                type: ApplicationCommandOptionType.Subcommand,
-                options: [{ name: 'target', description: 'The User', required: true, type: ApplicationCommandOptionType.User }]
-            }
-        ]
-    },
-    {
-        name: 'modlogs', description: 'View a user\'s moderation history.', default_member_permissions: String(PermissionFlagsBits.ModerateMembers),
-        contexts: [InteractionContextType.Guild],
-        options: [{ name: 'target', description: 'The user to view', required: true, type: ApplicationCommandOptionType.User }]
-    },
-    {
-        name: 'note', description: "add/show a user's notes", default_member_permissions: String(PermissionFlagsBits.ModerateMembers), 
-        contexts: [InteractionContextType.Guild],
-        options: [
-            {
-                name: 'show',
-                description: 'Display a users notes',
-                type: ApplicationCommandOptionType.Subcommand,
-                options: [{ name: 'target', description: 'target User', required: true, type: ApplicationCommandOptionType.User }]
-            },
-            {
-                name: 'add',
-                description: 'Add note to a user',
-                type: ApplicationCommandOptionType.Subcommand,
-                options: [
-                    { name: 'target', description: 'The User', required: true, type: ApplicationCommandOptionType.User },
-                    { name: 'note', description: 'note to add', required: true, type: ApplicationCommandOptionType.String }
-                ]
-            }
-        ]
-    },
-    {
-        name: 'rank', description: 'view a users xp and Level', contexts: [InteractionContextType.Guild], type: ApplicationCommandType.ChatInput,
-        options: [{ name: 'target', description: 'The Member', type: ApplicationCommandOptionType.User }]
-    },
-    {
-        name: 'link', type: ApplicationCommandType.ChatInput, description: 'Link your twitch', contexts: [InteractionContextType.Guild],
-        options: [{ name: 'channel', description: 'Twitch channel to link', type: ApplicationCommandOptionType.String }]
-    },
-    {
-        name: 'admin', description: 'all admin commands', contexts: [InteractionContextType.Guild],
-        default_member_permissions: String(PermissionFlagsBits.Administrator),
-        options: [
-            {
-                name: 'clear', type: ApplicationCommandOptionType.Subcommand, description: 'clear a number of messages',
-                options: [{
-                    name: 'count',
-                    type: ApplicationCommandOptionType.Integer,
-                    description: 'number of messages to clear',
-                    required: true,
-                    min_value: 2,
-                    max_value: 100
-
-                }]
-            }
-
-        ]
-    }
+    new SlashCommandBuilder()
+        .setName('appeal')
+        .setDescription('appeal a ban')
+        .setContexts([InteractionContextType.Guild]).toJSON(),
+    new SlashCommandBuilder()
+        .setName('applications')
+        .setDescription('Open/close applications')
+        .setContexts([InteractionContextType.Guild])
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        .addStringOption(new SlashCommandStringOption()
+            .setName('decision')
+            .setDescription('open or close apps')
+            .setChoices([{ name: 'open', value: 'open' }, { name: 'close', value: 'close' }])
+        ).toJSON(),
+    new SlashCommandBuilder()
+        .setName('apply')
+        .setContexts([InteractionContextType.Guild])
+        .setDescription('Apply to be on the mod team'
+        ).toJSON(),
+    new SlashCommandBuilder()
+        .setName('blacklist')
+        .setDescription('edit/show a users blacklist')
+        .setContexts([InteractionContextType.Guild])
+        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+        .addSubcommand(
+            new SlashCommandSubcommandBuilder()
+                .setName('modify')
+                .setDescription('modify a user\'s blacklist')
+                .addStringOption(new SlashCommandStringOption().setName('action').setDescription('the action').setRequired(true)
+                    .addChoices([{ name: 'add', value: 'add' }, { name: 'remove', value: 'remove' }])
+                )
+                .addUserOption(new SlashCommandUserOption().setName('target').setDescription('User').setRequired(true))
+                .addRoleOption(new SlashCommandRoleOption().setName('role').setDescription('Role').setRequired(true))
+        )
+        .addSubcommand(
+            new SlashCommandSubcommandBuilder().setName('show').setDescription('show blacklist').addUserOption(new SlashCommandUserOption().setName('target').setDescription('User to Show').setRequired(true))
+        ).toJSON(),
+    new SlashCommandBuilder()
+        .setName('dnd')
+        .setDescription('Roll DND dice')
+        .setContexts([InteractionContextType.Guild])
+        .addStringOption(
+            new SlashCommandStringOption().setName('sides').setRequired(true).setDescription('number of sides')
+                .setChoices([
+                    { name: '4', value: '4' },
+                    { name: '6', value: '6' },
+                    { name: '8', value: '8' },
+                    { name: '10', value: '10' },
+                    { name: '12', value: '12' },
+                    { name: '20', value: '20' },
+                    { name: '100', value: '100' }
+                ])
+        )
+        .toJSON(),
+    new SlashCommandBuilder()
+        .setName('games')
+        .setDescription('Play a game')
+        .setContexts([InteractionContextType.Guild])
+        .addSubcommand(
+            new SlashCommandSubcommandBuilder()
+                .setName('tictactoe')
+                .setDescription('Play Tictactoe')
+                .addUserOption(new SlashCommandUserOption().setName('opponent').setDescription('Your Opponent').setRequired(true))
+        )
+        .addSubcommand(
+            new SlashCommandSubcommandBuilder()
+                .setName('rps')
+                .setDescription('Play Rock, Paper, Scissors')
+                .addStringOption(
+                    new SlashCommandStringOption().setName('choice').setDescription('Your move').setRequired(true).setChoices([{ name: 'Rock', value: 'rock' }, { name: 'Paper', value: 'paper' }, { name: 'Scissors', value: 'scissors' }])
+                )
+        )
+        .addSubcommand(new SlashCommandSubcommandBuilder().setName('logos').setDescription('Play the logo game'))
+        .addSubcommand(
+            new SlashCommandSubcommandBuilder()
+                .setName('bet')
+                .setDescription('Bet coins')
+                .addIntegerOption(new SlashCommandIntegerOption().setName('amount').setDescription('The amount').setRequired(true))
+        )
+        .addSubcommand(new SlashCommandSubcommandBuilder().setName('highlow').setDescription('Guess a number between 1 and 100'))
+        .toJSON(),
+    new SlashCommandBuilder()
+        .setName('leaderboard')
+        .setDescription('Show the top ten users')
+        .setContexts([InteractionContextType.Guild])
+        .toJSON(),
+    new SlashCommandBuilder()
+        .setName('member')
+        .setDescription('Warn/Mute/Ban/kick/unwarn/unmute a user')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+        .setContexts(InteractionContextType.Guild)
+        .addSubcommand(
+            new SlashCommandSubcommandBuilder()
+                .setName('create')
+                .setDescription('Create a missing database record')
+                .addUserOption(new SlashCommandUserOption().setName('target').setDescription('The member').setRequired(true))
+        )
+        .addSubcommand(
+            new SlashCommandSubcommandBuilder()
+                .setName('warn')
+                .setDescription('Warn a user')
+                .addUserOption(new SlashCommandUserOption().setName('target').setDescription('The user').setRequired(true))
+                .addStringOption(new SlashCommandStringOption().setName('reason').setDescription('The reason').setRequired(true))
+        )
+        .addSubcommand(
+            new SlashCommandSubcommandBuilder()
+                .setName('mute')
+                .setDescription('Mute a user')
+                .addUserOption(new SlashCommandUserOption().setName('target').setDescription('The user').setRequired(true))
+                .addStringOption(new SlashCommandStringOption().setName('reason').setDescription('Reason').setRequired(true))
+                .addIntegerOption(new SlashCommandIntegerOption().setName('duration').setDescription('Unit').setRequired(true))
+                .addStringOption(
+                    new SlashCommandStringOption().setName('unit').setDescription('Unit').setRequired(true).setChoices([{ name: 'Minute', value: 'min' }, { name: 'Hour', value: 'hour' }, { name: 'Day', value: 'day' }])
+                )
+        )
+        .addSubcommand(
+            new SlashCommandSubcommandBuilder()
+                .setName('ban')
+                .setDescription('Ban a user')
+                .addUserOption(new SlashCommandUserOption().setName('target').setDescription('The user').setRequired(true))
+                .addStringOption(new SlashCommandStringOption().setName('reason').setDescription('Reason').setRequired(true))
+        )
+        .addSubcommand(
+            new SlashCommandSubcommandBuilder()
+                .setName('kick')
+                .setDescription('Kick a user')
+                .addUserOption(new SlashCommandUserOption().setName('target').setDescription('The user').setRequired(true))
+                .addStringOption(new SlashCommandStringOption().setName('reason').setDescription('Reason').setRequired(true))
+        )
+        .addSubcommand(
+            new SlashCommandSubcommandBuilder()
+                .setName('unwarn')
+                .setDescription("Removes a user's warn")
+                .addUserOption(new SlashCommandUserOption().setName('target').setDescription('The User').setRequired(true))
+        )
+        .addSubcommand(
+            new SlashCommandSubcommandBuilder()
+                .setName('unmute')
+                .setDescription('Unmute a user')
+                .addUserOption(
+                    new SlashCommandUserOption()
+                        .setName('target')
+                        .setDescription('The User')
+                        .setRequired(true)
+                )
+        )
+        .toJSON(),
+    new SlashCommandBuilder()
+        .setName('modlogs')
+        .setDescription('View a user\'s moderation history.')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+        .setContexts(InteractionContextType.Guild)
+        .addUserOption(new SlashCommandUserOption().setName('target').setDescription('The user to view').setRequired(true))
+        .toJSON(),
+    new SlashCommandBuilder()
+        .setName('note')
+        .setDescription("add/show a user's notes")
+        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+        .setContexts(InteractionContextType.Guild)
+        .addSubcommand(
+            new SlashCommandSubcommandBuilder()
+                .setName('show')
+                .setDescription('Display a users notes')
+                .addUserOption(new SlashCommandUserOption().setName('target').setDescription('Target User').setRequired(true))
+        )
+        .addSubcommand(
+            new SlashCommandSubcommandBuilder()
+                .setName('add')
+                .setDescription('Add note to a user')
+                .addUserOption(new SlashCommandUserOption().setName('target').setDescription('The User').setRequired(true))
+                .addStringOption(new SlashCommandStringOption().setName('note').setDescription('note to add').setRequired(true))
+        )
+        .toJSON(),
+    new SlashCommandBuilder()
+        .setName('rank')
+        .setDescription('view a users xp and Level')
+        .setContexts(InteractionContextType.Guild)
+        .addUserOption(new SlashCommandUserOption().setName('target').setDescription('The Member'))
+        .toJSON(),
+    new SlashCommandBuilder()
+        .setName('link')
+        .setDescription('Link your twitch')
+        .setContexts(InteractionContextType.Guild)
+        .addStringOption(
+            new SlashCommandStringOption()
+                .setName('channel')
+                .setDescription('Twitch channel to link')
+                .setRequired(true)
+        )
+        .toJSON(),
+    new SlashCommandBuilder()
+        .setName('admin')
+        .setDescription('all admin commands')
+        .setContexts(InteractionContextType.Guild)
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        .addSubcommand(
+            new SlashCommandSubcommandBuilder()
+                .setName('clear')
+                .setDescription('clear a number of messages')
+                .addIntegerOption(
+                    new SlashCommandIntegerOption()
+                        .setName('count')
+                        .setDescription('number of messages to clear')
+                        .setRequired(true)
+                        .setMinValue(2)
+                        .setMaxValue(100)
+                )
+        )
+        .toJSON(),
 ];
 const rest = new REST().setToken(`${Bun.env.TOKEN}`)
 async function updatecommands() { console.log(await rest.put(Routes.applicationCommands('1420927654701301951'), { body: commands })); }
-updatecommands()
+await updatecommands()
