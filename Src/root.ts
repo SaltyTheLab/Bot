@@ -1,15 +1,17 @@
-import { cron, sleep, file } from 'bun'
-import { usersCollection, guildconfigs, type DbInvite, logos } from './Database';
+import { cron, sleep, file, Image } from 'bun'
+import { usersCollection, guildconfigs, type DbInvite } from './Database';
 import statusMap from './statusMap';
 import { ObjectId, type Document, type WithId } from 'mongodb';
-import { ComponentType, ButtonStyle, MessageType, ActivityType, PresenceUpdateStatus, Client, Options, Role, Routes, Partials, GatewayIntentBits, TextChannel, MessageFlags, subtext, GuildMember, GuildMemberFlags, Invite, SectionBuilder, TextDisplayBuilder, ContainerBuilder, ButtonBuilder, ThumbnailBuilder, type APIMessage, type APIContainerComponent, type Interaction, Collection, InteractionResponseType, bold, type CacheType, quote, ChatInputCommandInteraction, EmbedBuilder, type APIDMChannel, InteractionResponse, PermissionFlagsBits, MediaGalleryBuilder, ActionRowBuilder, ModalBuilder, User, type APIUser, SeparatorBuilder, SeparatorSpacingSize, ActionRow, ButtonComponent } from 'discord.js'
+import { ComponentType, ButtonStyle, MessageType, ActivityType, PresenceUpdateStatus, Client, Options, Role, Routes, Partials, GatewayIntentBits, TextChannel, MessageFlags, subtext, GuildMember, GuildMemberFlags, Invite, SectionBuilder, TextDisplayBuilder, ContainerBuilder, ButtonBuilder, ThumbnailBuilder, Collection, bold, quote, ChatInputCommandInteraction, EmbedBuilder, InteractionResponse, PermissionFlagsBits, MediaGalleryBuilder, ActionRowBuilder, ModalBuilder, User, SeparatorBuilder, SeparatorSpacingSize, ButtonComponent, AttachmentBuilder } from 'discord.js'
 import { createHash } from 'crypto'
-import { awardXp } from './xp';
+import awardXp from './xp';
 import { apiClient, syncTwitchConfigs } from './twitch';
 import { Resvg } from '@resvg/resvg-js';
 import { buildApplicationHub, PART_CONFIG } from './applicationConfig';
+import { readdir } from 'fs/promises';
 process.on("uncaughtException", (err: any) => { console.error('[root] Uncaught exception', err) })
 process.on("unhandledRejection", (reason: any) => { console.error('[root] Unhandled rejection', reason) });
+
 const client = new Client({
     intents: GatewayIntentBits.Guilds | GatewayIntentBits.GuildMembers | GatewayIntentBits.GuildModeration | GatewayIntentBits.GuildExpressions | GatewayIntentBits.GuildIntegrations | GatewayIntentBits.GuildWebhooks | GatewayIntentBits.GuildVoiceStates | GatewayIntentBits.GuildMessages | GatewayIntentBits.GuildMessageReactions | GatewayIntentBits.MessageContent,
     partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.User],
@@ -18,25 +20,15 @@ const client = new Client({
     sweepers: { ...Options.DefaultSweeperSettings }
 });
 const ephemeral = (content: string) => { return new EmbedBuilder({ description: content }) };
-const v2 = (...parts: { toJSON(): any }[]) => ({ flags: MessageFlags.IsComponentsV2 as const, components: parts.map(p => p.toJSON()) });
 const LOG_COLORS: Record<string, number> = { Warn: 0xffcc00, Mute: 0xff4444, Ban: 0xd10000, Kick: 0x838383 };
-function winProbability(choice: string, start: number, min: number, max: number): number {
-    const count = choice === 'higher' ? (max - start) : (start - min);
-    return Math.max(count, 1) / (max - min);
-}
 const fmtDate = (ts: number) => new Date(ts).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Chicago' });
-const avatarOf = (u: { id: string; avatar: string | null }) =>
-    u.avatar
-        ? client.rest.cdn.avatar(u.id, u.avatar)
-        : client.rest.cdn.defaultAvatar(Number((BigInt(u.id) >> 22n) % 6n));
 const notice = (description: string, color?: number) => new EmbedBuilder({ color: color ?? undefined, description: description }).toJSON();
-async function runPunishment(interaction: ChatInputCommandInteraction<CacheType>, guildConfig: Document): Promise<void> {
-    const { guildId, channelId, options, } = interaction
+async function runPunishment(interaction: ChatInputCommandInteraction, guildConfig: Document): Promise<void> {
+    const { guildId, channelId, options, guild } = interaction
     const targetUser = options.getUser('target', true);
     const reason = options.getString('reason', true);
     const subcommand = options.getSubcommand();
-    await interaction.deferReply();
-    const { Stages, guildname, icon, modChannels } = guildConfig;
+    const { Stages, modChannels } = guildConfig;
     const punishmentDoc = await usersCollection.findOne({ userId: targetUser.id, guildId }, { projection: { punishments: 1 } });
     const punishments: any[] = punishmentDoc?.punishments ?? [];
     const activeWarns = punishments.filter((p: any) => p.active === 1).reduce((acc: number, cur: any) => acc + (cur.weight || 1), 0);
@@ -55,50 +47,29 @@ async function runPunishment(interaction: ChatInputCommandInteraction<CacheType>
     const finalMessage = await interaction.editReply({
         embeds: [new EmbedBuilder({
             color: statusMap[warnType]!.color,
-            author: { name: `${targetUser.username} ${warnType === 'Mute' ? `was issued a ${durationStr}` : statusMap[warnType]!.cmd}`, iconURL: targetUser.displayAvatarURL() }
+            author: { name: `${targetUser.username} ${warnType === 'Mute' ? `was issued a ${durationStr}` : statusMap[warnType]!.cmd}`, iconURL: targetUser.displayAvatarURL() ?? targetUser.defaultAvatarURL }
         })]
     });
     const object = new ObjectId();
-    const newPunishment = { _id: object, userId: targetUser.id, moderatorId: interaction.user.id, reason, duration: durationMs, timestamp: Date.now(), active: 1, weight: 1, type: warnType, guildId, channel: channelId, refrence: `https://discord.com/channels/${guildId}/${channelId}/${finalMessage.id}`, warns: activeWarns };
+    const newPunishment = { _id: object, userId: targetUser.id, moderatorId: interaction.user.id, reason, duration: durationMs, timestamp: Date.now(), active: 1, weight: 1, type: warnType, guildId, channel: channelId, refrence: `https://discord.com/channels/${guildId}/${channelId}/${finalMessage.id}`, warns: isFinite(activeWarns) ? activeWarns : 1 };
     await usersCollection.updateOne({ userId: targetUser.id, guildId }, { $push: { punishments: newPunishment as any } });
     const caseHistory = [...punishments, newPunishment].filter((r: any) => warnType === 'Ban' ? r.type === 'Ban' : r.type !== 'Kick').slice(0, 10).map((p: any, idx: number) => p.refrence ? `[Case ${idx + 1}](${p.refrence})` : null).filter(Boolean);
     let dm = true;
-    const dmchannel = await client.rest.post(Routes.userChannels(), { body: { recipient_id: targetUser.id } }) as APIDMChannel;
-    const dmResult = await client.rest.post(Routes.channelMessages(dmchannel.id), {
-        body: {
-            flags: MessageFlags.IsComponentsV2,
-            components: [{
-                type: ComponentType.Container,
-                accent_color: statusMap[warnType]!.color,
-                components: [{
-                    type: ComponentType.Section,
-                    accessory: {
-                        type: ComponentType.Thumbnail,
-                        media: { url: `${icon}` }
-                    },
-                    components: [
-                        {
-                            type: ComponentType.TextDisplay,
-                            content: `<@${targetUser.id}>, ${statusMap[warnType]!.dm} ${warnType === 'Ban' ? ` [${guildname}](https://discord.com/channels/${guildId}). To appeal this decision, please join our dedicated appeal server using the button below.` : warnType === 'Mute' ? `\`${durationStr}\` in ${guildname}` : `in ${guildname}`}`
-                        },
-                        {
-                            type: ComponentType.TextDisplay,
-                            content: `Reason: \`${reason}\` ${['Ban', 'Kick'].includes(warnType) ? '' : `\nPunishment: ${durationStr ? `\`1 warn,${durationStr}\`` : `\`1 warn\``}`}\nActive Warnings: \`${activeWarns + 1}\`\nWarn expires: <t:${Math.floor((Date.now() + 86400000) / 1000)}:F>`
-                        }]
-                },
-                ...(warnType === 'Ban' ? [{
-                    type: ComponentType.ActionRow,
-                    components: [{
-                        type: ComponentType.Button,
-                        style: ButtonStyle.Link,
-                        label: "Appeal",
-                        url: 'https://discord.gg/qMjjyXyYbr'
-                    }]
-                }] : [])]
-            }]
-
-        }
-    })
+    const container = new ContainerBuilder()
+        .setAccentColor(statusMap[warnType]!.color)
+        .addSectionComponents(
+            new SectionBuilder()
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder({ content: `<@${targetUser.id}>, ${statusMap[warnType]!.dm} ${warnType === 'Ban' ? ` [${guild?.name}](https://discord.com/channels/${guildId}). To appeal this decision, please join our dedicated appeal server using the button below.` : warnType === 'Mute' ? `\`${durationStr}\` in ${guild?.name}` : `in ${guild?.name}`}` }),
+                    new TextDisplayBuilder({ content: `Reason: \`${reason}\` ${['Ban', 'Kick'].includes(warnType) ? '' : `\nPunishment: ${durationStr ? `\`1 warn,${durationStr}\`` : `\`1 warn\``}`}\nActive Warnings: \`${activeWarns + 1}\`\nWarn expires: <t:${Math.floor((Date.now() + 86400000) / 1000)}:F>` }))
+                .setThumbnailAccessory({ type: ComponentType.Thumbnail, media: { url: `${interaction.guild?.iconURL()}` }, })
+        )
+    warnType == 'Ban' ? container.addActionRowComponents(
+        new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder({ style: ButtonStyle.Link, label: "Appeal", url: 'https://discord.gg/qMjjyXyYbr' }))) : null
+    const dmResult = targetUser.send({
+        flags: MessageFlags.IsComponentsV2,
+        components: [container]
+    }) 
     if (!dmResult) dm = false
     switch (warnType) {
         case 'Ban':
@@ -112,24 +83,21 @@ async function runPunishment(interaction: ChatInputCommandInteraction<CacheType>
             await client.rest.delete(Routes.guildMember(guildId!, targetUser.id), { reason: `Kick Command: ${reason}` });
             break;
     }
+    const logcontainer = new ContainerBuilder()
+        .setAccentColor(statusMap[warnType]!.color)
+        .addSectionComponents(
+            new SectionBuilder()
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder()
+                        .setContent(`${interaction.user.username} ${statusMap[warnType]!.log}\n\nuser:<@${targetUser.id}>\nChannel: <#${channelId}>\nHistory: ${caseHistory.join(' | ') || 'none'}\nReason: \`${reason}\`\n${['Ban', 'Kick'].includes(warnType) ? '' : `Punishment: ${durationStr ? `\`1 warn,${durationStr}\`` : '`1 warn`'}`}\nNext Punishment: \`${Stages[Math.min(activeWarns, Stages.length - 1)].label}\`\n\n${subtext(dm ? 'User DMed ✅' : 'User DMed 🚫')}`))
+                .setThumbnailAccessory({
+                    type: ComponentType.Thumbnail,
+                    media: { url: targetUser.displayAvatarURL() }
+                }))
     await client.rest.post(Routes.channelMessages(warnType === 'Ban' ? modChannels.banlogChannel : modChannels.mutelogChannel), {
         body: {
             flags: MessageFlags.IsComponentsV2,
-            components: [{
-                type: ComponentType.Container,
-                accent_color: statusMap[warnType]!.color,
-                components: [{
-                    type: ComponentType.Section,
-                    accessory: {
-                        type: ComponentType.Thumbnail,
-                        media: { url: targetUser.displayAvatarURL() }
-                    },
-                    components: [{
-                        type: ComponentType.TextDisplay,
-                        content: `${interaction.user.username} ${statusMap[warnType]!.log}\n\nuser:<@${targetUser.id}>\nChannel: <#${channelId}>\nHistory: ${caseHistory.join(' | ') || 'none'}\nReason: \`${reason}\`\n${['Ban', 'Kick'].includes(warnType) ? '' : `Punishment: ${durationStr ? `\`1 warn,${durationStr}\`` : '`1 warn`'}`}\nNext Punishment: \`${Stages[Math.min(activeWarns, Stages.length - 1)].label}\`\n\n${subtext(dm ? 'User DMed ✅' : 'User DMed 🚫')}`
-                    }]
-                }]
-            }]
+            components: [logcontainer]
         }
     })
     if (['Warn', 'Mute'].includes(warnType)) {
@@ -177,7 +145,7 @@ function shuffle<T>(array: T[]): T[] {
     }
     return array;
 }
-function buildNoteView(notes: any[], index: number, user: User, mod: APIUser, opener: string, disabled = false) {
+function buildNoteView(notes: any[], index: number, user: User, mod: User, opener: string, disabled = false) {
     const n = notes[index];
     return new ContainerBuilder({ accent_color: 0xdddddd, })
         .addSectionComponents(new SectionBuilder({ components: [{ type: ComponentType.TextDisplay, content: `<@${user.id}> notes | \`${index + 1} of ${notes.length}\`\n${String(n.note).split('\n').map(l => `> ${l}`).join('\n')}\n\n${subtext(`<@${mod.id}> | ${fmtDate(n.timestamp)}`)}` }], accessory: { type: ComponentType.Thumbnail, media: { url: user.avatarURL()! } } }))
@@ -187,8 +155,7 @@ function buildNoteView(notes: any[], index: number, user: User, mod: APIUser, op
             new ButtonBuilder({ custom_id: `note-del-${user.id}-${index}-${opener}-${n._id}`, label: '🗑️ delete', style: ButtonStyle.Secondary, disabled: disabled })
         ));
 }
-
-function buildModlogView(logs: any[], index: number, user: User, mod: APIUser, opener: string, isAdmin: boolean, disabled = false) {
+function buildModlogView(logs: any[], index: number, user: User, mod: User, opener: string, isAdmin: boolean, disabled = false) {
     const p = logs[index];
     const mins = Math.round(p.duration / 60000);
     const hours = Math.floor(mins / 60);
@@ -201,10 +168,10 @@ function buildModlogView(logs: any[], index: number, user: User, mod: APIUser, o
             { name: '**Active:**', value: `\`${p.active == 1 ? 'true' : 'false'}\``, inline: true },
             { name: '**Reason:**', value: `\`${p.reason}\`` },
             { name: '**Punishments:**', value: `${p.type == 'Ban' ? '`Ban`' : `\`${p.weight} warn\``}${p.duration ? `,\`${hours > 0 ? `${hours} hour` : `${mins} minute`} Mute\`` : ''}` },
-            { name: '**Warns at Log Time:**', value: `\`${p.warns}\`` },
+            { name: '**Warns at Log Time:**', value: `\`${isFinite(p.warns) ? p.warns : 0}\`` },
             { name: '**Channel:**', value: `<#${p.channel}>\n\n[Event Link](${p.refrence})` },
         )
-        .setFooter({ text: `Staff: ${mod.username} | log ${index + 1} of ${logs.length} | ${fmtDate(p.timestamp)}`, iconURL: avatarOf(mod) });
+        .setFooter({ text: `Staff: ${mod.username} | log ${index + 1} of ${logs.length} | ${fmtDate(p.timestamp)}`, iconURL: mod.avatarURL() ?? mod.defaultAvatarURL });
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder().setCustomId(`modlog-prev-${user.id}-${index}-${opener}`).setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary).setDisabled(disabled || index === 0),
         new ButtonBuilder().setCustomId(`modlog-next-${user.id}-${index}-${opener}`).setLabel('Next ➡️').setStyle(ButtonStyle.Secondary).setDisabled(disabled || index >= logs.length - 1),
@@ -216,40 +183,12 @@ function buildModlogView(logs: any[], index: number, user: User, mod: APIUser, o
 }
 const commands = new Collection<string, (interaction: ChatInputCommandInteraction, guildConfig: WithId<Document>) => Promise<unknown>>();
 const activeCooldowns = new Collection<string, number>();
-function generateButtons(board: string[], p1: string, p2: string, current: string, disabled: boolean) {
-    return [0, 1, 2].map(i =>
-        new ActionRowBuilder<ButtonBuilder>().addComponents(
-            [0, 1, 2].map(j => {
-                const index = i * 3 + j;
-                const cell = board[index]!;
-                return new ButtonBuilder({
-                    custom_id: `ttt-${board.join('')}-${p1}-${p2}-${current}-${index}`,
-                    label: cell === '_' ? '\u200b' : cell,
-                    style: cell === 'X' ? ButtonStyle.Primary : cell === 'O' ? ButtonStyle.Danger : ButtonStyle.Secondary,
-                    disabled: cell !== '_' || disabled
-                })
-            }),
-        ),
-    );
-}
 function rangeForStreak(streak: number, k = 2): { min: number, max: number } {
     const width = Math.max(5, 100 / (1 + k * Math.log(streak + 1)));
     const center = width / 2 + (Math.random() - 0.5) * (100 - width); // range wanders, not glued to center
     let min = Math.ceil(Math.max(1, center - width / 2));
     let max = Math.ceil(Math.min(100, center + width / 2));
     return { min, max };
-}
-function highlowRow(start: number, secret: number, streak: number, pot: number, min: number, max: number) {
-    const row = new ActionRowBuilder<ButtonBuilder>({
-        components: [
-            new ButtonBuilder({ custom_id: `highlow-higher-${start}-${secret}-${streak}-${pot}-${min}-${max}`, label: 'Higher', style: ButtonStyle.Primary }),
-            new ButtonBuilder({ custom_id: `highlow-lower-${start}-${secret}-${streak}-${pot}-${min}-${max}`, label: 'Lower', style: ButtonStyle.Danger })
-        ]
-    })
-    if (pot > 0) row.components.push(
-        new ButtonBuilder({ custom_id: `highlow-cashout-${pot}`, label: `Cash Out (${pot})`, style: ButtonStyle.Success })
-    );
-    return row;
 }
 async function buildBlacklistEmbed(targetUser: User, guild_id: string) {
     const doc = await usersCollection.findOne({ userId: targetUser.id, guildId: guild_id }, { projection: { blacklist: 1 } });
@@ -275,36 +214,46 @@ commands.set('games.rps', async (interaction: ChatInputCommandInteraction) => {
     return await interaction.reply({ embeds: [new EmbedBuilder({ color: 0xffa500, title: result, description: `You chose **${choice!}**.\nOpponent chose **${opp}**.` })] })
 })
 commands.set('games.logos', async (interaction: ChatInputCommandInteraction) => {
-    const { member } = interaction;
-    const { logolist } = await logos.findOne({}) as any;
-    const logo = logolist[Math.floor(Math.random() * logolist.length)];
-    const distractors = shuffle(logolist.filter((l: any) => l.brand !== logo.brand)).slice(0, 3).map((l: any) => l.brand);
-    const comps = shuffle([logo.brand, ...distractors]).map((opt: string) =>
-        new ButtonBuilder({ custom_id: `logos-${opt}-${logo.brand}`, label: opt, style: ButtonStyle.Primary })
+    const { member, user } = interaction;
+    const logolist = await readdir('./images')
+    const brand = logolist[Math.floor(Math.random() * logolist.length)]?.replace('.png', '')!
+    const logo = file(`./images/${brand}.png`)
+    const comps = shuffle([brand, ...shuffle(logolist.filter((l: any) => l.brand !== brand)).slice(0, 3)]).map((opt: string) =>
+        new ButtonBuilder({ custom_id: `logos-${opt.replace('.png', '')}-${brand}`, label: opt.replace('.png', ''), style: ButtonStyle.Primary })
     )
-    const form = new FormData();
-    form.append('files[0]', new Blob([await file(logo.image).arrayBuffer()]), 'logo.png');
-    const container = new ContainerBuilder({
-        accent_color: Math.floor(Math.random() * 16777215),
-        components: [
-            new TextDisplayBuilder({ content: `Guess this logo ${member?.user.username}` }).toJSON(),
-            new MediaGalleryBuilder({ items: [{ media: { url: 'attachment://logo.png' } }] }).toJSON(),
-            new ActionRowBuilder<ButtonBuilder>().addComponents(comps).toJSON()
-        ]
-    })
-    form.append('payload_json', JSON.stringify({ type: 4, data: { flags: MessageFlags.IsComponentsV2, components: [container.toJSON()], attachments: [{ id: 0, filename: 'logo.png' }] } }));
-    return new Response(form);
+    return await interaction.reply({
+        embeds: [new EmbedBuilder()
+            .setAuthor({ name: `Guess this logo ${member?.user.username}`, iconURL: user.avatarURL() ?? user.defaultAvatarURL })
+            .setColor(Math.floor(Math.random() * 16777215))
+        ],
+        files: [new AttachmentBuilder(logo.stream(), { name: 'logo.png' })],
+        components: [new ActionRowBuilder<ButtonBuilder>({ components: comps })]
+    });
 })
 commands.set('games.tictactoe', async (interaction: ChatInputCommandInteraction) => {
     const { member, options } = interaction;
     const opponent = options.getUser('opponent', true)
-    const me = member!.user;
-    if (me.id === opponent.id) { return await interaction.reply({ embeds: [ephemeral("You can't play against yourself.")] }) }
-    const current = Math.random() < 0.5 ? me.id : opponent.id!;
+    if (member!.user.id === opponent.id) { return await interaction.reply({ embeds: [ephemeral("You can't play against yourself.")] }) }
+    const current = Math.random() < 0.5 ? member!.user.id : opponent.id!;
+    const board = Array(9).fill('_')
+    const rows = [0, 1, 2].map(i =>
+        new ActionRowBuilder<ButtonBuilder>().addComponents(
+            [0, 1, 2].map(j => {
+                const index = i * 3 + j;
+                const cell = board[index]!;
+                return new ButtonBuilder({
+                    custom_id: `ttt-${board.join('')}-${member!.user.id}-${opponent.id}-${current}-${index}`,
+                    label: cell === '_' ? '\u200b' : cell,
+                    style: cell === 'X' ? ButtonStyle.Primary : cell === 'O' ? ButtonStyle.Danger : ButtonStyle.Secondary,
+                    disabled: false
+                })
+            }),
+        ),
+    );
     const container = new ContainerBuilder()
         .setAccentColor(0x0000ff)
-        .addTextDisplayComponents(new TextDisplayBuilder({ content: `<@${opponent}>, <@${me}> wants to play tictactoe` }))
-        .addActionRowComponents(...generateButtons(Array(9).fill('_'), me.id, opponent.id!, current, false));
+        .addTextDisplayComponents(new TextDisplayBuilder({ content: `<@${opponent}>, <@${member!.user}> wants to play tictactoe` }))
+        .addActionRowComponents(rows);
     return await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container.toJSON()] })
 });
 commands.set('games.highlow', async (interaction: ChatInputCommandInteraction) => {
@@ -317,13 +266,18 @@ commands.set('games.highlow', async (interaction: ChatInputCommandInteraction) =
         .setTitle('Higher or Lower')
         .setDescription('I am thinking of a number. Do you think my number is higher or lower than the number below?')
         .addFields({ name: 'Current Number:', value: `${start}` });
-    const row = highlowRow(start, secret, 0, 0, min, max)
-    return await interaction.reply({ embeds: [embed.toJSON()], components: [row.toJSON()] })
+    return await interaction.reply({
+        embeds: [embed], components: [new ActionRowBuilder<ButtonBuilder>({
+            components: [
+                new ButtonBuilder({ custom_id: `highlow-higher-${start}-${secret}-${0}-${0}-${min}-${max}`, label: 'Higher', style: ButtonStyle.Primary }),
+                new ButtonBuilder({ custom_id: `highlow-lower-${start}-${secret}-${0}-${0}-${min}-${max}`, label: 'Lower', style: ButtonStyle.Danger })
+            ]
+        })]
+    })
 });
 commands.set('games.bet', async (interaction: ChatInputCommandInteraction) => {
-    const { member, guildId, options } = interaction;
+    const { guildId, options, user } = interaction;
     const amount = options.getInteger('amount', true)
-    const user = member!.user;
     const doc = await usersCollection.findOne({ userId: user.id, guildId: guildId }, { projection: { coins: 1 } });
     const coins: number = doc?.coins ?? 0;
     if (!amount || amount <= 0 || amount > coins) {
@@ -333,18 +287,17 @@ commands.set('games.bet', async (interaction: ChatInputCommandInteraction) => {
     await usersCollection.updateOne({ userId: user.id, guildId: guildId }, { $inc: { coins: win ? Math.ceil(amount * 1.5) : -amount } });
     const embed = new EmbedBuilder()
         .setColor(win ? 0x007a00 : 0x7a0000)
-        .setAuthor({ name: `${user.username} you bet ${amount} and ${win ? 'won' : 'lost'}!`, iconURL: user.iconURL() });
-    return await interaction.reply({ embeds: [embed.toJSON()] })
+        .setAuthor({ name: `${user.username} you bet ${amount} and ${win ? 'won' : 'lost'}!`, iconURL: user.avatarURL() ?? user.defaultAvatarURL });
+    return await interaction.reply({ embeds: [embed] })
 });
-commands.set('appeal', async (interaction: ChatInputCommandInteraction, guildConfig: WithId<Document>) => {
-    const { member, guildId } = interaction;
-    const { guildname } = guildConfig as WithId<Document>;
+commands.set('appeal', async (interaction: ChatInputCommandInteraction) => {
+    const { member, guildId, guild } = interaction;
     const userdata = await usersCollection.find({ userId: member?.user.id }).toArray();
     const seenGuilds = new Map<string, string>();
     for (const data of userdata) {
         for (const p of data.punishments || []) {
             const ban = p.filter((p: any) => p.type == "Ban")
-            if (ban.length > 0 && !seenGuilds.has(guildId!)) seenGuilds.set(guildId!, guildname);
+            if (ban.length > 0 && !seenGuilds.has(guildId!)) seenGuilds.set(guildId!, guild!.name);
         }
     }
     const opts = Array.from(seenGuilds).map(([id, gName]) => ({ label: gName, value: id }));
@@ -364,21 +317,22 @@ commands.set('appeal', async (interaction: ChatInputCommandInteraction, guildCon
     return await interaction.showModal(modal)
 });
 commands.set('rank', async (interaction: ChatInputCommandInteraction, guildConfig: WithId<Document>) => {
-    const { member, guildId, options } = interaction
-    const targetUser = options ? options.getUser('target', true) : member!.user;
-    const { level, xp, coins, totalmessages } = await usersCollection.findOne({ userId: targetUser!.id, guildId: guildId }, { projection: { level: 1, xp: 1, coins: 1, avatar: 1, totalmessages: 1, nick: 1 } }) as Document;
+    const { guildId, options, user } = interaction
+    const targetUser = options.getUser('target') ?? user;
+    const stats = await usersCollection.findOne({ userId: targetUser.id, guildId }, { projection: { level: 1, xp: 1, coins: 1, totalmessages: 1 } });
+    if (!stats) return await interaction.reply({ content: 'No rank data found for that user.', flags: MessageFlags.Ephemeral });
+    const { level, xp, coins, totalmessages } = stats;
     const { exponent, baseMultiplier, roundToNearest, flatOffset } = guildConfig as Document
-    const rank = await usersCollection.countDocuments({ guildId: guildId, $or: [{ level: { $gt: level } }, { level: level, xp: { $gt: xp } }] });
-    const avRes = await fetch(await member!.avatarURL());
+    const [rank, avRes] = await Promise.all([
+        usersCollection.countDocuments({ guildId: guildId, $or: [{ level: { $gt: level } }, { level: level, xp: { $gt: xp } }] }) as Promise<number>,
+        fetch(targetUser.avatarURL() ?? targetUser.defaultAvatarURL) as Promise<Response>
+    ])
     const resizedAvatarBuf = await new Image(await avRes.arrayBuffer()).resize(100, 100).png().toBase64();
     const reqXp = Math.round(((level < 100 ? level : 100) ** exponent * baseMultiplier + flatOffset) / roundToNearest);
     const rankCardSvg = `<svg width="500" height="150" xmlns="http://www.w3.org/2000/svg"><defs><clipPath id="avatarClip"><circle cx="70" cy="75" r="50"/></clipPath></defs><rect width="500" height="150" rx="16" fill="#2c2f33"/><circle cx="70" cy="75" r="52" stroke="#3ba55d" stroke-width="3" fill="none" /><image href="data:image/png;base64,${resizedAvatarBuf}" x="20" y="25" width="100" height="100" clip-path="url(#avatarClip)"/><text x="130" y="60" fill="white" font-size="20" font-family="Arial" font-weight="bold">${targetUser?.username.slice(0, 15) + (targetUser?.username.length! > 15 ? "..." : "")}</text><text x="300" y="35" fill="white" font-size="16" font-family="Arial" font-weight="bold" text-anchor="middle">Level ${level}</text><text x="440" y="35" fill="white" font-size="16" font-family="Arial" font-weight="bold" text-anchor="end">Rank #${rank + 1}</text><rect x="130" y="85" width="350" height="20" rx="10" fill="#484b4e"/><rect x="130" y="85" width="${Math.min(Math.max(350 * (xp / reqXp), 25), 350)}" height="20" rx="10" fill="#3ba55d"/><text x="480" y="75" fill="#ccc" font-size="16" font-family="Arial" text-anchor="end">${xp} / ${reqXp} xp</text><text x="150" y="130" fill="#ccc" font-size="18" font-family="Arial">Coins: ${coins} | Messages: ${totalmessages}</text></svg>`;
     const renderer = new Resvg(rankCardSvg, { font: { loadSystemFonts: true } });
     const rankCardBuffer = Buffer.from(renderer.render().asPng());
-    const form = new FormData();
-    form.append('files[0]', new Blob([rankCardBuffer], { type: "image/png" }), 'rankcard.png');
-    form.append('payload_json', JSON.stringify({ type: InteractionResponseType.ChannelMessageWithSource }));
-    return new Response(form);
+    return await interaction.reply({ files: [new AttachmentBuilder(rankCardBuffer, { name: 'rankcard.png' })] });
 });
 commands.set('blacklist.show', async (interaction: ChatInputCommandInteraction) => {
     const { guildId, options } = interaction;
@@ -395,8 +349,10 @@ commands.set('blacklist.modify', async (interaction: ChatInputCommandInteraction
     switch (action) {
         case 'add':
             if (!blacklist.includes(role.id)) {
-                await usersCollection.updateOne({ userId: target, guildId: guildId }, { $push: { blacklist: role } as any });
-                await client.rest.delete(Routes.guildMemberRole(guildId!, target.id!, role.id))
+                await Promise.all([
+                    usersCollection.updateOne({ userId: target, guildId: guildId }, { $push: { blacklist: role } as any }),
+                    client.rest.delete(Routes.guildMemberRole(guildId!, target.id!, role.id))
+                ])
                 embed.setDescription(`<@&${role}> was blacklisted from <@${target!}>`);
             } else {
                 embed.setDescription(`<@&${role}> is already blacklisted from <@${target!}>`);
@@ -413,7 +369,6 @@ commands.set('apply', async (interaction: ChatInputCommandInteraction) => {
     const { member, guildId } = interaction;
     const doc = await usersCollection.findOne({ userId: member?.user.id, guildId: guildId }, { projection: { application: 1 } }) as any;
     return await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: buildApplicationHub(doc?.application ?? {}, PART_CONFIG) })
-
 });
 commands.set('leaderboard', async (interaction) => {
     const { guildId, guild } = interaction;
@@ -424,17 +379,17 @@ commands.set('leaderboard', async (interaction) => {
         description: `**__LeaderBoard:__**\n${board.map((u, i) => `Rank \`${i + 1}\`: <@${u.userId}> - level \`${u.level}\` with \`${u.xp}\` xp`).join('\n')}`
     })
     embed.setThumbnail(guild?.iconURL() ?? null);
-    return await interaction.reply({ embeds: [embed.toJSON()] })
+    return await interaction.reply({ embeds: [embed] })
 });
 commands.set('modlogs', async (Interaction) => {
-    const { member, guildId, options, memberPermissions } = Interaction;
+    const { member, guildId, options, memberPermissions, user, guild } = Interaction;
     const targetUser = options.getUser('target', true);
-    const isAdmin = memberPermissions!.has(PermissionFlagsBits.Administrator)
-    const { punishments } = await usersCollection.findOne({ userId: targetUser.id, guildId: guildId }, { projection: { punishments: 1, avatar: 1 } }) as any;
+    const isAdmin = memberPermissions!.has(PermissionFlagsBits.Administrator) || user.id == guild?.ownerId
+    const { punishments } = await usersCollection.findOne({ userId: targetUser.id, guildId: guildId }, { projection: { punishments: 1 } }) as any;
     if (!punishments?.length) {
         return Interaction.reply({ embeds: [{ color: 0xf58931, description: `❌ No modlogs found for <@${targetUser!.id}>.` }] })
     }
-    const moderator = await client.rest.get(Routes.user(punishments[0].moderatorId)) as APIUser
+    const moderator = await client.users.fetch(punishments[0].moderatorId);
     await Interaction.reply(buildModlogView(punishments, 0, targetUser, moderator, member!.user.id, isAdmin));
     setTimeout(() => {
         void Interaction.editReply({ components: buildModlogView(punishments, 0, targetUser, moderator, member!.user.id, isAdmin, true).components }).catch(() => null);
@@ -456,9 +411,9 @@ commands.set('note.add', async (interaction) => {
         .addSectionComponents(
             new SectionBuilder()
                 .addTextDisplayComponents(new TextDisplayBuilder({ content: `📝 note created for <@${targetUser.id}>\n\n${quote(note!)}` }))
-                .setThumbnailAccessory(new ThumbnailBuilder({ media: { url: avatarOf(targetUser) } })),
+                .setThumbnailAccessory(new ThumbnailBuilder({ media: { url: targetUser.avatarURL() ?? targetUser.defaultAvatarURL } })),
         );
-    return await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container.toJSON()] })
+    return await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container] })
 });
 commands.set('note.show', async (interaction) => {
     const { member, guildId, options } = interaction;
@@ -468,8 +423,8 @@ commands.set('note.show', async (interaction) => {
     if (!sortednotes.length) {
         return await interaction.reply({ embeds: [new EmbedBuilder().setColor(0x00a900).setDescription(`❌ No notes found for <@${u!.id}>`).setThumbnail(u.avatarURL() ?? null).toJSON()] })
     }
-    const mod = await client.rest.get(Routes.user(sortednotes[0].moderatorId)) as APIUser;
-    return interaction.reply(v2(buildNoteView(sortednotes, 0, u!, mod, member!.user.id)))
+    const mod = await client.users.fetch(sortednotes[0].moderatorId);
+    return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [buildNoteView(sortednotes, 0, u!, mod, member!.user.id)] })
 });
 commands.set('applications', async (interaction, guildConfig) => {
     const { modChannels } = guildConfig as Document
@@ -510,14 +465,11 @@ commands.set('member.create', async (interaction) => {
                 punishments: [],
                 notes: [],
                 blacklist: [],
-                avatar: avatarOf(targetUser!),
                 total: 0,
                 mediaCount: 0,
                 duplicateCounts: {},
                 timestamps: [],
-                nick: targetUser!.username,
                 lastmessage: null,
-                joinedTime: targetMember.joinedTimestamp ? targetMember.joinedTimestamp : Date.now(),
                 verified: false
             }
         },
@@ -528,7 +480,7 @@ commands.set('member.create', async (interaction) => {
 commands.set('member.ban', async (interaction, guildConfig, restrictedToFullMod = true) => {
     const blocked = await withGuards(interaction, guildConfig, restrictedToFullMod);
     if (blocked) return blocked;
-    runPunishment(interaction, guildConfig).catch(console.error);
+    runPunishment(interaction, guildConfig);
     return await interaction.deferReply()
 });
 commands.set('member.warn', async (interaction, guildConfig) => {
@@ -573,8 +525,8 @@ commands.set('link', async (interaction) => {
 commands.set('admin.clear', async (interaction) => {
     const { channel, options } = interaction
     const count = options.getInteger('count', true);
-    if (count > 1) {
-        await channel!.bulkDelete(count, true)
+    if (count > 1 && channel instanceof TextChannel) {
+        await (channel).bulkDelete(count, true)
         return await interaction.reply({ content: `Deleted ${count} messages.`, flags: MessageFlags.Ephemeral, })
     }
 })
@@ -584,7 +536,7 @@ async function grantDiscordXp(member: GuildMember, channel: TextChannel) {
     const levelUp = await awardXp({ userId: member.user.id, guildId: guildId }, guildId);
     if (!levelUp) return;
     if (levelUp.level > 2 && !member.roles.cache.has('1334238580914131026') && guildId === '1231453115937587270') {
-        await client.rest.put(Routes.guildMemberRole(guildId, member.id, '1334238580914131026'));
+        await member.roles.add('1334238580914131026');
     }
 
     await channel.send({
@@ -598,6 +550,7 @@ async function grantDiscordXp(member: GuildMember, channel: TextChannel) {
 let massban = 0;
 async function getReactionRoleConfig(guildId: string, messageId: string) {
     const doc = await guildconfigs.findOne({ guildId }, { projection: { messageConfigs: 1 } });
+    if (!doc) return null
     return Object.values(doc?.messageConfigs ?? {}).find((info: any) => info?.messageId === messageId) as { reactions: { emoji: string; roleId: string | string[] }[] } | undefined;
 }
 cron("0 0 * * 0", async () => {
@@ -637,10 +590,10 @@ client.on('clientReady', async (ready) => {
         { arrayFilters: [{ "elem.active": 1, "elem.timestamp": { $lt: Date.now() - 24 * 60 * 60 * 1000 } }] }
     );
     for (const guild of ready.guilds.cache.values()) {
-        const { id, name, ownerId, invites } = guild
+        const { id, ownerId, invites } = guild
         if (!await guildconfigs.findOne({ guildId: id })) continue;
         const guildinvites = await invites.fetch();
-        await guildconfigs.updateOne({ guildId: id }, { $set: { icon: guild.iconURL(), name: name, ownerId: ownerId, Invites: Object.fromEntries(guildinvites.map(i => [i.code, { uses: i.uses, id: i.inviter!.id, code: i.code }])) } })
+        await guildconfigs.updateOne({ guildId: id }, { $set: { ownerId: ownerId, Invites: Object.fromEntries(guildinvites.map(i => [i.code, { uses: i.uses, id: i.inviter!.id, code: i.code }])) } })
     }
 })
 client.on('autoModerationActionExecution', async (action) => {
@@ -661,7 +614,7 @@ client.on('autoModerationActionExecution', async (action) => {
         durationStr = minutes >= 60 ? `${Math.ceil(minutes / 60)} hour mute` : `${minutes} min mute`;
         warnType = 'Mute';
     }
-    const finalMessage = await (channel as TextChannel).send({
+    const finalMessage = await (channel! as TextChannel).send({
         embeds: [{
             author: {
                 name: `${user!.username} ${warnType === 'Mute' ? `was issued a ${durationStr}` : `${statusMap[warnType]?.cmd}`}`,
@@ -676,7 +629,7 @@ client.on('autoModerationActionExecution', async (action) => {
         duration: durationMs, timestamp: Date.now(), active: 1,
         weight: !bannable ? totalWeight : 1, type: warnType, channel: channel!.id,
         refrence: `https://discord.com/channels/${guild.id}/${channel!.id}/${finalMessage.id}`,
-        warns: totalWarns - 1
+        warns: isFinite(totalWarns) ? totalWarns - 1 : 0
     };
     await usersCollection.updateOne({ userId: user!.id, guildId: guild.id }, { $push: { punishments: newPunishment as any } }, { upsert: true });
     const caseHistory = [...punishments, newPunishment]
@@ -694,7 +647,7 @@ client.on('autoModerationActionExecution', async (action) => {
             .setThumbnailAccessory(new ThumbnailBuilder({ media: { url: guild.iconURL()! } })))
         .addTextDisplayComponents(new TextDisplayBuilder(
             {
-                content: `Reason: \`${reason}\` ${(['Ban', 'Kick'].includes(warnType)) ? '' : `Punishment: \`${!bannable ? totalWeight : 1} warn\`${durationStr ? `, \`${durationStr}\`` : ''}\nActive Warnings:\`${totalWarns}\`\nWarn expires: <t:${Math.floor((Date.now() + 86400000) / 1000)}:F>`}`
+                content: `Reason: \`${reason}\` ${(['Ban', 'Kick'].includes(warnType)) ? '' : `Punishment: \`${isFinite(totalWeight) ? totalWeight : 1} warn\`${durationStr ? `, \`${durationStr}\`` : ''}\nActive Warnings:\`${totalWarns}\`\nWarn expires: <t:${Math.floor((Date.now() + 86400000) / 1000)}:F>`}`
             }
         ))
     if (warnType == 'Ban')
@@ -728,11 +681,11 @@ client.on('autoModerationActionExecution', async (action) => {
                     type: ComponentType.Section,
                     accessory: {
                         type: ComponentType.Thumbnail,
-                        media: { url: client.rest.cdn.avatar('1420927654701301951', 'a96f0e3049ea9aae9798f45cc2479ebc') }
+                        media: { url: client.user?.avatarURL() ?? client.user?.defaultAvatarURL }
                     },
                     components: [{
                         type: ComponentType.TextDisplay,
-                        content: `febot ${statusMap[warnType]!.log}\n\nuser: <@${user!.id}>  Channel:<#${channel!.id}>  History: ${caseHistory.join(' | ')} || "none"\n\nReason: \`${reason}\`\n\n ${['Ban', 'Kick'].includes(warnType) ? '' : `Punishment: \`${!bannable ? totalWeight : 1} warn\`${durationStr ? `, \`${durationStr}\`` : ''}\nWarns at log time: \`${activeWarns}\`\nNext Punishment: \`${label}\`\n\n ${dm ? 'User DMed ✅' : 'User DMed 🚫'}`}`
+                        content: `febot ${statusMap[warnType]!.log}\n\nuser: <@${user!.id}>  Channel:<#${channel!.id}>  History: ${caseHistory.join(' | ')} || "none"\n\nReason: \`${reason}\`\n\n ${['Ban', 'Kick'].includes(warnType) ? '' : `Punishment: \`${isFinite(totalWeight) ? totalWeight : 1} warn\`${durationStr ? `, \`${durationStr}\`` : ''}\nWarns at log time: \`${activeWarns}\`\nNext Punishment: \`${label}\`\n\n ${dm ? 'User DMed ✅' : 'User DMed 🚫'}`}`
                     }]
                 }]
             }]
@@ -743,14 +696,12 @@ client.on('autoModerationActionExecution', async (action) => {
     }
 });
 client.on('guildCreate', async (guild) => {
-    const { id, name, ownerId } = guild
+    const { id, ownerId } = guild
     const existing = await guildconfigs.findOne({ guildId: id });
     if (!existing) {
         await guildconfigs.insertOne(
             {
                 guildId: id,
-                guildname: name,
-                icon: guild.iconURL(),
                 modChannels: {
                     mutelogChannel: "",
                     deletedlogChannel: "",
@@ -795,156 +746,114 @@ client.on('guildCreate', async (guild) => {
             });
     };
     const guildinvites = await guild.invites.fetch();
-    await guildconfigs.updateOne({ guildId: id }, { $set: { icon: guild.iconURL(), name: name, ownerId: ownerId, Invites: Object.fromEntries(guildinvites.map(i => [i.code, { uses: i.uses, inviter: i.inviter!.id, code: i.code }])) } })
+    await guildconfigs.updateOne({ guildId: id }, { $set: { ownerId: ownerId, Invites: Object.fromEntries(guildinvites.map(i => [i.code, { uses: i.uses, inviter: i.inviter!.id, code: i.code }])) } })
     const owner = await guild.fetchOwner()
-    const channel = await owner.user.createDM();
-    const embed = new ContainerBuilder({
-        accent_color: 0xf03030,
-        components: [
-            new TextDisplayBuilder({
-                content: `Hello <@${owner}, thank you for adding febot to your sever, be sure to setup your config in the [dashboard]{${process.env.DISCORD_REDIRECT}.`
-            }).toJSON()
-        ]
-    })
-    await channel.send({ flags: MessageFlags.IsComponentsV2, components: [embed] })
+    const embed = new ContainerBuilder()
+        .setAccentColor(0xf03030)
+        .addTextDisplayComponents(new TextDisplayBuilder({ content: `Hello <@${owner}>, thank you for adding febot to your sever, be sure to setup your config in the [dashboard]{${process.env.DISCORD_REDIRECT}.` }))
+    await owner.user.send({ flags: MessageFlags.IsComponentsV2, components: [embed] })
 })
 client.on('guildDelete', async (guild) => {
     await usersCollection.deleteMany({ guildId: guild.id })
     await guildconfigs.findOneAndDelete({ guildId: guild.id })
 })
 client.on('guildMemberAdd', async (member) => {
-    const { guild, user, joinedTimestamp, flags } = member;
+    const { guild, user, flags } = member;
     const { modChannels: { welcomeChannel, mutelogChannel }, generalchannels, Invites } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { modChannels: 1, staffroles: 1, generalchannels: 1, Invites: 1 } }) as Document;
     const currentInvites = await guild.invites.fetch();
     const invite = currentInvites.find((i: any) => i.uses > (Invites[i.code]?.uses || 0)) ?? Object.values(Invites)?.find((i: any) => !currentInvites.get(i!.code!)) as DbInvite ?? undefined;
     const inviter: string | undefined | { uses: number; id: string; code: string } = invite instanceof Invite ? invite?.inviter?.id : invite && invite satisfies DbInvite ? invite!.id : undefined;
-    const originalMessage = await client.rest.post(Routes.channelMessages(welcomeChannel), {
-        body: {
-            allowed_mentions: { "parse": [] },
-            flags: MessageFlags.IsComponentsV2,
-            components: [{
-                type: ComponentType.Container, accent_color: 0x00FF99,
-                components: [
-                    {
-                        type: ComponentType.Section,
-                        components: [{ type: ComponentType.TextDisplay, content: `<@${user.id}> joined the Server!\n\nDiscord Join Date: <t:${Math.floor(user.createdTimestamp / 1000)}>` }],
-                        accessory: { type: ComponentType.Thumbnail, media: { url: user.avatarURL() ?? user.defaultAvatarURL } }
-                    }, { type: ComponentType.Separator },
-                    {
-                        type: ComponentType.Section,
-                        components: [{ type: ComponentType.TextDisplay, content: subtext(`${invite instanceof Invite || (invite && invite satisfies DbInvite) ? `Invited by: <@${inviter}> | ${invite?.code}` : 'No Invite'}`), }],
-                        accessory: { type: ComponentType.Button, style: ButtonStyle.Danger, custom_id: `ban_${user.id}_${invite instanceof Invite && inviter ? invite?.code : 'none'}`, label: `🔨 ${invite ? `Ban & Delete Invite` : 'Ban'}` }
-                    }],
-            }]
-        }
-    }) as APIMessage;
+    const channel = await client.channels.fetch(welcomeChannel)
+    const originalMessage = await (channel as TextChannel).send({
+        allowedMentions: { "parse": [] },
+        flags: MessageFlags.IsComponentsV2,
+        components: [
+            new ContainerBuilder()
+                .setAccentColor(0x00FF99)
+                .addSectionComponents(
+                    new SectionBuilder()
+                        .addTextDisplayComponents(new TextDisplayBuilder({ content: `<@${user.id}> joined the Server!\n\nDiscord Join Date: <t:${Math.floor(user.createdTimestamp / 1000)}>` }))
+                        .setThumbnailAccessory(new ThumbnailBuilder({ media: { url: user.avatarURL() ?? user.defaultAvatarURL } }))
+                )
+                .addSeparatorComponents(new SeparatorBuilder({ spacing: SeparatorSpacingSize.Large }))
+                .addTextDisplayComponents(new TextDisplayBuilder({ content: subtext(`${invite instanceof Invite || (invite && invite satisfies DbInvite) ? `Invited by: <@${inviter}> | ${invite?.code}` : 'No Invite'}`) }))
+                .addActionRowComponents(new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder({ style: ButtonStyle.Danger, custom_id: `ban_${user.id}_${invite instanceof Invite && inviter ? invite?.code : 'none'}`, label: `🔨 ${invite ? `Ban & Delete Invite` : 'Ban'}` })))
+        ]
+    }) 
     if (Date.now() - user.createdTimestamp < 172800000) {
         await member.kick('Account less than 2 days old');
-        await client.rest.post(Routes.channelMessages(mutelogChannel), {
-            body: {
-                flags: MessageFlags.IsComponentsV2,
-                components: [{
-                    type: ComponentType.Container,
-                    components: [{
-                        type: ComponentType.Section,
-                        components: [{
-                            type: ComponentType.TextDisplay,
-                            content: `A member was auto-kicked \n\n**User:**<@${user.id}>\n\n**Reason:**New Account\n** Created:** <t:${user.createdTimestamp}:R>\n\n**Created on:**<t:${Math.floor(user.createdTimestamp / 1000)}:R>`
-                        }],
-                        accessory: {
-                            type: ComponentType.Thumbnail,
-                            media: { url: user.avatarURL() ?? user.defaultAvatarURL }
-                        }
-                    }]
-                }]
-            }
+        const channel = await guild.channels.fetch(mutelogChannel) as TextChannel
+        await channel.send({
+            flags: MessageFlags.IsComponentsV2,
+            components: [new ContainerBuilder()
+                .addSectionComponents(
+                    new SectionBuilder()
+                        .addTextDisplayComponents(new TextDisplayBuilder({ content: `A member was auto-kicked \n\n**User:**<@${user.id}>\n\n**Reason:**New Account\n** Created:** <t:${user.createdTimestamp}:R>\n\n**Created on:**<t:${Math.floor(user.createdTimestamp / 1000)}:R>` }))
+                        .setThumbnailAccessory(new ThumbnailBuilder({ media: { url: user.avatarURL() ?? user.defaultAvatarURL } }))
+                )]
         })
         return;
     }
     try {
         await user.send({
             flags: MessageFlags.IsComponentsV2,
-            components: [{
-                type: ComponentType.Container,
-                accent_color: 0x00FF99,
-                components: [
-                    { type: ComponentType.TextDisplay, content: `Welcome to the server ${user}!\n\nBe sure to check out the rules and grab some roles in the role channel.` }]
-            }]
+            components: [new ContainerBuilder()
+                .setAccentColor(0x00FF99)
+                .addTextDisplayComponents(new TextDisplayBuilder({ content: `Welcome to the server ${user}!\n\nBe sure to check out the rules and grab some roles in the role channel.` }))]
         })
-    } catch (error) {
-        console.warn(`[Member Add] Could not send a DM to ${user.id}`, error)
-    }
+    } catch { }
     if (!flags.has(GuildMemberFlags.DidRejoin) && !user.bot) {
-        await usersCollection.insertOne({ userId: user.id, guildId: guild.id, level: 1, coins: 100, xp: 0, totalmessages: 0, punishments: [], notes: [], blacklist: [], avatar: user.avatarURL() ?? user.defaultAvatarURL, total: 0, mediaCount: 0, duplicateCounts: {}, timestamps: [], nick: user.username, lastmessage: null, joinedTime: joinedTimestamp, verified: false })
+        await usersCollection.insertOne({
+            userId: user.id,
+            guildId: guild.id,
+            level: 1,
+            coins: 100,
+            xp: 0,
+            totalmessages: 0,
+            punishments: [],
+            notes: [],
+            blacklist: [],
+            total: 0,
+            mediaCount: 0,
+            duplicateCounts: {},
+            timestamps: [],
+            lastmessage: null,
+            verified: false
+        })
     } else {
-            if (guild.id == "1231453115937587270")
-                await client.rest.put(Routes.guildMemberRole(guild.id, user.id, `1463354464747524136`))
-        await client.rest.post(Routes.channelMessages(generalchannels[0]!), {
-                body: {
-                    flags: MessageFlags.IsComponentsV2,
-                    components: [{
-                        type: ComponentType.Container,
-                        components: [
-                            {
-                                type: ComponentType.Section,
-                                components: [{
-                                    type: ComponentType.TextDisplay,
-                                    content: `Everyone, Welcome <@${user.id}> back to the server!\n\nDiscord Join Date: <t:${Math.floor(user.createdTimestamp / 1000)}>`
-                                }],
-                                accessory: {
-                                    type: ComponentType.Thumbnail,
-                                    media: { url: user.avatarURL() ?? user.defaultAvatarURL },
-                                    description: "User icon",
-                                    spoiler: false
-                                }
-                            },
-
-
-                        ]
-                    }]
-                }
-            })
+        if (guild.id == "1231453115937587270")
+            await member.roles.add(`1463354464747524136`)
+        const channel = await guild.channels.fetch(generalchannels[0]!) as TextChannel
+        channel?.send({
+            flags: MessageFlags.IsComponentsV2,
+            components: [new ContainerBuilder()
+                .addSectionComponents(
+                    new SectionBuilder()
+                        .addTextDisplayComponents(new TextDisplayBuilder({ content: `Everyone, Welcome <@${user.id}> back to the server!\n\nDiscord Join Date: <t:${Math.floor(user.createdTimestamp / 1000)}>` }))
+                        .setThumbnailAccessory(new ThumbnailBuilder({ media: { url: user.avatarURL() ?? user.defaultAvatarURL } }))
+                )]
+        })
     }
-        setTimeout(async () => {
-            try {
-                await client.rest.patch(Routes.channelMessage(welcomeChannel, originalMessage.id as string), {
-                body: {
-                    allowed_mentions: { "parse": [] },
-                    flags: MessageFlags.IsComponentsV2,
-                    components: [{
-                        type: ComponentType.Container,
-                        accent_color: 0x00FF99,
-                        components: [{
-                            type: ComponentType.Section,
-                            components: [{
-                                type: ComponentType.TextDisplay,
-                                content: `<@${user.id}> joined the Server!\n\nDiscord Join Date: <t:${Math.floor(user.createdTimestamp / 1000)}>`
-                            }],
-                            accessory: {
-                                type: ComponentType.Thumbnail,
-                                media: { url: user.avatarURL() ?? user.defaultAvatarURL }
-                            }
-                        },
-                            {
-                                type: ComponentType.Section,
-                                components: [{
-                                    type: ComponentType.TextDisplay,
-                                    content: subtext(`${invite ? `Invited by: <@${inviter}> | ${invite?.code}` : 'No Invite'}`),
-                                }],
-                                accessory: {
-                                    type: ComponentType.Button,
-                                    style: ButtonStyle.Danger,
-                                    custom_id: `ban_${user.id}_${invite && inviter ? invite?.code : 'none'}`,
-                                    label: `🔨 ${invite ? `Ban & Delete Invite` : 'Ban'}`,
-                                    disabled: true
-                                }
-                            }]
-                    }]
-                }
-            })
-            } catch (error) {
-                console.error('[guildMemberAdd] Button-disable PATCH failed', error)
-            }
+    setTimeout(async () => {
+        originalMessage.edit({
+            allowedMentions: { "parse": [] },
+            flags: MessageFlags.IsComponentsV2,
+            components: [new ContainerBuilder()
+                .setAccentColor(0x00FF99)
+                .addSectionComponents(
+                    new SectionBuilder()
+                        .addTextDisplayComponents(new TextDisplayBuilder({ content: `<@${user.id}> joined the Server!\n\nDiscord Join Date: <t:${Math.floor(user.createdTimestamp / 1000)}>` }))
+                        .setThumbnailAccessory(new ThumbnailBuilder({ media: { url: user.avatarURL() ?? user.defaultAvatarURL } })),
+                    new SectionBuilder()
+                        .addTextDisplayComponents(new TextDisplayBuilder({ content: subtext(`${invite ? `Invited by: <@${inviter}> | ${invite?.code}` : 'No Invite'}`) }))
+                        .setButtonAccessory(new ButtonBuilder({
+                            style: ButtonStyle.Danger,
+                            custom_id: `ban_${user.id}_${invite && inviter ? invite?.code : 'none'}`,
+                            label: `🔨 ${invite ? `Ban & Delete Invite` : 'Ban'}`,
+                            disabled: true
+                        }))
+                )]
+        })
         }, 15 * 60 * 1000)
 
 })
@@ -975,9 +884,8 @@ client.on('guildMemberRemove', async (member) => {
     })
 })
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
-    const { guild, user, nickname, avatar } = newMember;
+    const { guild, user, nickname } = newMember;
     const { modChannels: { namelogChannel } } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { modChannels: 1 } }) as Document
-    await usersCollection.updateOne({ guildId: guild.id, userId: user.id }, { $set: { nick: nickname ?? user.username, avatar: avatar } });
     if (!oldMember || nickname === oldMember.nickname || newMember.user.username == nickname) return;
     await client.rest.post(Routes.channelMessages(namelogChannel), {
         body: {
@@ -1015,54 +923,28 @@ client.on('guildBanAdd', async (ban) => {
         try {
             await user.send({
                 flags: MessageFlags.IsComponentsV2,
-                components: [{
-                    type: ComponentType.Container,
-                    accent_color: 0xd10000,
-                    components: [{
-                        type: ComponentType.Section,
-                        accessory: { type: ComponentType.Thumbnail, media: { url: guild.iconURL()! } },
-                        components: [{
-                            type: ComponentType.TextDisplay,
-                            content: `${user.username}, you were banned from [${guild.name}](https://discord.com/channels/${guild.id}).\n\n\nTo appeal this decision, please join our dedicated appeal server using the button below.\nReason: \`${sortedpunishments[0].reason}\``,
-
-                        }]
-                    },
-                        {
-                            type: ComponentType.Section,
-                            components: [{
-                                type: ComponentType.TextDisplay,
-                                content: "Click the button below/on the right to go to the Server:"
-                            }],
-                            accessory: {
-                                type: ComponentType.Button,
-                                style: ButtonStyle.Link,
-                                label: "Appeal",
-                                url: 'https://discord.gg/qMjjyXyYbr'
-                            }
-                        }
-                    ],
-                }]
+                components: [new ContainerBuilder()
+                    .setAccentColor(0xd10000)
+                    .addSectionComponents(
+                        new SectionBuilder()
+                            .setThumbnailAccessory(new ThumbnailBuilder({ media: { url: guild.iconURL()! } }))
+                            .addTextDisplayComponents(new TextDisplayBuilder({ content: `${user.username}, you were banned from [${guild.name}](https://discord.com/channels/${guild.id}).\n\n\nTo appeal this decision, please join our dedicated appeal server using the button below.\nReason: \`${sortedpunishments[0].reason}\`` })),
+                        new SectionBuilder()
+                            .addTextDisplayComponents(new TextDisplayBuilder({ content: "Click the button below/on the right to go to the Server:" }))
+                            .setButtonAccessory({ type: ComponentType.Button, style: ButtonStyle.Link, label: "Appeal", url: 'https://discord.gg/qMjjyXyYbr' })
+                    )]
             })
         } catch { dmed = false }
-        await client.rest.post(Routes.channelMessages(banlogChannel), {
-            body: {
-                flags: MessageFlags.IsComponentsV2,
-                components: [{
-                    type: ComponentType.Container,
-                    accent_color: 0xff3030,
-                    components: [{
-                        type: ComponentType.Section,
-                        accessory: {
-                            type: ComponentType.Thumbnail,
-                            media: { url: guild.iconURL()! }
-                        },
-                        components: [{
-                            type: ComponentType.TextDisplay,
-                            content: `Mass Ban Detected\n**Moderator <@${sortedpunishments[0].moderatorId}> banned <@${user.id}>:\n\nID: <@${user.id}>\n\n**TAG:**${user.username}\n\n**Reason:**\`${sortedpunishments[0].reason}\`\n\n-# ${dmed ? 'User DMed ✅' : 'User Dmed ❌'}`,
-                        },]
-                    }]
-                }]
-            }
+        const channel = guild.channels.cache.get(banlogChannel) as TextChannel;
+        channel.send({
+            flags: MessageFlags.IsComponentsV2,
+            components: [new ContainerBuilder()
+                .setAccentColor(0xff3030)
+                .addSectionComponents(
+                    new SectionBuilder()
+                        .setThumbnailAccessory(new ThumbnailBuilder({ media: { url: guild.iconURL()! } }))
+                        .addTextDisplayComponents(new TextDisplayBuilder({ content: `Mass Ban Detected\n**Moderator <@${sortedpunishments[0].moderatorId}> banned <@${user.id}>:\n\nID: <@${user.id}>\n\n**TAG:**${user.username}\n\n**Reason:**\`${sortedpunishments[0].reason}\`\n\n-# ${dmed ? 'User DMed ✅' : 'User Dmed ❌'}` }))
+                )]
         })
         massban -= 1;
     }
@@ -1070,26 +952,17 @@ client.on('guildBanAdd', async (ban) => {
 client.on('guildBanRemove', async (ban) => {
     const { user, guild, reason } = ban
     const { modChannels: { banlogChannel } } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { modChannels: 1 } }) as Document
-    await client.rest.post(Routes.channelMessages(banlogChannel), {
-        body: {
-            flags: MessageFlags.IsComponentsV2,
-            components: [{
-                type: ComponentType.Container,
-                accent_color: 0x309eff,
-                components: [{
-                    type: ComponentType.Section,
-                    components: [{
-                        type: ComponentType.TextDisplay,
-                        content: `A member was unbanned\n\n**User**: <@${user.id}>\n**Tag**:\`${user.username}\`\n**Reason**:\`${reason}\``
-                    }],
-                    accessory: {
-                        type: ComponentType.Thumbnail,
-                        media: { url: user.avatarURL() ?? user.defaultAvatarURL }
-                    }
-                }]
-            }]
-        }
-
+    const channel = guild.channels.cache.get(banlogChannel) as TextChannel;
+    await channel.send({
+        flags: MessageFlags.IsComponentsV2,
+        components: [
+            new ContainerBuilder()
+                .setAccentColor(0x309eff)
+                .addSectionComponents(
+                    new SectionBuilder()
+                        .addTextDisplayComponents(new TextDisplayBuilder({ content: `A member was unbanned\n\n**User**: <@${user.id}>\n**Tag**:\`${user.username}\`\n**Reason**:\`${reason}\`` }))
+                        .setThumbnailAccessory(new ThumbnailBuilder({ media: { url: user.avatarURL() ?? user.defaultAvatarURL } }))
+                )]
     })
 })
 client.on('inviteCreate', async (invite) => {
@@ -1114,8 +987,8 @@ client.on('messageReactionAdd', async (reaction, user) => {
         await reaction.users.remove(user.id).catch(() => { }); // optional: un-react so it doesn't look like it worked
         return;
     }
-    const member = await guild.members.fetch(user.id);
-    await member.roles.add(roleIds);
+    const member = guild.members.cache.get(user.id);
+    await member!.roles.add(roleIds);
 });
 client.on('messageReactionRemove', async (reaction, user) => {
     const { message: { guild, id }, emoji } = reaction;
@@ -1123,90 +996,66 @@ client.on('messageReactionRemove', async (reaction, user) => {
     const config = await getReactionRoleConfig(guild.id, id);
     if (!config) return;
     const entry = config.reactions.find(entry => entry.emoji === (emoji.id! ?? emoji.name!));
-    if (!entry) return;
+    if (!entry || !config) return;
     const roleIds = Array.isArray(entry.roleId) ? entry.roleId : [entry.roleId];
-    const member = await guild.members.fetch(user.id);
-    await Promise.all(roleIds.map(id => member.roles.remove(id)));
+    const member = guild.members.cache.get(user.id);
+    await Promise.all(roleIds.map(id => member!.roles.remove(id)));
 })
 client.on('messageDelete', async (deletedData) => {
     const { id, channelId, guildId, stickers, attachments, author, content } = deletedData;
     if (deletedData.partial || !author || author.bot) return;
     const imageAttachments = attachments.filter(att => att.contentType?.startsWith('image/')).map(att => att.proxyURL);
     const { modChannels: { deletedlogChannel } } = await guildconfigs.findOne({ guildId }, { projection: { modChannels: 1 } }) as Document;
-    const container: APIContainerComponent = 
-        {
-        accent_color: 0xf03030,
-        type: ComponentType.Container,
-        components: [{
+    const container = new ContainerBuilder()
+        .setAccentColor(0xf03030)
+        .addSectionComponents({
             type: ComponentType.Section,
             components: [{
                 type: ComponentType.TextDisplay, content: `Message by ${author.username} was deleted in <#${channelId}>\n\n${content || 'No text content'}`
             }],
             accessory: { type: ComponentType.Thumbnail, media: { url: author.avatarURL() ?? author.defaultAvatarURL } }
-        }]
-    };
+        })
     if (stickers.size > 0) {
-        container.components.push({
-            type: ComponentType.TextDisplay,
-            content: 'stickers deleted:'
-        })
-        container.components.push({
-            type: ComponentType.MediaGallery,
-            items: [{ media: { url: stickers.first()!.url } }]
-        })
+        container.addTextDisplayComponents(new TextDisplayBuilder({ content: 'stickers deleted:' }))
+        container.addMediaGalleryComponents(new MediaGalleryBuilder({ items: [{ media: { url: stickers.first()!.url } }] }))
     }
     if (imageAttachments.length > 0) {
-        container.components.push({
-            type: ComponentType.TextDisplay,
-            content: 'Images deleted:'
-        })
-        container.components.push({
-            type: ComponentType.MediaGallery,
-            items: imageAttachments.map(url => ({ media: { url } }))
-        });
+        container.addTextDisplayComponents(new TextDisplayBuilder({ content: 'Images deleted:' }))
+        container.addMediaGalleryComponents(new MediaGalleryBuilder({ items: imageAttachments.map(url => ({ media: { url } })) }));
     }
-    container.components.push({
-        type: ComponentType.ActionRow,
-        components: [{ type: ComponentType.Button, style: ButtonStyle.Link, label: 'Event link', url: `https://discord.com/channels/${guildId}/${channelId}/${id}` }]
-    })
+    container.addActionRowComponents(new ActionRowBuilder<ButtonBuilder>({ components: [new ButtonBuilder().setStyle(ButtonStyle.Link).setURL(`https://discord.com/channels/${guildId}/${channelId}/${id}`).setLabel('Event link')] }))
     await client.rest.post(Routes.channelMessages(deletedlogChannel), { body: { flags: MessageFlags.IsComponentsV2, components: [container] } })
 })
 client.on('messageUpdate', async (oldMessage, newMessage) => {
-    const { author, id, channelId, content, guildId } = newMessage;
+    const { author, id, channelId, content, guildId, guild } = newMessage;
     if (!oldMessage.content || oldMessage.content == newMessage.content || oldMessage.author?.bot) return;
     const { modChannels: { updatedlogChannel } } = await guildconfigs.findOne({ guildId: newMessage.guildId }, { projection: { modChannels: 1 } }) as Document
-    await client.rest.post(Routes.channelMessages(updatedlogChannel), {
-        body: {
-            allowed_mentions: { parse: [] },
-            flags: MessageFlags.IsComponentsV2,
-            components: [{
-                type: ComponentType.Container,
-                accent_color: 0x309eff,
-                components: [{
-                    type: ComponentType.Section,
-                    components: [{
-                        type: ComponentType.TextDisplay,
-                        content: `<@${author!.id}> edited a message in <#${channelId}>\n\n **Before:**\n${oldMessage.content || ''}\n\n **After:**\n${content || ''}`
-                    }],
-                    accessory: { type: ComponentType.Thumbnail, media: { url: author.avatarURL() ?? author.defaultAvatarURL } }
-                },
-                {
-                    type: ComponentType.ActionRow,
-                    components: [{
-                        type: ComponentType.Button, style: ButtonStyle.Link,
-                        label: 'Event Link',
-                        url: `https://discordapp.com/channels/${guildId}/${channelId}/messages/${id}`
-                    }]
-                }],
-            }]
-        }
+    const channel = guild?.channels.cache.get(updatedlogChannel) as TextChannel
+    await channel.send({
+        allowedMentions: { parse: [] },
+        flags: MessageFlags.IsComponentsV2,
+        components: [
+            new ContainerBuilder()
+                .setAccentColor(0x309eff)
+                .addSectionComponents(
+                    new SectionBuilder()
+                        .addTextDisplayComponents(new TextDisplayBuilder({ content: `<@${author!.id}> edited a message in <#${channelId}>\n\n **Before:**\n${oldMessage.content || ''}\n\n **After:**\n${content || ''}` }))
+                        .setThumbnailAccessory(new ThumbnailBuilder({ media: { url: author.avatarURL() ?? author.defaultAvatarURL } }))
+                )
+                .addActionRowComponents(
+                    new ActionRowBuilder<ButtonBuilder>()
+                        .addComponents(new ButtonBuilder({
+                            type: ComponentType.Button, style: ButtonStyle.Link,
+                            label: 'Event Link',
+                            url: `https://discordapp.com/channels/${guildId}/${channelId}/messages/${id}`
+                        })))]
     })
 })
 client.on('messageCreate', async (message) => {
     const { author, member, content, attachments, type, mentions, guild, channel } = message;
     if (author.bot == true || !guild || type === MessageType.ChatInputCommand || type === MessageType.UserJoin) return;
     const { publicChannels: { countingChannel }, responses, staffroles, generalchannels, automodsettings: { messagereasonsandweights, messagethreshold, Duplicatespamthreshold, mediathreshold, spamthreshold, capsthreshold }, count, lastMessageId, lastuser, Stages, modChannels: { banlogChannel, mutelogChannel } } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { publicChannels: 1, responses: 1, staffroles: 1, mediaexclusions: 1, automodsettings: 1, count: 1, lastuser: 1, baseMultiplier: 1, lastMessageId: 1, exponent: 1, flatOffset: 1, roundToNearest: 1, generalchannels: 1, Stages: 1, modChannels: 1 } }) as Document
-    const isstaff = member?.roles.cache.some((role: Role) => staffroles.includes(role.id)) || author.id === "521404063934447616"
+    const isstaff = member?.roles.cache.some((role: Role) => staffroles.includes(role.id)) || author.id == guild.ownerId
     const hasMedia = (attachments.size > 0 || /https?:\/\/[^\s]+/i.test(content)) && generalchannels.includes(channel.id)
     let messageWords: string = '!';
     let changed: boolean = false
@@ -1270,7 +1119,6 @@ client.on('messageCreate', async (message) => {
             { $set: { isModReset: { $or: ["$markDuplicateSpam", "$markMessageThreshold", "$markInactive30"] } } },
             {
                 $set: {
-                    avatar: member!.user.avatarURL() ?? member!.user.defaultAvatarURL,
                     totalmessages: { $add: [{ $ifNull: ["$totalmessages", 0] }, 1] },
                     total: { $cond: ["$isModReset", 0, { $add: ["$total", 1] }] },
                     mediaCount: { $cond: ["$isModReset", 0, { $add: ["$mediaCount", hasMedia ? 1 : 0] }] },
@@ -1319,34 +1167,25 @@ client.on('messageCreate', async (message) => {
             color: statusMap[warnType]!.color,
         }]
     });
-    const newPunishment = { _id: object, userId: author.id, moderatorId: '1420927654701301951', reasonText, duration: durationMs, timestamp: Date.now(), active: 1, weight: !bannable ? totalWeight : 1, type: warnType, guildId: guild.id, channel: channel.id, refrence: `https://discord.com/channels/${guild.id}/${channel.id}/${finalMessage.id}`, warns: totalWarns - 1 };
+    const newPunishment = { _id: object, userId: author.id, moderatorId: '1420927654701301951', reasonText, duration: durationMs, timestamp: Date.now(), active: 1, weight: !bannable ? totalWeight : 1, type: warnType, guildId: guild.id, channel: channel.id, refrence: `https://discord.com/channels/${guild.id}/${channel.id}/${finalMessage.id}`, warns: isFinite(totalWarns) ? totalWarns - 1 : 0 };
     await usersCollection.updateOne({ userId: author.id, guildId: guild.id }, { $push: { punishments: newPunishment as any } });
     const caseHistory = [...punishments, newPunishment].filter((r: any) => warnType === 'Ban' ? r.type === "Ban" : r.type !== 'Kick').slice(0, 10).map((p: any, idx: number) => p.refrence ? `[Case ${idx + 1}](${p.refrence})` : null).filter(Boolean);
     let dm = true;
+    const container = new ContainerBuilder()
+        .setAccentColor(statusMap[warnType]!.color)
+        .addSectionComponents(
+            new SectionBuilder()
+                .setThumbnailAccessory(new ThumbnailBuilder({ media: { url: message.guild?.iconURL()! } }))
+                .addTextDisplayComponents(new TextDisplayBuilder({ content: `<@${author.id}>,${statusMap[warnType]!.dm} ${warnType === 'Ban' ? ` [${message.guild!.name}](https://discord.com/channels/${guild.id}). To appeal this decision, please join our dedicated appeal server using the button below.` : warnType === 'Mute' ? `\`${durationStr}\` in ${message.guild!.name}` : `in ${message.guild!.name}`}\n\nReason: \`${reasonText}\` ${['Ban', 'Kick'].includes(warnType) ? '' : `Punishment: \`${isFinite(totalWeight) ? totalWeight : 1} warn\`${durationStr ? `, \`${durationStr}\`` : ''}\nActive Warnings: \`${totalWarns}\`\nWarn expires: <t:${Math.floor((Date.now() + 86400000) / 1000)}:F>`}` })))
+    if (warnType === 'Ban')
+        container
+            .addActionRowComponents(
+                new ActionRowBuilder<ButtonBuilder>()
+                    .addComponents(new ButtonBuilder({ type: ComponentType.Button, style: ButtonStyle.Link, label: "Appeal", url: 'https://discord.gg/qMjjyXyYbr' }))) 
     try {
         await author.send({
             flags: MessageFlags.IsComponentsV2,
-            components: [{
-                type: ComponentType.Container,
-                accent_color: statusMap[warnType]!.color,
-                components: [{
-                    type: ComponentType.Section,
-                    accessory: { type: ComponentType.Thumbnail, media: { url: message.guild?.iconURL()! } },
-                    components: [
-                        {
-                            type: ComponentType.TextDisplay,
-                            content: `<@${author.id}>,${statusMap[warnType]!.dm} ${warnType === 'Ban' ? ` [${message.guild!.name}](https://discord.com/channels/${guild.id}). To appeal this decision, please join our dedicated appeal server using the button below.` : warnType === 'Mute' ? `\`${durationStr}\` in ${message.guild!.name}` : `in ${message.guild!.name}`}`
-                        }]
-                },
-                    {
-                        type: ComponentType.Section,
-                        components: [{
-                            type: ComponentType.TextDisplay,
-                            content: `Reason: \`${reasonText}\` ${['Ban', 'Kick'].includes(warnType) ? '' : `Punishment: \`${totalWeight} warn\`${durationStr ? `, \`${durationStr}\`` : ''}\nActive Warnings: \`${totalWarns}\`\nWarn expires: <t:${Math.floor((Date.now() + 86400000) / 1000)}:F>`}`
-                        }],
-                        ...(warnType === 'Ban' ? { accessory: { type: ComponentType.Button, style: ButtonStyle.Link, label: "Appeal", url: 'https://discord.gg/qMjjyXyYbr' } } : {})
-                    }]
-            }]
+            components: [container]
         })
     } catch { dm = false; }
     switch (warnType) {
@@ -1361,22 +1200,21 @@ client.on('messageCreate', async (message) => {
             await member?.kick(reasonText)
             break;
     }
-    await client.rest.post(Routes.channelMessages(warnType === 'Ban' ? banlogChannel : mutelogChannel), {
-        body: {
-            flags: MessageFlags.IsComponentsV2, components: [{
-                type: ComponentType.Container, accent_color: statusMap[warnType]!.color, components: [{
-                    type: ComponentType.Section,
-                    components: [{
-                        type: ComponentType.TextDisplay,
-                        content: `<@${client.user?.id}> ${statusMap[warnType]!.log}\n\n user:<@${author.id}>\nChannel:<#${channel.id}>\nHistory: ${caseHistory.join(' | ') || "none"}\n\nReason:  \`${reasonText}\`\n${['Ban', 'Kick'].includes(warnType) ? '' : `Punishment: \`${!bannable ? totalWeight : 1} warn\`${durationStr ? `, \`${durationStr}\`` : ''}\nWarns at log time: \`${activeWarns}\`\nNext Punishment: \`${label}\`\n\n${subtext(dm ? 'User DMed ✅' : 'User DMed 🚫')}`}`
-                    }],
-                    accessory: {
-                        type: ComponentType.Thumbnail,
-                        media: { url: author.avatarURL() ?? author.defaultAvatarURL }
-                    }
-                }]
+    const logchannel = guild.channels.cache.get(warnType === 'Ban' ? banlogChannel : mutelogChannel) as TextChannel
+    logchannel.send({
+        flags: MessageFlags.IsComponentsV2, components: [{
+            type: ComponentType.Container, accent_color: statusMap[warnType]!.color, components: [{
+                type: ComponentType.Section,
+                components: [{
+                    type: ComponentType.TextDisplay,
+                    content: `<@${client.user?.id}> ${statusMap[warnType]!.log}\n\n user:<@${author.id}>\nChannel:<#${channel.id}>\nHistory: ${caseHistory.join(' | ') || "none"}\n\nReason:  \`${reasonText}\`\n${['Ban', 'Kick'].includes(warnType) ? '' : `Punishment: \`${isFinite(totalWeight) ? totalWeight : 1} warn\`${durationStr ? `, \`${durationStr}\`` : ''}\nWarns at log time: \`${activeWarns}\`\nNext Punishment: \`${label}\`\n\n${subtext(dm ? 'User DMed ✅' : 'User DMed 🚫')}`}`
+                }],
+                accessory: {
+                    type: ComponentType.Thumbnail,
+                    media: { url: author.avatarURL() ?? author.defaultAvatarURL }
+                }
             }]
-        }
+        }]
     })
     if (['Warn', 'Mute'].includes(warnType)) {
         setTimeout(async () => {
@@ -1388,27 +1226,17 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     const { guild, channelId, member } = newState;
     const { modChannels: { voicelogChannel } } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { modChannels: 1 } }) as Document
     if (oldState.channelId === channelId) return;
-    await client.rest.post(Routes.channelMessages(voicelogChannel), {
-        body: {
-            flags: MessageFlags.IsComponentsV2,
-            components: [{
-                type: ComponentType.Container,
-                accent_color: channelId !== null ? 0x305830 : 0x8b0000,
-                components: [
-                    {
-                        type: ComponentType.Section,
-                        components: [{
-                            type: ComponentType.TextDisplay,
-                            content: channelId !== null ? `${member?.user.username} joined <#${channelId}>.` : `${member?.user.username} left <#${oldState.channelId}>`
-                        }],
-                        accessory: {
-                            type: ComponentType.Thumbnail,
-                            media: { url: member!.user.avatarURL() ?? member!.user.defaultAvatarURL }
-                        }
-                    }
-                ]
-            }]
-        }
+    const channel = guild.channels.cache.get(voicelogChannel) as TextChannel
+    channel.send({
+        flags: MessageFlags.IsComponentsV2,
+        components: [
+            new ContainerBuilder()
+                .setAccentColor(channelId !== null ? 0x305830 : 0x8b0000)
+                .addSectionComponents(
+                    new SectionBuilder()
+                        .addTextDisplayComponents(new TextDisplayBuilder({ content: channelId !== null ? `${member?.user.username} joined <#${channelId}>.` : `${member?.user.username} left <#${oldState.channelId}>` }))
+                        .setThumbnailAccessory(new ThumbnailBuilder({ media: { url: member!.user.avatarURL() ?? member!.user.defaultAvatarURL } }))
+                )]
     })
 })
 client.on('guildUpdate', async (oldGuild, newGuild) => {
@@ -1425,11 +1253,10 @@ client.on('shardDisconnect', async (event, shardId) => {
 client.on('shardResume', async (shardId, replayedEvents) => {
     console.info(`[root] Shard ${shardId} resumed, replayed ${replayedEvents} events`)
 })
-client.on('interactionCreate', async (interaction: Interaction) => {
+client.on('interactionCreate', async (interaction) => {
     if (interaction.isModalSubmit()) {
-        const { guildId, customId, member, components, fields } = interaction;
+        const { guildId, customId, member, fields, user } = interaction;
         const updates: Record<string, any> = {};
-        const res: { type: InteractionResponseType, data: APIMessage | {} } = { type: InteractionResponseType.ChannelMessageWithSource, data: {} }
         if (customId.startsWith('appeal')) {
             const targetGuild = fields.getField('guild', ComponentType.StringSelect)
             const reason = fields.getField('reason', ComponentType.TextInput)
@@ -1437,126 +1264,104 @@ client.on('interactionCreate', async (interaction: Interaction) => {
             const extra = fields.getField('extra', ComponentType.TextInput)
             const gConf = await guildconfigs.findOne({ guildId: targetGuild }, { projection: { staffroles: 1, modChannels: 1 } }) as any;
             const attachments = fields.getUploadedFiles('evidence');
-            const appealMsg = await client.rest.post(Routes.channelMessages(gConf.modChannels.appealChannel), {
-                body: {
+            const channel = await client.channels.fetch(gConf.modChannels.appealChannel);
+            const container = new ContainerBuilder()
+                .setAccentColor(0x13cbd8)
+                .addSectionComponents(
+                    new SectionBuilder()
+                        .addTextDisplayComponents(new TextDisplayBuilder({ content: `Appeal for <@${member?.user.id}>\n\nWhy did you get banned?\n${reason.value}\n\nWhy should we accept your appeal?\n${justification!.value}\n\nExtra info:\n${extra!.value || "None"}` }))
+                        .setThumbnailAccessory(new ThumbnailBuilder({ media: { url: user.avatarURL() ?? user.defaultAvatarURL } }))
+                )
+            if (attachments)
+                container.addMediaGalleryComponents(new MediaGalleryBuilder({ items: Object.values(attachments).map((i: any) => ({ media: { url: i.url } })) }))
+            container.addActionRowComponents(
+                new ActionRowBuilder<ButtonBuilder>()
+                    .addComponents(new ButtonBuilder({ custom_id: `unban_approve_${member?.user.id}`, label: 'Approve', style: ButtonStyle.Success }), new ButtonBuilder({ type: ComponentType.Button, custom_id: `unban_reject_${member?.user.id}`, label: 'Reject', style: ButtonStyle.Danger })
+                    ))
+            const appealMsg = await (channel as TextChannel)!.send({
                     flags: MessageFlags.IsComponentsV2,
-                    components: [
-                        { type: ComponentType.TextDisplay, content: `<@&${gConf.staffroles[0]}> <@&${gConf.staffroles[1]}>` },
-                        {
-                            type: ComponentType.Container,
-                            accent_color: 0x13cbd8,
-                            components: [
-                                {
-                                    type: ComponentType.Section,
-                                    components: [{
-                                        type: ComponentType.TextDisplay,
-                                        content: `Appeal for <@${member?.user.id}>\n\nWhy did you get banned?\n${reason.value}\n\nWhy should we accept your appeal?\n${justification!.value}\n\nExtra info:\n${extra!.value || "None"}`
-                                    }],
-                                    accessory: { type: ComponentType.Thumbnail, media: { url: `https://cdn.discordapp.com/avatars/${member?.user.id}/${member?.user.avatar}.png` } },
-                                },
-                                ...(attachments ? [{
-                                    type: ComponentType.MediaGallery,
-                                    items: Object.values(attachments).map((i: any) => ({ media: { url: i.url } })),
-                                }] : []),
-                            ],
-                        },
-                        {
-                            type: ComponentType.ActionRow,
-                            components: [
-                                { type: ComponentType.Button, custom_id: `unban_approve_${member?.user.id}`, label: 'Approve', style: ButtonStyle.Success },
-                                { type: ComponentType.Button, custom_id: `unban_reject_${member?.user.id}`, label: 'Reject', style: ButtonStyle.Danger },
-                            ],
-                        },
-                    ],
-                }
-            }) as APIMessage
-            await client.rest.post(Routes.threads(gConf.modChannels.appealChannel, appealMsg.id), { body: { type: 11, name: `${member?.user.username}` } });
+                components: [
+                    new TextDisplayBuilder({ content: `<@&${gConf.staffroles[0]}> <@&${gConf.staffroles[1]}>` }),
+                    container
+                ]
+            })
+            const messagechannel = appealMsg.channel as TextChannel;
+            await messagechannel.threads.create({ name: `${member?.user.username}` })
             await usersCollection.updateOne({ userId: member?.user.id, guildId: targetGuild }, { $set: { appeals: { _id: new ObjectId(), reason: reason!.value, justification: justification!.value, extra: extra!.value } } });
-            return await interaction.reply({ content: 'Your appeal has been submitted!', flags: 64 })
+            return await interaction.reply({ content: 'Your appeal has been submitted!', flags: MessageFlags.Ephemeral })
         }
         else if (customId.startsWith('apply-modal-')) {
             const part = Number(customId.split('-')[2]);
-            const { modal, fields } = PART_CONFIG[part]!;
-            if (modal) {
-                (components).forEach((row: any) => {
-                    if (!row.component) return;
-                    const index = modal.components.findIndex((f: any) => f.component.custom_id === row.component.custom_id);
-                    if (index === -1) return;
-                    const dbKey = fields[index];
-                    updates[`application.${dbKey}`] = row.component.type === ComponentType.StringSelect ? row.component.values?.[0] : row.component.value;
-                });
-
-                await usersCollection.updateOne({ userId: member?.user.id, guildId: guildId }, { $set: updates });
+            const config = PART_CONFIG[part];
+            if (!config) return;
+            const modalComponents = config.modal.toJSON().components as any[];
+            modalComponents.forEach((label, index) => {
+                const component = label.component;
+                const dbKey = config.fields[index];
+                if (!component?.custom_id || !dbKey) return;
+                const value = component.type === ComponentType.StringSelect
+                    ? interaction.fields.getStringSelectValues(component.custom_id)[0]
+                    : interaction.fields.getTextInputValue(component.custom_id);
+                if (value !== undefined) updates[`application.${dbKey}`] = value;
+            });
+            if (Object.keys(updates).length) {
+                await usersCollection.updateOne({ userId: member?.user.id, guildId }, { $set: updates });
             }
             const doc = await usersCollection.findOne({ userId: member?.user.id, guildId: guildId }, { projection: { application: 1 } }) as any;
-            res.type = InteractionResponseType.UpdateMessage;
-            res.data = { flags: MessageFlags.IsComponentsV2, components: buildApplicationHub(doc?.application ?? {}, PART_CONFIG) };
             return await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: buildApplicationHub(doc?.application ?? {}, PART_CONFIG) })
         }
     }
     if (interaction.isButton()) {
-        const { token, guildId, member, customId, memberPermissions, channel, message, applicationId } = interaction
+        const { guildId, member, customId, memberPermissions, channel, message, user, guild } = interaction
         const { modChannels, appealInvite, generalchannels } = await guildconfigs.findOne({ guildId: guildId }, { projection: { modChannels: 1, appealInvite: 1, generalchannels: 1 } }) as Document
-        const isAdmin = memberPermissions?.has(PermissionFlagsBits.Administrator)
+        const isAdmin = memberPermissions?.has(PermissionFlagsBits.Administrator) || user.id == guild?.ownerId
         if (customId.startsWith('ban_')) {
             const [, targetId, inviteCode] = customId.split('_');
-            if (memberPermissions!.has(PermissionFlagsBits.BanMembers)) return ephemeral('jrs cannot use this button.');
+            if (memberPermissions!.has(PermissionFlagsBits.BanMembers)) return interaction.reply({ embeds: [ephemeral('jrs cannot use this button.')] })
             const targetUser = await client.users.fetch(targetId!)
-            await interaction.deferReply()
-            const { guildname, icon } = await guildconfigs.findOne({ guildId: guildId }, { projection: { guildname: 1, icon: 1 } }) as Document;
             await guildconfigs.updateOne({ guildId: guildId }, { $set: { Ban: targetUser.id } });
             const doc = await usersCollection.findOne({ userId: targetUser!.id, guildId: guildId }, { projection: { punishments: 1 } });
-            const punishments: any[] = doc?.punishments ?? [];
-            const avatar = avatarOf(targetUser);
-            const finalMessage = await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0xd10000).setAuthor({ name: `<@${targetUser.id}> was banned`, iconURL: avatar }).toJSON()] })
+            const punishments: any[] = doc?.punishments;
+            const finalMessage = await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xd10000).setAuthor({ name: `<@${targetUser.id}> was banned`, iconURL: targetUser.avatarURL() ?? targetUser.defaultAvatarURL }).toJSON()] })
             const newPunishment = { _id: new ObjectId(), userId: targetUser.id, moderatorId: member!.user.id, reason: 'troll', duration: 0, timestamp: Date.now(), active: 1, weight: 1, type: 'Ban', guildId, channel: channel!.id, refrence: `https://discord.com/channels/${guildId}/${channel!.id}/${finalMessage.id}`, warns: 1 };
             await usersCollection.updateOne({ userId: targetUser.id, guildId: guildId }, { $push: { punishments: newPunishment as any } });
             const caseHistory = [...punishments, newPunishment].filter(r => r.type === 'Ban').slice(0, 10)
                 .map((p, i) => p.refrence ? `[Case ${i + 1}](${p.refrence})` : null).filter(Boolean);
-
             let dm = true;
             try {
-                const dmchannel = await client.rest.post(Routes.userChannels(), { body: { recipient_id: targetUser.id } }) as APIDMChannel;
                 const dmContainer = new ContainerBuilder()
                     .setAccentColor(0xd10000)
-                    .addSectionComponents(new SectionBuilder({ components: [{ type: ComponentType.TextDisplay, content: `<@${targetUser.id}>, you were banned from [${guildname}](https://discord.com/channels/${guildId}). To appeal this decision, please join our dedicated appeal server using the button below.\n${bold('Reason:')} ${quote('troll')}` }], accessory: { type: ComponentType.Thumbnail, media: { url: icon } } }))
+                    .addSectionComponents(new SectionBuilder({ components: [{ type: ComponentType.TextDisplay, content: `<@${targetUser.id}>, you were banned from [${guild?.name}](https://discord.com/channels/${guildId}). To appeal this decision, please join our dedicated appeal server using the button below.\n${bold('Reason:')} ${quote('troll')}` }], accessory: { type: ComponentType.Thumbnail, media: { url: guild?.iconURL()! } } }))
                     .addSeparatorComponents(new SeparatorBuilder({ spacing: SeparatorSpacingSize.Small }))
                     .addActionRowComponents(new ActionRowBuilder<ButtonBuilder>({ components: [{ type: ComponentType.Button, style: ButtonStyle.Link, label: 'Apeal', url: 'https://discord.gg/qMjjyXyYbr' }] }));
-                await client.rest.post(Routes.channelMessages(dmchannel.id), { body: v2(dmContainer) });
+                targetUser.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] })
             } catch { dm = false; }
-
-            await client.rest.put(Routes.guildBan(guildId!, targetUser.id), { body: { delete_message_seconds: 604800 }, reason: 'Ban Command: troll' });
-            await client.rest.post(Routes.channelMessages(modChannels.banlogChannel), {
-                body: v2(new ContainerBuilder({ accent_color: 0xd10000 })
-                    .addSectionComponents(new SectionBuilder({
-                        components: [{
-                            type: ComponentType.TextDisplay,
-                            content: `${member!.user.username} banned a member\n\nuser: <@${targetUser.id}>\nChannel: <#${channel!.id}>\nHistory: ${caseHistory.join(' | ') || 'none'}\nReason: Troll\n\n${subtext(dm ? 'User DMed ✅' : 'User DMed 🚫')}`
-                        }],
-                        accessory: {
-                            type: ComponentType.Thumbnail,
-                            media: { url: avatar }
-                        }
-                    })),
-                )
-            });
-            if (inviteCode !== 'none') await client.rest.delete(Routes.invite(inviteCode!));
-            const disabledComponents = (message.components as ActionRow<ButtonComponent>[]).map(row =>
-                new ActionRowBuilder<ButtonBuilder>().addComponents(row.components.map(component => {
-                    const button = ButtonBuilder.from(component.toJSON()).setDisabled(true);
-                    if (component.customId === customId) {
-                        button.setStyle(ButtonStyle.Secondary).setLabel(inviteCode !== 'none' ? '🔨 Banned & Invite Deleted!' : '🔨 Banned!');
-                    }
-                    return button;
-                }))
-            );
-            await message.edit({ flags: MessageFlags.IsComponentsV2, components: disabledComponents });
+            await guild?.bans.create(targetUser.id, { reason: 'Ban Command: troll', deleteMessageSeconds: 604800 });
+            const logchannel = guild?.channels.cache.get(modChannels.banlogChannel) as TextChannel
+            await logchannel.send({
+                flags: MessageFlags.IsComponentsV2,
+                components: [new ContainerBuilder()
+                    .setAccentColor(0xd10000)
+                    .addSectionComponents(
+                        new SectionBuilder()
+                            .addTextDisplayComponents(new TextDisplayBuilder({ content: `${member!.user.username} banned a member\n\nuser: <@${targetUser.id}>\nChannel: <#${channel!.id}>\nHistory: ${caseHistory.join(' | ') || 'none'}\nReason: Troll\n\n${subtext(dm ? 'User DMed ✅' : 'User DMed 🚫')}` }))
+                            .setThumbnailAccessory(new ThumbnailBuilder({ media: { url: targetUser.avatarURL() ?? targetUser.defaultAvatarURL } }))
+                    )
+                ]
+            })
+            if (inviteCode !== 'none') await guild?.invites.delete(inviteCode!);
+            const pushedbutton = message.resolveComponent(customId) as ButtonComponent;
+            message.components[3]!.components =
+                ButtonBuilder
+                    .from(pushedbutton.toJSON())
+                    .setLabel(inviteCode !== 'none' ? '🔨 Banned & Invite Deleted!' : '🔨 Banned!').toJSON();
+            return await interaction.update({ flags: MessageFlags.IsComponentsV2, components: message.components });
         }
         else if (customId.startsWith('unban_')) {
             const [, action, userId] = customId.split('_');
             const approved = action === 'approve';
             const color = approved ? 0x008900 : 0x890000;
-            const targetUser = await client.rest.get(Routes.user(userId!)) as APIUser;
+            const targetUser = await client.users.fetch(userId!);
             const doc = await usersCollection.findOne({ userId, guildId: guildId }, { projection: { appeals: 1 } });
             const appeals = doc?.appeals;
             if (!appeals) return ephemeral('I could not find any appeal entries');
@@ -1566,30 +1371,25 @@ client.on('interactionCreate', async (interaction: Interaction) => {
             }
             if (!approved) await usersCollection.deleteOne({ userId, guildId: guildId }); // wipes the whole doc
             else {
-                await client.rest.delete(Routes.guildBan(guildId!, userId!));
+                await guild?.bans.remove(userId!);
                 await usersCollection.updateOne({ userId, guildId: guildId }, { $set: { appeals: {} } });
             }
             try {
-                const dm = await client.rest.post(Routes.userChannels(), { body: { recipient_id: userId } }) as APIDMChannel;
-                await client.rest.post(Routes.channelMessages(dm.id), {
-                    body: {
-                        embeds: [new EmbedBuilder().setColor(color).setDescription(
-                            approved ? `<@${userId}> your ban appeal has been accepted! click below to rejoin the server!\n\n invite: ${appealInvite}` : `<@${userId}> your ban appeal has been denied.`,
-                        ).toJSON()]
-                    },
+                await targetUser.send({
+                    embeds: [new EmbedBuilder().setColor(color).setDescription(
+                        approved ? `<@${userId}> your ban appeal has been accepted! click below to rejoin the server!\n\n invite: ${appealInvite}` : `<@${userId}> your ban appeal has been denied.`,
+                    ).toJSON()]
                 });
             } catch { /* DMs closed */ }
             const gallery = message.components.filter(component => component.type == ComponentType.MediaGallery)[0]
             const container = new ContainerBuilder()
                 .setAccentColor(color)
-                .addSectionComponents(new SectionBuilder({ components: [{ type: ComponentType.TextDisplay, content: `## Ban appeal: ${approved ? 'Approved' : 'Denied'}\n**Why did you get banned?**\n${appeals.reason}\n\n**Why accept appeal?**\n${appeals.justification}\n\n**Extra info**\n${appeals.extra || 'None'}` }], accessory: { type: ComponentType.Thumbnail, media: { url: avatarOf(targetUser) } } }));
+                .addSectionComponents(new SectionBuilder({ components: [{ type: ComponentType.TextDisplay, content: `## Ban appeal: ${approved ? 'Approved' : 'Denied'}\n**Why did you get banned?**\n${appeals.reason}\n\n**Why accept appeal?**\n${appeals.justification}\n\n**Extra info**\n${appeals.extra || 'None'}` }], accessory: { type: ComponentType.Thumbnail, media: { url: targetUser.avatarURL() ?? targetUser.defaultAvatarURL } } }));
             if (gallery) container.addMediaGalleryComponents(
                 new MediaGalleryBuilder().addItems(gallery.items.map(i => ({ media: { url: i.media.url } }))),
             );
-            container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-                subtext(`${approved ? 'Approved' : 'Denied'} by <@${member!.user.id}> | User ID: ${userId}`),
-            ));
-            return await interaction.reply(v2(container))
+            container.addTextDisplayComponents(new TextDisplayBuilder({ content: subtext(`${approved ? 'Approved' : 'Denied'} by <@${member!.user.id}> | User ID: ${userId}`) }));
+            return await interaction.update({ flags: MessageFlags.IsComponentsV2, components: [container] })
         }
         else if (customId.startsWith('apply-part-')) {
             const part = Number(customId.split('-')[2]);
@@ -1608,17 +1408,18 @@ client.on('interactionCreate', async (interaction: Interaction) => {
             const embed = new EmbedBuilder({
                 color: 0x13b6df,
                 title: 'Mod Application',
-                author: { name: `@${member!.user.username}`, iconURL: avatarOf(member!.user) },
-                fields: APP_FIELDS.map(([name, key]) => ({ name, value: String(application[key] ?? 'N/A').slice(0, 1024) })),
+                author: { name: `@${member!.user.username}`, iconURL: user.avatarURL() ?? user.defaultAvatarURL },
+                fields: APP_FIELDS.map(([name, key]) => ({ name, value: String(application[key]).slice(0, 1024) })),
                 timestamp: Date.now()
             })
             await client.rest.post(Routes.channelMessages(modChannels.applicationChannel), { body: { embeds: [embed.toJSON()] } });
             await usersCollection.updateOne({ userId: member?.user.id, guildId: guildId }, { $set: { application: {} } });
-            const message = await interaction.reply({
-                ...v2(new ContainerBuilder({
+            const message = await interaction.update({
+                flags: MessageFlags.IsComponentsV2,
+                components: [new ContainerBuilder({
                     accent_color: 0x2ecc71,
                     components: [new TextDisplayBuilder({ content: '## Application submitted!\nThanks for applying — the mod team will review it soon.' }).setContent('## Application submitted!\nThanks for applying — the mod team will review it soon.').toJSON()]
-                }))
+                })]
             })
             setTimeout(async () => { await message.delete() }, 60_000);
 
@@ -1626,10 +1427,9 @@ client.on('interactionCreate', async (interaction: Interaction) => {
         else if (customId.startsWith('note-') || customId.startsWith('modlog-')) {
             const isNote = customId.startsWith('note-');
             const [, action, target, index, opener, itemId] = customId.split('-');
-            if (member!.user.id !== opener) return ephemeral('You did not initiate this command');
+            if (member!.user.id !== opener) return interaction.reply({ embeds: [ephemeral('You did not initiate this command')] });
             const targetUser = await client.users.fetch(target!)
             let idx = parseInt(index!);
-
             if (action === 'del') {
                 const itemObjId = ObjectId.createFromHexString(itemId!);
                 if (isNote) {
@@ -1649,11 +1449,14 @@ client.on('interactionCreate', async (interaction: Interaction) => {
                 const doc = await usersCollection.findOne({ userId: target, guildId: guildId }, { projection: { notes: 1 } });
                 const notes: any[] = [...(doc?.notes ?? [])].sort((a, b) => b.timestamp - a.timestamp);
                 if (!notes.length) {
-                    return await interaction.reply(v2(new ContainerBuilder().setAccentColor(0xdddddd).addTextDisplayComponents(new TextDisplayBuilder().setContent('All notes deleted.'))))
+                    return await interaction.update({
+                        flags: MessageFlags.IsComponentsV2,
+                        components: [new ContainerBuilder().setAccentColor(0xdddddd).addTextDisplayComponents(new TextDisplayBuilder({ content: 'All notes deleted.' }).setContent('All notes deleted.'))]
+                    })
                 }
                 idx = Math.min(idx, notes.length - 1);
-                const mod = await client.rest.get(Routes.user(notes[idx].moderatorId)) as APIUser;
-                return await interaction.reply(v2(buildNoteView(notes, idx, targetUser, mod, opener!)))
+                const mod = await client.users.fetch(notes[idx].moderatorId);
+                return await interaction.update({ flags: MessageFlags.IsComponentsV2, components: [buildNoteView(notes, idx, targetUser, mod, opener!)] })
             } else {
                 const doc = await usersCollection.findOne({ userId: target, guildId: guildId }, { projection: { punishments: 1 } });
                 const logs: any[] = doc?.punishments ?? [];
@@ -1662,39 +1465,29 @@ client.on('interactionCreate', async (interaction: Interaction) => {
                 }
                 idx = Math.min(idx, logs.length - 1);
 
-                const mod = await client.rest.get(Routes.user(logs[idx].moderatorId)) as APIUser;
-                return await interaction.reply(buildModlogView(logs, idx, targetUser, mod, opener!, isAdmin!))
+                const mod = await client.users.fetch(logs[idx].moderatorId);
+                return await interaction.update(buildModlogView(logs, idx, targetUser, mod, opener!, isAdmin!))
             }
         }
         else if (customId.startsWith('logos')) {
-            const [, guess, logo] = customId.split('-');
-            const components = message.components.map((component) => {
-                const data = component.toJSON();
-                if (data.type !== ComponentType.Container) return data;
-                return {
-                    ...data,
-                    components: data.components.map((child) => {
-                        if (child.type !== ComponentType.ActionRow) return child;
-                        return {
-                            ...child,
-                            components: child.components.map((button) => {
-                                const brand = ('custom_id' in button ? button.custom_id : undefined)?.split('-')[1];
-                                return {
-                                    ...button,
-                                    style: brand === logo ? ButtonStyle.Success : brand === guess ? ButtonStyle.Danger : ButtonStyle.Secondary,
-                                    disabled: true
-                                };
-                            })
-                        };
-                    })
-                };
-            });
-            if (guess === logo) await usersCollection.findOneAndUpdate({ userId: member?.user.id, guildId: guildId }, { $inc: { coins: 20 } });
-            return await message.edit({ components: components })
+            const pushedbutton = message.resolveComponent(customId) as ButtonComponent
+            const logo = customId.slice(`logos-${pushedbutton.label}-`.length);
+            const actionRow = message.components[0];
+            if (!actionRow || actionRow.type !== ComponentType.ActionRow) return;
+            const buttons = actionRow.components.filter((component): component is ButtonComponent => component.type === ComponentType.Button);
+            const updatedRow = new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons.map(button =>
+                ButtonBuilder.from(button.toJSON()).setDisabled(true).setStyle(
+                    button.customId === customId
+                        ? pushedbutton.label === logo ? ButtonStyle.Success : ButtonStyle.Danger
+                        : ButtonStyle.Secondary
+                )
+            ));
+            if (pushedbutton.label === logo) await usersCollection.findOneAndUpdate({ userId: member?.user.id, guildId: guildId }, { $inc: { coins: 20 } });
+            return await interaction.update({ components: [updatedRow] })
         }
         else if (customId.startsWith('ttt-')) {
             const [, boardStr, player1, player2, currentplayer, index] = customId.split('-');
-            if (member?.user.id !== currentplayer) return Response.json({ type: InteractionResponseType.ChannelMessageWithSource, data: { content: "It's not your turn.", flags: MessageFlags.Ephemeral } });
+            if (member?.user.id !== currentplayer) return interaction.reply({ embeds: [ephemeral("It's not your turn.")], flags: MessageFlags.Ephemeral }) 
             const board = boardStr!.split('');
             const marker = currentplayer === player1 ? 'X' : 'O';
             board[parseInt(index!)] = marker;
@@ -1702,17 +1495,29 @@ client.on('interactionCreate', async (interaction: Interaction) => {
             const tie = !win && board.every((c: string) => c !== '_');
             if (win || tie) {
                 if (win) await usersCollection.findOneAndUpdate({ userId: currentplayer, guildId: guildId }, { $inc: { coins: 100 } });
-                setTimeout(() => { client.rest.delete(Routes.webhookMessage(applicationId, token)).catch(() => null); }, 10000);
+                setTimeout(() => { message.delete(); }, 10000);
             }
+            const rows = [0, 1, 2].map(i =>
+                new ActionRowBuilder<ButtonBuilder>().addComponents(
+                    [0, 1, 2].map(j => {
+                        const index = i * 3 + j;
+                        const cell = board[index]!;
+                        return new ButtonBuilder({
+                            custom_id: `ttt-${board.join('')}-${player1}-${player2}-${nextPl}-${index}`,
+                            label: cell === '_' ? '\u200b' : cell,
+                            style: cell === 'X' ? ButtonStyle.Primary : cell === 'O' ? ButtonStyle.Danger : ButtonStyle.Secondary,
+                            disabled: cell !== '_' || win || tie
+                        })
+                    }),
+                ),
+            );
             const nextPl = currentplayer === player1 ? player2 : player1;
-            await message.edit(
-                v2(
-                    new ContainerBuilder()
-                        .setAccentColor(win ? 0xceab10 : tie ? 0x555555 : 0x0000ff)
-                        .addTextDisplayComponents(new TextDisplayBuilder({ content: `${bold('TicTacToe')}\n${win ? `<@${currentplayer}> wins!` : tie ? "It's a draw!" : `It's <@${nextPl}> turn!`}` }))
-                        .addActionRowComponents(...generateButtons(board, player1!, player2!, nextPl!, win || tie)),
-                )
-            )
+            return await interaction.update({
+                flags: MessageFlags.IsComponentsV2, components: [new ContainerBuilder()
+                    .setAccentColor(win ? 0xceab10 : tie ? 0x555555 : 0x0000ff)
+                    .addTextDisplayComponents(new TextDisplayBuilder({ content: `${bold('TicTacToe')}\n${win ? `<@${currentplayer}> wins!` : tie ? "It's a draw!" : `It's <@${nextPl}> turn!`}` }))
+                    .addActionRowComponents(rows)]
+            })
         }
         else if (customId.startsWith('highlow-')) {
             const [, choice, startNum, secretNum, streakNum, potNum, prevMin, prevMax] = customId.split('-');
@@ -1727,23 +1532,32 @@ client.on('interactionCreate', async (interaction: Interaction) => {
                 const start = parseInt(startNum!), secret = parseInt(secretNum!), streak = parseInt(streakNum!), pot = parseInt(potNum!);
                 const won = (choice === 'higher' && secret > start) || (choice === 'lower' && secret < start);
                 if (won) {
-                    const gained = Math.round(8 / winProbability(choice!, start, parseInt(prevMin!), parseInt(prevMax!)));
+                    const winProbability = Math.max(choice === 'higher' ? (parseInt(prevMin!) - start) : (start - parseInt(prevMin!)), 1) / (parseInt(prevMax!) - parseInt(prevMin!));
+                    const gained = Math.round(8 / winProbability);
                     const { min, max } = rangeForStreak(streak + 1);
                     const newStart = min + Math.ceil(Math.random() * (max - min));
                     let newSecret = min + Math.ceil(Math.random() * (max - min));
+                    const row = new ActionRowBuilder<ButtonBuilder>({
+                        components: [
+                            new ButtonBuilder({ custom_id: `highlow-higher-${newStart}-${newSecret}-${streak + 1}-${pot + gained}-${min}-${max}`, label: 'Higher', style: ButtonStyle.Primary }),
+                            new ButtonBuilder({ custom_id: `highlow-lower-${newStart}-${newSecret}-${streak + 1}-${pot + gained}-${min}-${max}`, label: 'Lower', style: ButtonStyle.Danger }),
+                            new ButtonBuilder({ custom_id: `highlow-cashout-${pot}`, label: `Cash Out (${pot})`, style: ButtonStyle.Success })
+                        ]
+                    })
                     while (newSecret === newStart) newSecret = min + Math.ceil(Math.random() * (max - min));
-                    return await message.edit({
+                    return await interaction.update({
                         embeds: [{
                             title: `Correct! (Streak: ${streak + 1})`,
                             color: 0xc79c0f,
                             description: `📉 Range tightening — this round's number is between **${min}** and **${max}**.`,
                             fields: [{ name: 'Current Number:', value: `${newStart}` }],
                         }],
-                        components: [highlowRow(newStart, newSecret, streak + 1, pot + gained, min, max).toJSON()],
+
+                        components: [row],
                     })
                 } else {
                     if (streak === 0) await usersCollection.updateOne({ userId: member?.user.id, guildId: guildId }, { $inc: { coins: -10 } });
-                    return interaction.reply({
+                    return interaction.update({
                         embeds: [{ color: 0x870000, title: 'You Lost! 💀', description: `The number was **${secret}**.\n(Guess was ${choice} than ${start})\n\nYou lost a pot of **${pot}** coins. 💸` }],
                         components: [],
                     })
@@ -1751,40 +1565,33 @@ client.on('interactionCreate', async (interaction: Interaction) => {
             }
         }
         else if (customId.startsWith('verify')) {
-            const joinedTime = await usersCollection.findOne({ guildId: guildId, userId: member?.user.id }, { projection: { joinedTime: 1 } }) as Document
-            if (Date.now() - joinedTime.joinedTime < ((Math.random() + 5) * 1000)) {
-                const channel = await client.rest.post(Routes.userChannels(), { body: { recipient_id: member?.user.id } }) as APIDMChannel
-                await client.rest.post(Routes.channelMessages(channel.id), {
-                    body: {
-                        embeds: [{
-                            author: { name: member?.user.username, icon_url: `https://cdn.discordapp.com/avatars/${member?.user.id}/${member!.user.avatar}.png` },
-                            description: `Hi <@${member?.user.id}>, your interaction speed with the verification system was too fast for a typical human and was flagged for an auto kick.\n\nYou are free to rejoin the server through a new or public invite.`
-                        }]
-                    }
-                });
-                await client.rest.delete(Routes.guildMember(guildId!, member?.user.id));
+            if (Date.now() - (member as GuildMember)!.joinedTimestamp! < ((Math.random() + 5) * 1000)) {
+                await user.send({
+                    embeds: [{
+                        author: { name: user.username, icon_url: user.avatarURL() ?? user.defaultAvatarURL },
+                        description: `Hi <@${user.id}>, your interaction speed with the verification system was too fast for a typical human and was flagged for an auto kick.\n\nYou are free to rejoin the server through a new or public invite.`
+                    }]
+                })
+                await guild?.members.kick(user.id)
                 return;
             }
-            const av = member!.avatarURL() ?? member?.defaultavatar
-            await client.rest.put(Routes.guildMemberRole(guildId!, member!.user.id, '1463354464747524136'));
-            await client.rest.post(Routes.channelMessages(generalchannels[0]), { body: { embeds: [{ description: `Everyone, Welcome <@${member?.user.id}> to the server !\n\n`, thumbnail: { url: av }, fields: [{ name: 'Discord Join Date:', value: `<t:${Number(((BigInt(member!.user.id) >> 22n) + 1420070400000n) / 1000n)}>`, inline: true }] }] } })
+            await (member as GuildMember)?.roles.add('1463354464747524136');
+            const generalchannel = guild?.channels.cache.get(generalchannels[0]) as TextChannel;
+            await generalchannel.send({ embeds: [{ description: `Everyone, Welcome <@${member?.user.id}> to the server !\n\n`, thumbnail: { url: user!.avatarURL() ?? user.defaultAvatarURL }, fields: [{ name: 'Discord Join Date:', value: `<t:${user.createdTimestamp / 1000}>`, inline: true }] }] })
             await usersCollection.findOneAndUpdate({ userId: member?.user.id }, { $set: { verified: true } })
-            return await interaction.reply({ content: `Welcome to the cave <@${member?.user.id}>!!`, flags: 64 })
+            return await user.send({ content: `Welcome to ${guild!.name} <@${member?.user.id}>!! Be sure to grab some roles in the role claim channel!!` });
         }
     }
     if (interaction.isChatInputCommand()) {
         const { options, commandName, member, guildId } = interaction
-        const guildConfig = await guildconfigs.findOne({ guildId: guildId }, { projection: { modChannels: 1, publicChannel: 1, staffroles: 1, guildname: 1, exponent: 1, baseMultiplier: 1, roundToNearest: 1, flatOffset: 1, icon: 1, Stages: 1 }, });
-        const subcommand = options.getSubcommand()
-        const key = options.getSubcommand() ? `${commandName}.${subcommand}` : commandName;
+        const guildConfig = await guildconfigs.findOne({ guildId: guildId }, { projection: { modChannels: 1, publicChannel: 1, staffroles: 1, exponent: 1, baseMultiplier: 1, roundToNearest: 1, flatOffset: 1, Stages: 1 }, });
+        const subcommand = options ? options.getSubcommand(false) : null
+        const key = subcommand ? `${commandName}.${subcommand}` : commandName;
         const expiry = activeCooldowns.get(`${member!.user.id}.${key}`);
         const handler = commands.get(key);
         if (!handler) return ephemeral(`Unhandled command: ${key}`);
         if (expiry && expiry > Date.now()) {
-            return Response.json({
-                type: InteractionResponseType.ChannelMessageWithSource,
-                data: { embeds: [notice(`<@${member!.user.id}>, you can use that command again in <t:${Math.floor(expiry / 1000)}:R>`)], flags: MessageFlags.Ephemeral }
-            });
+            return await interaction.reply({ embeds: [notice(`<@${member!.user.id}>, you can use ${subcommand ? key.split('.')[1] : commandName} command again in <t:${Math.floor(expiry / 1000)}:R>`)], flags: MessageFlags.Ephemeral })
         }
         activeCooldowns.set(`${member!.user.id}.${key}`, Date.now() + 3000);
         return await handler(interaction, guildConfig!)
