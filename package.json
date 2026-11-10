@@ -2,7 +2,7 @@
   "name": "bot",
   "private": true,
   "devDependencies": {
-    "@tailwindcss/cli": "^4.3.3",
+    "@tailwindcss/cli": "^4.3.5",
     "@types/bun": "latest",
     "bun-types": "^1.4.4",
     "http-status-codes": "^2.3.0"
@@ -17,8 +17,8 @@
     "@twurple/auth": "^8.2.0",
     "@twurple/chat": "^8.2.0",
     "@twurple/eventsub-ws": "^8.2.0",
-    "discord.js": "^14.28.0",
-    "jose": "^6.2.15",
+    "discord.js": "^14.28.1",
+    "jose": "^6.2.17",
     "mongodb": "^7.8.0"
   },
   "scripts": {
