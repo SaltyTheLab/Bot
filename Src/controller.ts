@@ -1144,10 +1144,8 @@ function createReasonWeightInput(container: HTMLElement, ruleOptions: AutomodRul
 }
 // General Channels is a flat array of channel IDs in Mongo (no key:value pairs).
 function renderArraySection(container: HTMLElement, items: string[]) {
-        container.innerHTML = '';
-    (items || []).forEach((value: string) => createArrayInput(container, value));
-}
-function createArrayInput(container: HTMLElement, value: string = '') {
+    container.innerHTML = '';
+    (items || []).forEach((value: string) => {
         const div = document.createElement('div');
         div.classList.add('flex', 'items-center', 'gap-2');
         div.innerHTML = `
@@ -1155,6 +1153,7 @@ function createArrayInput(container: HTMLElement, value: string = '') {
     <button class="remove-btn">&times;</button>`;
         div.querySelector<HTMLElement>('.remove-btn')!.onclick = () => div.remove();
         container.appendChild(div);
+    });
 }
 function getArraySectionValues(container: HTMLElement) {
         const values: string[] = [];
@@ -1227,7 +1226,7 @@ async function refreshGuildSelect() {
     const selectedGuildId = guildSelect.value;
     guildSelect.innerHTML = '<option value="">-- Select a Guild --</option>';
     if (new URLSearchParams(location.search).get('twitch') === 'connected') {
-        showMessage('Twitch bot account connected.', 'bg-green-500');
+        showMessage('Twitch module connected.', 'bg-green-500');
         history.replaceState({}, document.title, location.pathname);
     }
     const response = await fetch(`/api/auth/me`, { credentials: 'include' });
@@ -1267,7 +1266,6 @@ async function refreshGuildSelect() {
             await loadSelectedGuild(null);
             return;
         }
-        console.log(Object.keys(guildMap)[0]!)
         addServerBtn.classList.remove('hidden');
         guildSelect.value = guildMap[selectedGuildId] ? selectedGuildId : Object.keys(guildMap)[0]!;
         summary = guildMap[guildSelect.value];
@@ -1300,6 +1298,12 @@ async function loadSelectedGuild(guildId: string | null = null, guildconfig?: Gu
         return;
     } else {
         connectTwitchBtn.classList.toggle('hidden', guildconfig!.role !== 'owner');
+        if (guildconfig!.role === 'owner') {
+            const twitchResponse = await fetch(`/api/auth/me?guildId=${encodeURIComponent(guildId!)}`, { credentials: 'include', cache: 'no-store' });
+            const twitchStatus: { twitchConnected?: boolean } = await twitchResponse.json();
+            connectTwitchBtn.dataset.connected = String(twitchStatus.twitchConnected === true);
+            connectTwitchBtn.textContent = twitchStatus.twitchConnected ? 'Unlink Twitch Module' : 'Connect Twitch Bot';
+        }
         addServerBtn.classList.add('hidden');
         orText.classList.add('hidden');
         channelsContainer.classList.remove('hidden')
@@ -1688,7 +1692,8 @@ elements.connectTwitchBtn!.addEventListener('click', async () => {
     }
     elements.connectTwitchBtn.disabled = true;
     try {
-        const response = await fetch('/api/auth/twitch', { method: 'DELETE', credentials: 'include' });
+        const guildId = elements.guildSelect.value;
+        const response = await fetch(`/api/auth/twitch?guildId=${encodeURIComponent(guildId)}`, { method: 'DELETE', credentials: 'include' });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result.error || 'Could not unlink Twitch');
         elements.connectTwitchBtn.dataset.connected = 'false';
@@ -1713,7 +1718,15 @@ elements.logoutBtn!.addEventListener('click', async () => {
     await refreshGuildSelect();
 });
 elements.addPublicChannelBtn.addEventListener('click', () => createChannelInput(elements.publicChannelsSection, '', '', 'public'));
-elements.addMediaBtn.addEventListener('click', () => createArrayInput(elements.GeneralChannelsSection, ''));
+elements.addMediaBtn.addEventListener('click', () => {
+    const div = document.createElement('div');
+    div.classList.add('flex', 'items-center', 'gap-2');
+    div.innerHTML = `
+    <select class="field" data-array-value="channel">${buildChannelOptionsHtml('')}</select>
+    <button class="remove-btn">&times;</button>`;
+    div.querySelector<HTMLElement>('.remove-btn')!.onclick = () => div.remove();
+    elements.GeneralChannelsSection.appendChild(div);
+});
 elements.addReactionBtn.addEventListener('click', () => createChannelInput(elements.reactionsSection, '', '', 'reaction'));
 elements.addStringBtn.addEventListener('click', () => createChannelInput(elements.Responses, '', '', 'response'));
 elements.addReasonWeightBtn.addEventListener('click', () => createReasonWeightInput(elements.reasonsWeightsSection, currentAutomodRules, '', '', 1));
@@ -1759,7 +1772,6 @@ elements.deleteConfigBtn.addEventListener('click', async () => {
     elements.guildSelect!.value = '';
     await refreshGuildSelect();
 });
-
 elements.addServerBtn.addEventListener('click', () => { window.open('https://discord.com/oauth2/authorize?client_id=1420927654701301951&permissions=1202859404454&integration_type=0&scope=bot+applications.commands', '_blank', 'noopener,noreferrer'); });
 initTabs();
 initSubtabs();
