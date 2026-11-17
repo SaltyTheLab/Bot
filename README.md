@@ -6,10 +6,11 @@ To install dependencies:
 bun install
 ```
 
-To run:
+To build and run the bot:
 
 ```bash
-bun run 
+bun run ./build.ts
+./bot.exe
 ```
 
-This project was created using `bun init` in bun v1.3.14. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+The build produces one executable containing both the Discord bot and the interactions/OAuth server.
