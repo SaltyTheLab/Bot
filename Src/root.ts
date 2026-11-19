@@ -557,8 +557,8 @@ commands.set('link', async (interaction) => {
 commands.set('admin.clear', async (interaction) => {
     const { channel, options } = interaction
     const count = options.getInteger('count', true);
-    if (count > 1 && channel instanceof TextChannel) {
-        await (channel).bulkDelete(count, true)
+    if (count > 1) {
+        await (channel as TextChannel).bulkDelete(count, true)
         return await interaction.reply({ content: `Deleted ${count} messages.`, flags: MessageFlags.Ephemeral, })
     }
 })
@@ -1414,7 +1414,7 @@ client.on('interactionCreate', async (interaction) => {
                 flags: MessageFlags.IsComponentsV2,
                 components: [new ContainerBuilder({
                     accent_color: 0x2ecc71,
-                    components: [new TextDisplayBuilder({ content: '## Application submitted!\nThanks for applying — the mod team will review it soon.' }).setContent('## Application submitted!\nThanks for applying — the mod team will review it soon.').toJSON()]
+                    components: [new TextDisplayBuilder({ content: '## Application submitted!\nThanks for applying — the mod team will review it soon.' }).toJSON()]
                 })]
             })
             setTimeout(async () => { await message.delete() }, 60_000);
@@ -1471,12 +1471,8 @@ client.on('interactionCreate', async (interaction) => {
             const actionRow = message.components[0];
             if (!actionRow || actionRow.type !== ComponentType.ActionRow) return;
             const buttons = actionRow.components.filter((component): component is ButtonComponent => component.type === ComponentType.Button);
-            const updatedRow = new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons.map(button =>
-                ButtonBuilder.from(button.toJSON()).setDisabled(true).setStyle(
-                    button.customId === customId
-                        ? pushedbutton.label === logo ? ButtonStyle.Success : ButtonStyle.Danger
-                        : ButtonStyle.Secondary
-                )
+            const updatedRow = new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons.map(button => 
+                ButtonBuilder.from(button.toJSON()).setDisabled(true).setStyle(button.customId == customId ? (pushedbutton.label === logo ? ButtonStyle.Success : ButtonStyle.Danger) : ButtonStyle.Secondary)
             ));
             if (pushedbutton.label === logo) await usersCollection.findOneAndUpdate({ userId: member?.user.id, guildId: guildId }, { $inc: { coins: 20 } });
             return await interaction.update({ components: [updatedRow] })
