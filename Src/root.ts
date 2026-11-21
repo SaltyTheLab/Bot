@@ -1132,8 +1132,8 @@ client.on('messageCreate', async (message) => {
     const isNewUser = Date.now() - member?.joinedTimestamp! < 2 * 24 * 60 * 60 * 1000 && level < 3
     if (isstaff) return;
     if (mentions.everyone) await message.delete();
-    const activeChecks = messagereasonsandweights.filter((key: string) => automodMarks[key]).map((key: string) => ({ ...messagereasonsandweights[key] })) as Array<{ reason: string, Weight: number }>;
-    let totalWeight = activeChecks.reduce((acc, check) => acc + check.Weight, 0) as number;
+    const activeChecks = Object.entries(messagereasonsandweights).filter(([key]) => automodMarks[key]).map(([, check]) => ({ ...check }));
+    let totalWeight = activeChecks.reduce((acc, check) => acc + check.weight, 0);
     if (totalWeight == 0) return;
     await usersCollection.updateOne({ guildId: guild.id, userId: member!.user.id }, {
         $set: { 'automodMarks.everyonePing': false, 'automodMarks.duplicateSpam': false, 'automodMarks.mediaViolation': false, 'automodMarks.generalspam': false, 'automodMarks.capSpam': false }
@@ -1141,8 +1141,7 @@ client.on('messageCreate', async (message) => {
     let reasonText = `AutoMod: ${activeChecks.map(check => check.reason).join('; ')}`;
     if (isNewUser) { totalWeight += 1; reasonText += ' while new to the server.'; }
     const bannable = isNewUser && (totalWeight >= 3 || mentions.everyone)
-
-    const activeWarns = punishments.length > 0 ? punishments.filter((p: any) => p.active === 1).reduce((acc: number, cur: any) => acc + (cur.weight || 1), 0) : 0;
+    const activeWarns = punishments && punishments.length > 0 ? punishments.filter((p: any) => p.active === 1).reduce((acc: number, cur: any) => acc + (cur.weight || 1), 0) : 0;
     const totalWarns = activeWarns + totalWeight;
     const { minutes, label } = Stages[Math.min(totalWarns > 0 ? totalWarns - 1 : 0, Stages.length - 1)];
     const object = new ObjectId();
@@ -1164,7 +1163,8 @@ client.on('messageCreate', async (message) => {
     });
     const newPunishment = { _id: object, userId: author.id, moderatorId: '1420927654701301951', reasonText, duration: durationMs, timestamp: Date.now(), active: 1, weight: !bannable ? totalWeight : 1, type: warnType, guildId: guild.id, channel: channel.id, refrence: `https://discord.com/channels/${guild.id}/${channel.id}/${finalMessage.id}`, warns: isFinite(totalWarns) ? totalWarns - 1 : 0 };
     await usersCollection.updateOne({ userId: author.id, guildId: guild.id }, { $push: { punishments: newPunishment as any } });
-    const caseHistory = [...punishments, newPunishment].filter((r: any) => warnType === 'Ban' ? r.type === "Ban" : r.type !== 'Kick').slice(0, 10).map((p: any, idx: number) => p.refrence ? `[Case ${idx + 1}](${p.refrence})` : null).filter(Boolean);
+    const list = punishments ? [...punishments, newPunishment] : [newPunishment]
+    const caseHistory = list.filter((r: any) => warnType === 'Ban' ? r.type === "Ban" : r.type !== 'Kick').slice(0, 10).map((p: any, idx: number) => p.refrence ? `[Case ${idx + 1}](${p.refrence})` : null).filter(Boolean);
     let dm = true;
     const container = new ContainerBuilder()
         .setAccentColor(statusMap[warnType]!.color)
