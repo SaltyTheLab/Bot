@@ -2,7 +2,7 @@ import { cron, sleep, file, Image } from 'bun'
 import { usersCollection, guildconfigs, type DbInvite } from './Database';
 import statusMap from './statusMap';
 import { ObjectId, type Document, type WithId } from 'mongodb';
-import { ComponentType, ButtonStyle, MessageType, ActivityType, PresenceUpdateStatus, Client, Options, Role, Routes, Partials, GatewayIntentBits, TextChannel, MessageFlags, subtext, GuildMember, Invite, SectionBuilder, TextDisplayBuilder, ContainerBuilder, ButtonBuilder, ThumbnailBuilder, Collection, bold, quote, ChatInputCommandInteraction, EmbedBuilder, InteractionResponse, PermissionFlagsBits, MediaGalleryBuilder, ActionRowBuilder, ModalBuilder, User, SeparatorBuilder, SeparatorSpacingSize, ButtonComponent, AttachmentBuilder } from 'discord.js'
+import { ComponentType, ButtonStyle, MessageType, ActivityType, PresenceUpdateStatus, Client, Options, Role, Routes, Partials, GatewayIntentBits, TextChannel, MessageFlags, subtext, Invite, SectionBuilder, TextDisplayBuilder, ContainerBuilder, ButtonBuilder, ThumbnailBuilder, Collection, bold, quote, ChatInputCommandInteraction, EmbedBuilder, InteractionResponse, MediaGalleryBuilder, ActionRowBuilder, ModalBuilder, User, SeparatorBuilder, SeparatorSpacingSize, ButtonComponent, AttachmentBuilder } from 'discord.js'
 import { createHash } from 'crypto'
 import awardXp from './xp';
 import { apiClient } from './twitch';
@@ -11,7 +11,6 @@ import { buildApplicationHub, PART_CONFIG } from './applicationConfig';
 import { readdir } from 'fs/promises';
 process.on("uncaughtException", (err: any) => { console.error('[root] Uncaught exception', err) })
 process.on("unhandledRejection", (reason: any) => { console.error('[root] Unhandled rejection', reason) });
-
 const client = new Client({
     intents: GatewayIntentBits.Guilds | GatewayIntentBits.GuildMembers | GatewayIntentBits.GuildModeration | GatewayIntentBits.GuildExpressions | GatewayIntentBits.GuildIntegrations | GatewayIntentBits.GuildWebhooks | GatewayIntentBits.GuildVoiceStates | GatewayIntentBits.GuildMessages | GatewayIntentBits.GuildMessageReactions | GatewayIntentBits.MessageContent,
     partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.User],
@@ -19,10 +18,7 @@ const client = new Client({
     makeCache: Options.cacheWithLimits({ ...Options.DefaultMakeCacheSettings }),
     sweepers: { ...Options.DefaultSweeperSettings }
 });
-const ephemeral = (content: string) => { return new EmbedBuilder({ description: content }) };
-const LOG_COLORS: Record<string, number> = { Warn: 0xffcc00, Mute: 0xff4444, Ban: 0xd10000, Kick: 0x838383 };
-const fmtDate = (ts: number) => new Date(ts).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Chicago' });
-const notice = (description: string, color?: number) => new EmbedBuilder({ color: color ?? undefined, description: description }).toJSON();
+
 async function runPunishment(interaction: ChatInputCommandInteraction, guildConfig: Document): Promise<void> {
     const { guildId, channelId, options, guild } = interaction
     const targetUser = options.getUser('target', true);
@@ -44,14 +40,14 @@ async function runPunishment(interaction: ChatInputCommandInteraction, guildConf
         durationStr = stage.minutes > 0 ? stage.label : `${duration} ${unit}`;
         warnType = 'Mute';
     }
-    const finalMessage = await interaction.editReply({
+    const finalMessage = await interaction.reply({
         embeds: [new EmbedBuilder({
             color: statusMap[warnType]!.color,
             author: { name: `${targetUser.username} ${warnType === 'Mute' ? `was issued a ${durationStr}` : statusMap[warnType]!.cmd}`, iconURL: targetUser.displayAvatarURL() ?? targetUser.defaultAvatarURL }
         })]
     });
     const object = new ObjectId();
-    const newPunishment = { _id: object, userId: targetUser.id, moderatorId: interaction.user.id, reason, duration: durationMs, timestamp: Date.now(), active: 1, weight: 1, type: warnType, guildId, channel: channelId, refrence: `https://discord.com/channels/${guildId}/${channelId}/${finalMessage.id}`, warns: isFinite(activeWarns) ? activeWarns : 1 };
+    const newPunishment = { _id: object, userId: targetUser.id, moderatorId: interaction.user.id, reason: reason, duration: durationMs, timestamp: Date.now(), active: 1, weight: 1, type: warnType, guildId, channel: channelId, refrence: `https://discord.com/channels/${guildId}/${channelId}/${finalMessage.id}`, warns: isFinite(activeWarns) ? activeWarns : 1 };
     await usersCollection.updateOne({ userId: targetUser.id, guildId }, { $push: { punishments: newPunishment as any } });
     const caseHistory = [...punishments, newPunishment].filter((r: any) => warnType === 'Ban' ? r.type === 'Ban' : r.type !== 'Kick').slice(0, 10).map((p: any, idx: number) => p.refrence ? `[Case ${idx + 1}](${p.refrence})` : null).filter(Boolean);
     let dm = true;
@@ -104,95 +100,42 @@ async function runPunishment(interaction: ChatInputCommandInteraction, guildConf
 }
 async function withGuards(interaction: ChatInputCommandInteraction, guildConfig: WithId<Document>, restrictedToFullMod: boolean = false): Promise<InteractionResponse | void> {
     const { member, options, } = interaction;
-    const duration = options.getInteger('duration', true)
+    const duration = options.getInteger('duration')
     const subcommand = options.getSubcommand(true)
     const targetuser = options.getUser('target', true)
     const targetmember = await interaction.guild!.members.fetch(targetuser.id);
     const { modChannels, staffroles } = guildConfig as WithId<Document>;
-    if (subcommand) {
+    if (subcommand == 'mute') {
         if (duration! <= 0) {
-            return await interaction.reply({ embeds: [notice('❌ Invalid duration')], flags: MessageFlags.Ephemeral })
+            return await interaction.reply({ embeds: [new EmbedBuilder({ description: '❌ Invalid duration' })], flags: MessageFlags.Ephemeral })
         }
     }
     if (targetuser.id === member?.user.id) {
-        return await interaction.reply({ embeds: [notice('You cannot moderate yourself.')], flags: MessageFlags.Ephemeral })
+        return await interaction.reply({ embeds: [new EmbedBuilder({ description: 'You cannot moderate yourself.' })], flags: MessageFlags.Ephemeral })
     }
     if (targetuser?.bot) {
-        return interaction.reply({ embeds: [notice('You cannot moderate bots.')], flags: MessageFlags.Ephemeral })
+        return interaction.reply({ embeds: [new EmbedBuilder({ description: 'You cannot moderate bots.' })], flags: MessageFlags.Ephemeral })
     }
-    if (restrictedToFullMod && !interaction.memberPermissions?.has(PermissionFlagsBits.BanMembers)) {
+    if (restrictedToFullMod && !interaction.member?.roles.cache.has(staffroles[1])) {
         await client.rest.post(Routes.channelMessages(modChannels.adminChannel), {
-            body: { embeds: [notice(`Jr. mod ${member?.user} tried to use a mod only command.`)] }
+            body: { embeds: [new EmbedBuilder({ description: `Jr. mod ${member?.user} tried to use a mod only command.` })] }
         });
-        return await interaction.reply({ embeds: [notice('Jr mods do not have access to this command.')], flags: MessageFlags.Ephemeral })
+        return await interaction.reply({
+            embeds: [new EmbedBuilder({ description: 'Jr mods do not have access to this command.' })], flags: MessageFlags.Ephemeral
+        })
     }
     if (targetmember?.roles.cache.some((role: Role) => staffroles.includes(role.id))) {
         await client.rest.post(Routes.channelMessages(modChannels.adminChannel), {
-            body: { embeds: [notice(`<@${member?.user.id}> tried to moderate <@${targetuser!.id}>.`)] }
+            body: { embeds: [new EmbedBuilder({ description: `<@${member?.user.id}> tried to moderate <@${targetuser!.id}>.` })] }
         });
-        return await interaction.reply({ embeds: [notice(`<@${member?.user.id}> tried to moderate <@${targetuser!.id}>.`)] })
+        return await interaction.reply({ embeds: [new EmbedBuilder({ description: `You cannot moderate other staff members. Please handle the issue with someone higher up.` })], flags: MessageFlags.Ephemeral })
 
     }
 };
-function buildNoteView(notes: any[], index: number, user: User, mod: User, opener: string, disabled = false) {
-    const n = notes[index];
-    return new ContainerBuilder({ accent_color: 0xdddddd, })
-        .addSectionComponents(new SectionBuilder({ components: [{ type: ComponentType.TextDisplay, content: `<@${user.id}> notes | \`${index + 1} of ${notes.length}\`\n${String(n.note).split('\n').map(l => `> ${l}`).join('\n')}\n\n${subtext(`<@${mod.id}> | ${fmtDate(n.timestamp)}`)}` }], accessory: { type: ComponentType.Thumbnail, media: { url: user.avatarURL()! } } }))
-        .addActionRowComponents(new ActionRowBuilder<ButtonBuilder>().addComponents(
-            new ButtonBuilder({ custom_id: `note-prev-${user.id}-${index}-${opener}`, label: '◀️ prev', style: ButtonStyle.Secondary, disabled: disabled || index === 0 }),
-            new ButtonBuilder({ custom_id: `note-next-${user.id}-${index}-${opener}`, label: '▶️ next', style: ButtonStyle.Secondary, disabled: disabled || index >= notes.length - 1 }),
-            new ButtonBuilder({ custom_id: `note-del-${user.id}-${index}-${opener}-${n._id}`, label: '🗑️ delete', style: ButtonStyle.Secondary, disabled: disabled })
-        ));
-}
-function buildModlogView(logs: any[], index: number, user: User, mod: User, opener: string, isAdmin: boolean, disabled = false) {
-    const p = logs[index];
-    const mins = Math.round(p.duration / 60000);
-    const hours = Math.floor(mins / 60);
-    const embed = new EmbedBuilder()
-        .setColor(LOG_COLORS[p.type] ?? 0x838383)
-        .setThumbnail(user.avatarURL())
-        .addFields(
-            { name: '**Member:**', value: `<@${user.id}>`, inline: true },
-            { name: '**type:**', value: `\`${p.type}\``, inline: true },
-            { name: '**Active:**', value: `\`${p.active == 1 ? 'true' : 'false'}\``, inline: true },
-            { name: '**Reason:**', value: `\`${p.reason}\`` },
-            { name: '**Punishments:**', value: `${p.type == 'Ban' ? '`Ban`' : `\`${p.weight} warn\``}${p.duration ? `,\`${hours > 0 ? `${hours} hour` : `${mins} minute`} Mute\`` : ''}` },
-            { name: '**Warns at Log Time:**', value: `\`${isFinite(p.warns) ? p.warns : 0}\`` },
-            { name: '**Channel:**', value: `<#${p.channel}>\n\n[Event Link](${p.refrence})` },
-        )
-        .setFooter({ text: `Staff: ${mod.username} | log ${index + 1} of ${logs.length} | ${fmtDate(p.timestamp)}`, iconURL: mod.avatarURL() ?? mod.defaultAvatarURL });
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder().setCustomId(`modlog-prev-${user.id}-${index}-${opener}`).setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary).setDisabled(disabled || index === 0),
-        new ButtonBuilder().setCustomId(`modlog-next-${user.id}-${index}-${opener}`).setLabel('Next ➡️').setStyle(ButtonStyle.Secondary).setDisabled(disabled || index >= logs.length - 1),
-    );
-    if (isAdmin) row.addComponents(
-        new ButtonBuilder().setCustomId(`modlog-del-${user.id}-${index}-${opener}-${p._id}`).setLabel('Delete').setStyle(ButtonStyle.Danger).setDisabled(disabled),
-    );
-    return { embeds: [embed.toJSON()], components: [row.toJSON()] };
-}
 const commands = new Collection<string, (interaction: ChatInputCommandInteraction, guildConfig: WithId<Document>) => Promise<unknown>>();
 const activeCooldowns = new Collection<string, number>();
-function rangeForStreak(streak: number, k = 2): { min: number, max: number } {
-    const width = Math.max(5, 100 / (1 + k * Math.log(streak + 1)));
-    const center = width / 2 + (Math.random() - 0.5) * (100 - width); // range wanders, not glued to center
-    let min = Math.ceil(Math.max(1, center - width / 2));
-    let max = Math.ceil(Math.min(100, center + width / 2));
-    return { min, max };
-}
-async function buildBlacklistEmbed(targetUser: User, guild_id: string) {
-    const doc = await usersCollection.findOne({ userId: targetUser.id, guildId: guild_id }, { projection: { blacklist: 1 } });
-    const blacklist: string[] = doc?.blacklist ?? [];
-    const embed = new EmbedBuilder().setDescription(
-        `<@${targetUser.id}>'s blacklist\n\nblacklist: ${blacklist.length ? blacklist.map(r => `<@&${r}>`).join(', ') : 'empty'}`,
-    );
-    return { embed, blacklist };
-}
 let massban = 0;
-async function getReactionRoleConfig(guildId: string, messageId: string) {
-    const doc = await guildconfigs.findOne({ guildId }, { projection: { messageConfigs: 1 } });
-    if (!doc) return null
-    return Object.values(doc?.messageConfigs ?? {}).find((info: any) => info?.messageId === messageId) as { reactions: { emoji: string; roleId: string | string[] }[] } | undefined;
-}
+let presenceInterval: NodeJS.Timeout;
 cron("0 0 * * 0", async () => {
     const list = await usersCollection.find({ level: 1, totalmessages: 0, guildId: '1231453115937587270' }, { projection: { userId: 1, _id: 0 } }).toArray()
     const ids = list.flatMap(doc => doc.userId)
@@ -207,26 +150,12 @@ cron("0 0 * * 0", async () => {
     }
     await usersCollection.deleteMany({ guildId: '1231453115937587270', userId: { $in: ids } })
 })
-let presenceInterval: NodeJS.Timeout;
-function startStatusLoop() {
-    clearInterval(presenceInterval);
-    presenceInterval = setInterval(() => {
-        client.user?.setPresence({
-            activities: [{
-                name: `for ${Math.floor(client.uptime! / 86400000)}d ${Math.floor((client.uptime! / 3600000) % 24)}h ${Math.floor((client.uptime! / 60000) % 60)}m ${Math.floor((client.uptime! / 1000) % 60)}s`,
-                type: ActivityType.Watching,
-            }],
-            status: PresenceUpdateStatus.Online,
-            afk: false,
-        });
-    }, 5000);
-}
-commands.set('dnd', async (interaction: ChatInputCommandInteraction) => {
+commands.set('dnd', async (interaction) => {
     const { options } = interaction
     const sides = options.getInteger('sides', true)
     return await interaction.reply({ content: `you rolled a ${Math.ceil(Math.random() * sides)}` })
 })
-commands.set('games.rps', async (interaction: ChatInputCommandInteraction) => {
+commands.set('rps', async (interaction) => {
     const { member, guildId, options } = interaction;
     const choice = options.getString('choice', true)
     const oppChoices = ['rock', 'paper', 'scissors'];
@@ -236,7 +165,7 @@ commands.set('games.rps', async (interaction: ChatInputCommandInteraction) => {
     if (result === 'you win!!!') await usersCollection.findOneAndUpdate({ userId: member?.user.id, guildId: guildId }, { $inc: { coins: 20 } });
     return await interaction.reply({ embeds: [new EmbedBuilder({ color: 0xffa500, title: result, description: `You chose **${choice!}**.\nOpponent chose **${opp}**.` })] })
 })
-commands.set('games.logos', async (interaction: ChatInputCommandInteraction) => {
+commands.set('logos', async (interaction) => {
     const { user } = interaction;
     const picks: string[] = []
     const choices = await readdir('./images')
@@ -263,10 +192,10 @@ commands.set('games.logos', async (interaction: ChatInputCommandInteraction) => 
             })]
     });
 })
-commands.set('games.tictactoe', async (interaction: ChatInputCommandInteraction) => {
+commands.set('tictactoe', async (interaction) => {
     const { member, options } = interaction;
     const opponent = options.getUser('opponent', true)
-    if (member!.user.id === opponent.id) { return await interaction.reply({ embeds: [ephemeral("You can't play against yourself.")] }) }
+    if (member!.user.id === opponent.id) { return await interaction.reply({ embeds: [new EmbedBuilder({ description: "You can't play against yourself." })], flags: MessageFlags.Ephemeral }) }
     const current = Math.random() < 0.5 ? member!.user.id : opponent.id!;
     const board = Array(9).fill('_')
     const rows = [0, 1, 2].map(i =>
@@ -289,8 +218,11 @@ commands.set('games.tictactoe', async (interaction: ChatInputCommandInteraction)
         .addActionRowComponents(rows);
     return await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container.toJSON()] })
 });
-commands.set('games.highlow', async (interaction: ChatInputCommandInteraction) => {
-    const { min, max } = rangeForStreak(0);
+commands.set('highlow', async (interaction) => {
+    const width = Math.max(5, 100 / (1 + 2 * Math.log(0 + 1)));
+    const center = width / 2 + (Math.random() - 0.5) * (100 - width); // range wanders, not glued to center
+    let min = Math.ceil(Math.max(1, center - width / 2));
+    let max = Math.ceil(Math.min(100, center + width / 2));
     const start = min + Math.ceil(Math.random() * (max - min));
     let secret = min + Math.ceil(Math.random() * (max - min));
     while (secret === start) secret = min + Math.ceil(Math.random() * (max - min));
@@ -308,7 +240,7 @@ commands.set('games.highlow', async (interaction: ChatInputCommandInteraction) =
         })]
     })
 });
-commands.set('games.bet', async (interaction: ChatInputCommandInteraction) => {
+commands.set('bet', async (interaction) => {
     const { guildId, options, user } = interaction;
     const amount = options.getInteger('amount', true)
     const doc = await usersCollection.findOne({ userId: user.id, guildId: guildId }, { projection: { coins: 1 } });
@@ -323,7 +255,7 @@ commands.set('games.bet', async (interaction: ChatInputCommandInteraction) => {
         .setAuthor({ name: `${user.username} you bet ${amount} and ${win ? 'won' : 'lost'}!`, iconURL: user.avatarURL() ?? user.defaultAvatarURL });
     return await interaction.reply({ embeds: [embed] })
 });
-commands.set('appeal', async (interaction: ChatInputCommandInteraction) => {
+commands.set('appeal', async (interaction) => {
     const { member, guildId, guild } = interaction;
     const userdata = await usersCollection.find({ userId: member?.user.id }).toArray();
     const seenGuilds = new Map<string, string>();
@@ -349,7 +281,7 @@ commands.set('appeal', async (interaction: ChatInputCommandInteraction) => {
         ])
     return await interaction.showModal(modal)
 });
-commands.set('rank', async (interaction: ChatInputCommandInteraction, guildConfig: WithId<Document>) => {
+commands.set('rank', async (interaction, guildConfig) => {
     const { guildId, options, user } = interaction
     const targetUser = options.getUser('target') ?? user;
     const stats = await usersCollection.findOne({ userId: targetUser.id, guildId }, { projection: { level: 1, xp: 1, coins: 1, totalmessages: 1 } });
@@ -366,38 +298,44 @@ commands.set('rank', async (interaction: ChatInputCommandInteraction, guildConfi
     const renderer = new Resvg(rankCardSvg, { font: { loadSystemFonts: false, fontFiles: ['C:\\Windows\\Fonts\\arial.ttf'], defaultFontFamily: 'Arial' } })
     return await interaction.reply({ files: [new AttachmentBuilder(renderer.render().asPng(), { name: 'rankcard.png' })] });
 });
-commands.set('blacklist.show', async (interaction: ChatInputCommandInteraction) => {
+commands.set('view', async (interaction) => {
     const { guildId, options } = interaction;
     const target = options.getUser('target', true)
-    const { embed } = await buildBlacklistEmbed(target, guildId!);
+    const doc = await usersCollection.findOne({ userId: target.id, guildId: guildId }, { projection: { blacklist: 1 } });
+    const blacklist: string[] = doc?.blacklist ?? [];
+    const embed = new EmbedBuilder().setDescription(
+        `< @${target.id}> 's blacklist\n\nblacklist: ${blacklist.length ? blacklist.map(r => `<@&${r}>`).join(', ') : 'empty'}`,
+    );
     return await interaction.reply({ embeds: [embed] })
 });
-commands.set('blacklist.modify', async (interaction: ChatInputCommandInteraction) => {
+commands.set('modify', async (interaction) => {
     const { guildId, options } = interaction;
     const action = options.getString('action', true)
     const target = options.getUser('target', true)
     const role = options.getRole('role', true)
-    const { embed, blacklist } = await buildBlacklistEmbed(target, guildId!);
+    const doc = await usersCollection.findOne({ userId: target.id, guildId: guildId }, { projection: { blacklist: 1 } });
+    const blacklist: string[] = doc?.blacklist ?? [];
+    const embed = new EmbedBuilder();
     switch (action) {
         case 'add':
             if (!blacklist.includes(role.id)) {
                 await Promise.all([
-                    usersCollection.updateOne({ userId: target, guildId: guildId }, { $push: { blacklist: role } as any }),
+                    usersCollection.updateOne({ userId: target.id, guildId: guildId }, { $push: { blacklist: role.id } as any }),
                     client.rest.delete(Routes.guildMemberRole(guildId!, target.id!, role.id))
                 ])
-                embed.setDescription(`<@&${role}> was blacklisted from <@${target!}>`);
+                embed.setDescription(`${role} was blacklisted from ${target!}`);
             } else {
-                embed.setDescription(`<@&${role}> is already blacklisted from <@${target!}>`);
+                embed.setDescription(`${role}> is already blacklisted from ${target!}`);
             }
             break;
         case 'remove':
-            await usersCollection.updateOne({ userId: target!, guildId: guildId }, { $pull: { blacklist: role } as any });
-            embed.setDescription(`<@&${role}> was removed from <@${target!}>'s blacklist`);
+            await usersCollection.updateOne({ userId: target.id!, guildId: guildId }, { $pull: { blacklist: role.id } as any });
+            embed.setDescription(`${role} was removed from ${target!}'s blacklist`);
             break;
     }
     return await interaction.reply({ embeds: [embed] });
 });
-commands.set('apply', async (interaction: ChatInputCommandInteraction) => {
+commands.set('apply', async (interaction) => {
     const { member, guildId } = interaction;
     const doc = await usersCollection.findOne({ userId: member?.user.id, guildId: guildId }, { projection: { application: 1 } }) as any;
     return await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: buildApplicationHub(doc?.application ?? {}, PART_CONFIG) })
@@ -413,21 +351,53 @@ commands.set('leaderboard', async (interaction) => {
     embed.setThumbnail(guild?.iconURL() ?? null);
     return await interaction.reply({ embeds: [embed] })
 });
-commands.set('modlogs', async (Interaction) => {
-    const { member, guildId, options, memberPermissions, user, guild } = Interaction;
+commands.set('modlogs', async (Interaction, guildconfig) => {
+    const { member, guildId, options, user, guild } = Interaction;
+    const { staffroles } = guildconfig
     const targetUser = options.getUser('target', true);
-    const isAdmin = memberPermissions!.has(PermissionFlagsBits.Administrator) || user.id == guild?.ownerId
+    const isAdmin = member?.roles.cache.has(staffroles[0]) || user.id == guild?.ownerId
     const { punishments } = await usersCollection.findOne({ userId: targetUser.id, guildId: guildId }, { projection: { punishments: 1 } }) as any;
     if (!punishments?.length) {
         return Interaction.reply({ embeds: [{ color: 0xf58931, description: `❌ No modlogs found for <@${targetUser!.id}>.` }] })
     }
-    const moderator = await client.users.fetch(punishments[0].moderatorId);
-    await Interaction.reply(buildModlogView(punishments, 0, targetUser, moderator, member!.user.id, isAdmin));
+    const p = punishments[0];
+    const moderator = await client.users.fetch(p.moderatorId);
+    const mins = Math.round(p.duration / 60000);
+    const hours = Math.floor(mins / 60);
+    const LOG_COLORS: Record<string, number> = { Warn: 0xffcc00, Mute: 0xff4444, Ban: 0xd10000, Kick: 0x838383 };
+    const embed = new EmbedBuilder()
+        .setColor(LOG_COLORS[p.type] ?? 0x838383)
+        .setThumbnail(user.avatarURL())
+        .addFields(
+            { name: '**Member:**', value: `<@${user.id}>`, inline: true },
+            { name: '**type:**', value: `\`${p.type}\``, inline: true },
+            { name: '**Active:**', value: `\`${p.active == 1 ? 'true' : 'false'}\``, inline: true },
+            { name: '**Reason:**', value: `\`${p.reason}\`` },
+            { name: '**Punishments:**', value: `${p.type == 'Ban' ? '`Ban`' : `\`${p.weight} warn\``}${p.duration ? `,\`${hours > 0 ? `${hours} hour` : `${mins} minute`} Mute\`` : ''}` },
+            { name: '**Warns at Log Time:**', value: `\`${isFinite(p.warns) ? p.warns : 0}\`` },
+            { name: '**Channel:**', value: `<#${p.channel}>\n\n[Event Link](${p.refrence})` },
+        )
+        .setFooter({ text: `Staff: ${moderator.username} | log ${1} of ${punishments.length} | ${new Date(p.timestamp).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Chicago' })}`, iconURL: moderator.avatarURL() ?? moderator.defaultAvatarURL });
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder().setCustomId(`modlog-prev-${user.id}-${0}-${member?.user.id}`).setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary).setDisabled(0 === 0),
+        new ButtonBuilder().setCustomId(`modlog-next-${user.id}-${0}-${member?.user.id}`).setLabel('Next ➡️').setStyle(ButtonStyle.Secondary).setDisabled(0 >= punishments.length - 1),
+    );
+    if (isAdmin) row.addComponents(
+        new ButtonBuilder().setCustomId(`modlog-del-${user.id}-${0}-${member?.user.id}-${p._id}`).setLabel('Delete').setStyle(ButtonStyle.Danger).setDisabled(false),
+    );
+    await Interaction.reply({ embeds: [embed], components: [row] });
     setTimeout(() => {
-        void Interaction.editReply({ components: buildModlogView(punishments, 0, targetUser, moderator, member!.user.id, isAdmin, true).components }).catch(() => null);
+        const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder().setCustomId(`modlog-prev-${user.id}-${0}-${member?.user.id}`).setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary).setDisabled(true),
+            new ButtonBuilder().setCustomId(`modlog-next-${user.id}-${0}-${member?.user.id}`).setLabel('Next ➡️').setStyle(ButtonStyle.Secondary).setDisabled(true),
+        );
+        if (isAdmin) row.addComponents(
+            new ButtonBuilder().setCustomId(`modlog-del-${user.id}-${0}-${member?.user.id}-${p._id}`).setLabel('Delete').setStyle(ButtonStyle.Danger).setDisabled(true),
+        );
+        void Interaction.editReply({ components: [row] }).catch(() => null);
     }, 600000);
 });
-commands.set('note.add', async (interaction) => {
+commands.set('add', async (interaction) => {
     const { member, guildId, options, } = interaction;
     const note = options.getString('note', true)
     const targetUser = options.getUser('target', true)
@@ -436,7 +406,7 @@ commands.set('note.add', async (interaction) => {
         { $push: { notes: { _id: new ObjectId(), moderatorId: member?.user.id, note, timestamp: Date.now() } } as any },
     );
     if (!result.matchedCount) {
-        return await interaction.reply({ embeds: [notice(`❌ No record found for <@${targetUser.id}>.`)], flags: MessageFlags.Ephemeral })
+        return await interaction.reply({ embeds: [new EmbedBuilder({ description: `❌ No record found for <@${targetUser.id}>.` })], flags: MessageFlags.Ephemeral })
     }
     const container = new ContainerBuilder()
         .setAccentColor(0x00a900)
@@ -447,7 +417,7 @@ commands.set('note.add', async (interaction) => {
         );
     return await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container] })
 });
-commands.set('note.show', async (interaction) => {
+commands.set('show', async (interaction) => {
     const { member, guildId, options } = interaction;
     const u = options.getUser('target', true)
     const doc = await usersCollection.findOne({ userId: u.id, guildId: guildId }, { projection: { notes: 1 } });
@@ -456,7 +426,25 @@ commands.set('note.show', async (interaction) => {
         return await interaction.reply({ embeds: [new EmbedBuilder().setColor(0x00a900).setDescription(`❌ No notes found for <@${u!.id}>`).setThumbnail(u.avatarURL() ?? null).toJSON()] })
     }
     const mod = await client.users.fetch(sortednotes[0].moderatorId);
-    return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [buildNoteView(sortednotes, 0, u!, mod, member!.user.id)] })
+    const n = sortednotes[0]
+    const container = new ContainerBuilder({ accent_color: 0xdddddd, })
+        .addSectionComponents(new SectionBuilder({ components: [{ type: ComponentType.TextDisplay, content: `<@${u.id}> notes | \`${1} of ${sortednotes.length}\`\n${String(n.note).split('\n').map(l => `> ${l}`).join('\n')}\n\n${subtext(`<@${mod.id}> | ${new Date(n.timestamp).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Chicago' })}`)}` }], accessory: { type: ComponentType.Thumbnail, media: { url: u.avatarURL()! } } }))
+        .addActionRowComponents(new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder({ custom_id: `note-prev-${u.id}-${0}-${member?.user.id}`, label: '◀️ prev', style: ButtonStyle.Secondary, disabled: 0 === 0 }),
+            new ButtonBuilder({ custom_id: `note-next-${u.id}-${0}-${member?.user.id}`, label: '▶️ next', style: ButtonStyle.Secondary, disabled: 0 >= sortednotes.length - 1 }),
+            new ButtonBuilder({ custom_id: `note-del-${u.id}-${0}-${member?.user.id}-${n._id}`, label: '🗑️ delete', style: ButtonStyle.Secondary, disabled: false })
+        ))
+    await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container] })
+    setTimeout(() => {
+        const container = new ContainerBuilder({ accent_color: 0xdddddd, })
+            .addSectionComponents(new SectionBuilder({ components: [{ type: ComponentType.TextDisplay, content: `<@${u.id}> notes | \`${1} of ${sortednotes.length}\`\n${String(n.note).split('\n').map(l => `> ${l}`).join('\n')}\n\n${subtext(`<@${mod.id}> | ${new Date(n.timestamp).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Chicago' })}`)}` }], accessory: { type: ComponentType.Thumbnail, media: { url: u.avatarURL()! } } }))
+            .addActionRowComponents(new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder({ custom_id: `note-prev-${u.id}-${0}-${member?.user.id}`, label: '◀️ prev', style: ButtonStyle.Secondary, disabled: true }),
+                new ButtonBuilder({ custom_id: `note-next-${u.id}-${0}-${member?.user.id}`, label: '▶️ next', style: ButtonStyle.Secondary, disabled: true }),
+                new ButtonBuilder({ custom_id: `note-del-${u.id}-${0}-${member?.user.id}-${n._id}`, label: '🗑️ delete', style: ButtonStyle.Secondary, disabled: true })
+            ))
+        interaction.editReply({ components: [container] })
+    }, 600000);
 });
 commands.set('applications', async (interaction, guildConfig) => {
     const { modChannels } = guildConfig as Document
@@ -470,20 +458,19 @@ commands.set('applications', async (interaction, guildConfig) => {
             await usersCollection.updateMany({ guildId: interaction.guildId }, { $set: { application: {} } });
             break;
     }
-    return await interaction.reply({ embeds: [ephemeral(decision == 'closed' ? 'Apps have now been closed!' : 'Apps have now been opened!')] })
+    return await interaction.reply({ content: decision == 'closed' ? 'Apps have now been closed!' : 'Apps have now been opened!' })
 });
-commands.set('member.mute', async (interaction: ChatInputCommandInteraction, guildConfig: WithId<Document>) => {
+commands.set('mute', async (interaction, guildConfig) => {
     const blocked = await withGuards(interaction, guildConfig);
     if (blocked) return blocked;
     runPunishment(interaction, guildConfig).catch(console.error);
-    return await interaction.deferReply()
 })
-commands.set('member.create', async (interaction) => {
+commands.set('create', async (interaction) => {
     const { options, guildId } = interaction;
     const targetUser = options.getUser('target', true)
-    if (targetUser!.bot) return ephemeral('Bot accounts do not get member records.');
+    if (targetUser!.bot) return interaction.reply({ embeds: [new EmbedBuilder({ description: 'Bot accounts do not get member records.' })] })
     const targetMember = await interaction.guild!.members.fetch(targetUser.id);
-    if (!targetMember) return ephemeral('That user is not a member of this server.');
+    if (!targetMember) return interaction.reply({ embeds: [new EmbedBuilder({ description: 'That user is not a member of this server.' })] })
     const result = await usersCollection.updateOne(
         { userId: targetUser!.id, guildId: interaction.guildId },
         {
@@ -507,54 +494,51 @@ commands.set('member.create', async (interaction) => {
         },
         { upsert: true }
     );
-    return await interaction.reply({ embeds: [ephemeral(result.upsertedCount ? `Created a member record for <@${targetUser!.id}>.` : `<@${targetUser!.id}> already has a member record; nothing was changed.`)] })
+    return await interaction.reply({ embeds: [new EmbedBuilder({ description: result.upsertedCount ? `Created a member record for <@${targetUser!.id}>.` : `<@${targetUser!.id}> already has a member record; nothing was changed.` })] })
 });
-commands.set('member.ban', async (interaction, guildConfig, restrictedToFullMod = true) => {
-    const blocked = await withGuards(interaction, guildConfig, restrictedToFullMod);
+commands.set('ban', async (interaction, guildConfig) => {
+    const blocked = await withGuards(interaction, guildConfig, true);
     if (blocked) return blocked;
     runPunishment(interaction, guildConfig);
-    return await interaction.deferReply()
 });
-commands.set('member.warn', async (interaction, guildConfig) => {
+commands.set('warn', async (interaction, guildConfig) => {
     const blocked = await withGuards(interaction, guildConfig)
     if (blocked) return blocked;
     runPunishment(interaction, guildConfig)
-    return await interaction.deferReply()
 });
-commands.set('member.unwarn', async (interaction, guildConfig, restrictedToFullMod = true) => {
-    const blocked = await withGuards(interaction, guildConfig, restrictedToFullMod)
+commands.set('unwarn', async (interaction, guildConfig) => {
+    const blocked = await withGuards(interaction, guildConfig, true)
     if (blocked) return blocked;
     const target = interaction.options.getUser('target', true)
     const { punishments } = await usersCollection.findOne({ userId: target.id, guildId: interaction.guildId }, { projection: { punishments: 1 } }) as Document;
     const removed = punishments?.filter((p: any) => p.type === 'Warn').sort((a: any, b: any) => b.timestamp - a.timestamp)[0];
     if (removed) { await usersCollection.updateOne({ userId: target, guildId: interaction.guildId }, { $pull: { punishments: { _id: removed._id } } as any }); }
-    return await interaction.reply({ embeds: [notice(removed ? `Recent warn removed from <@${target}>` : `no recent warns found for <@${target}>`)] })
+    return await interaction.reply({ embeds: [new EmbedBuilder({ description: removed ? `Recent warn removed from <@${target}>` : `no recent warns found for <@${target}>` })] })
 })
-commands.set('member.unmute', async (interaction, guildConfig, restrictedToFullMod = true) => {
-    await withGuards(interaction, guildConfig, restrictedToFullMod)
+commands.set('unmute', async (interaction, guildConfig) => {
+    await withGuards(interaction, guildConfig, true)
     const { options } = interaction
     const target = options.getUser('target', true)
     const member = await interaction.guild!.members.fetch(target.id);
     if (member!.isCommunicationDisabled())
         await member.timeout(null);
-    return await interaction.reply({ embeds: [notice(member!.isCommunicationDisabled() ? '⚠️ User has been unmuted.' : '⚠️ User is not muted.')] })
+    return await interaction.reply({ embeds: [new EmbedBuilder({ description: member!.isCommunicationDisabled() ? '⚠️ User has been unmuted.' : '⚠️ User is not muted.' })] })
 
 })
-commands.set('member.kick', async (interaction, guildConfig, restrictedToFullMod = true) => {
-    const blocked = await withGuards(interaction, guildConfig, restrictedToFullMod);
+commands.set('kick', async (interaction, guildConfig) => {
+    const blocked = await withGuards(interaction, guildConfig, true);
     if (blocked) return blocked;
     runPunishment(interaction, guildConfig).catch(console.error);
-    return await interaction.deferReply()
 })
 commands.set('link', async (interaction) => {
     const { member, options, guildId } = interaction;
     const channel = options.getString('channel', true)
     const twitchUser = await apiClient.users.getUserByName(channel!)
-    if (!twitchUser) return await interaction.reply({ embeds: [ephemeral(`No Twitch channel found for \`${channel}\`.`)] })
+    if (!twitchUser) return await interaction.reply({ embeds: [new EmbedBuilder({ description: `No Twitch channel found for \`${channel}\`.` })] })
     await usersCollection.updateOne({ userId: member?.user.id, guildId: guildId }, { $set: { twitchChannelId: twitchUser.id, twitchChannelLogin: twitchUser.name } });
-    await interaction.reply({ embeds: [ephemeral(`Level Linked to Twitch channel ${quote(twitchUser.displayName)}.`)] })
+    await interaction.reply({ embeds: [new EmbedBuilder({ description: `Level Linked to Twitch channel ${quote(twitchUser.displayName)}.` })], flags: MessageFlags.Ephemeral })
 });
-commands.set('admin.clear', async (interaction) => {
+commands.set('clear', async (interaction) => {
     const { channel, options } = interaction
     const count = options.getInteger('count', true);
     if (count > 1) {
@@ -562,9 +546,18 @@ commands.set('admin.clear', async (interaction) => {
         return await interaction.reply({ content: `Deleted ${count} messages.`, flags: MessageFlags.Ephemeral, })
     }
 })
-
 client.on('clientReady', async (ready) => {
-    startStatusLoop();
+    clearInterval(presenceInterval);
+    presenceInterval = setInterval(() => {
+        client.user?.setPresence({
+            activities: [{
+                name: `for ${Math.floor(client.uptime! / 86400000)}d ${Math.floor((client.uptime! / 3600000) % 24)}h ${Math.floor((client.uptime! / 60000) % 60)}m ${Math.floor((client.uptime! / 1000) % 60)}s`,
+                type: ActivityType.Watching,
+            }],
+            status: PresenceUpdateStatus.Online,
+            afk: false,
+        });
+    }, 5000);
     await usersCollection.updateMany(
         { "punishments": { $elemMatch: { "active": 1, "timestamp": { $lt: Date.now() - 24 * 60 * 60 * 1000 } } } },
         { $set: { "punishments.$[elem].active": 0 } },
@@ -607,7 +600,7 @@ client.on('autoModerationActionExecution', async (action) => {
     })
     const object = new ObjectId();
     const newPunishment = {
-        _id: object, userId: user!.id, moderatorId: '1420927654701301951', reason,
+        _id: object, userId: user!.id, moderatorId: '1420927654701301951', reason: reason,
         duration: durationMs, timestamp: Date.now(), active: 1,
         weight: !bannable ? totalWeight : 1, type: warnType, channel: channel!.id,
         refrence: `https://discord.com/channels/${guild.id}/${channel!.id}/${finalMessage.id}`,
@@ -699,6 +692,7 @@ client.on('guildCreate', async (guild) => {
                 },
                 publicChannels: {},
                 generalchannels: [],
+                verifiedRole: "",
                 ownerId: ownerId,
                 reactions: {},
                 automodsettings: { messagereasonsandweights: {}, automodreasonsandweights: {}, Duplicatespamthreshold: 3, mediathreshold: 1, messagethreshold: 10, spamthreshold: 4, capsthreshold: 0.7 },
@@ -741,7 +735,7 @@ client.on('guildDelete', async (guild) => {
 })
 client.on('guildMemberAdd', async (member) => {
     const { guild, user } = member;
-    const { modChannels: { welcomeChannel, mutelogChannel }, generalchannels, Invites } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { modChannels: 1, staffroles: 1, generalchannels: 1, Invites: 1 } }) as Document;
+    const { modChannels: { welcomeChannel, mutelogChannel }, generalchannels, Invites, verifiedRole } = await guildconfigs.findOne({ guildId: guild.id }, { projection: { modChannels: 1, staffroles: 1, generalchannels: 1, Invites: 1, verifiedRole: 1 } }) as Document;
     const currentInvites = await guild.invites.fetch();
     const invite = currentInvites.find(i => i.uses! > (Invites[i.code]?.uses || 0)) ?? Object.values(Invites)?.find((i: any) => !currentInvites.get(i!.code!)) as DbInvite ?? undefined;
     const inviter: User | undefined | DbInvite | null = invite instanceof Invite ? invite.inviter : invite satisfies DbInvite ? invite : undefined;
@@ -805,7 +799,7 @@ client.on('guildMemberAdd', async (member) => {
         })
     } else {
         if (guild.id == "1231453115937587270")
-            await member.roles.add(`1463354464747524136`)
+            await member.roles.add(verifiedRole)
         const channel = await guild.channels.fetch(generalchannels[0]!) as TextChannel
         channel?.send({
             flags: MessageFlags.IsComponentsV2,
@@ -955,37 +949,52 @@ client.on('inviteDelete', async (invite) => {
     await guildconfigs.updateOne({ guildId: invite.guild!.id }, { $unset: { [`Invites.${invite.code}`]: "" } });
 })
 client.on('messageReactionAdd', async (reaction, user) => {
-    if (user.bot) return;
     if (reaction.partial) reaction = await reaction.fetch();
     const { message: { guild, id, }, emoji } = reaction;
-    if (!guild) return;
-    const config = await getReactionRoleConfig(guild.id, id);
-    if (!config) return;
-    const { reactions } = config;
-    const entry = reactions.find(e => e.emoji === emoji.id || e.emoji == emoji.name);
+    if (!guild || user.bot) return;
+    const { generalchannels, messageConfigs, verifiedRole } = await guildconfigs.findOne({ guildId: guild!.id }, { projection: { generalchannels: 1, messageConfigs: 1, verifiedRole: 1 } }) as Document
+    const member = guild!.members.cache.get(user.id);
+    const entry = Object.values(messageConfigs).find((info: any) => info?.messageId === id)?.reactions!.find((e: any) => e.emoji === emoji.name);
     if (!entry) return;
-    const roleIds = Array.isArray(entry.roleId) ? entry.roleId : [entry.roleId];
+    if (entry.roleId == verifiedRole) {
+        if (Date.now() - member?.joinedTimestamp! < ((Math.random() + 5) * 1000)) {
+            await reaction.users.remove(user.id);
+            await user.send({
+                embeds: [{
+                    author: { name: user.username!, icon_url: user.avatarURL() ?? user.defaultAvatarURL },
+                    description: `Hi ${user}, your interaction speed with the verification system was too fast for a typical human and was flagged for an auto kick.\n\nYou are free to rejoin the server through a new or public invite.`
+                }]
+            })
+            await guild.members.kick(user.id)
+            return;
+        }
+        await member?.roles.add(verifiedRole);
+        const generalchannel = guild?.channels.cache.get(generalchannels[0]) as TextChannel;
+        await generalchannel.send({ embeds: [{ description: `Everyone, Welcome <@${member?.user.id}> to the server!\n\n`, thumbnail: { url: user!.avatarURL() ?? user.defaultAvatarURL }, fields: [{ name: 'Discord Join Date:', value: `<t:${Math.floor(user.createdTimestamp / 1000)}>`, inline: true }] }] })
+        await usersCollection.findOneAndUpdate({ userId: member?.user.id }, { $set: { verified: true } })
+        await reaction.users.remove(user.id)
+        return await user.send({ content: `Welcome to ${guild!.name} <@${member?.user.id}>!! Be sure to grab some roles in the role claim channel!!` });
+    }
+    const roleIds: string[] = Array.isArray(entry.roleId) ? entry.roleId : [entry.roleId];
     const userDoc = await usersCollection.findOne({ userId: user.id, guildId: guild.id }, { projection: { blacklist: 1 } });
     if (userDoc?.blacklist?.length && roleIds.some(id => userDoc.blacklist.includes(id))) {
-        await reaction.users.remove(user.id).catch(() => { }); // optional: un-react so it doesn't look like it worked
+        await reaction.users.remove(user.id).catch(() => { }); 
         return;
     }
-    const member = guild.members.cache.get(user.id);
-    await member!.roles.add(roleIds);
+    await member?.roles.add(roleIds);
 });
 client.on('messageReactionRemove', async (reaction, user) => {
     const { message: { guild, id }, emoji } = reaction;
     if (!guild || user.bot) return;
-    const config = await getReactionRoleConfig(guild.id, id);
-    if (!config) return;
-    const entry = config.reactions.find(entry => entry.emoji === (emoji.id! ?? emoji.name!));
-    if (!entry || !config) return;
-    const roleIds = Array.isArray(entry.roleId) ? entry.roleId : [entry.roleId];
+    const { messageConfigs } = await guildconfigs.findOne({ guildId: guild!.id }, { projection: { generalchannels: 1, messageConfigs: 1 } }) as Document
+    const entry = Object.values(messageConfigs).find((info: any) => info?.messageId === id)?.reactions!.find((e: any) => e.emoji === emoji.name);
+    if (!entry) return;
+    const roleIds: string[] = Array.isArray(entry.roleId) ? entry.roleId : [entry.roleId];
     const member = guild.members.cache.get(user.id);
     await Promise.all(roleIds.map(id => member!.roles.remove(id)));
 })
 client.on('messageDelete', async (deletedData) => {
-    const { id, channelId, guildId, stickers, attachments, author, content } = deletedData;
+    const { id, channelId, guildId, stickers, attachments, author, content, guild } = deletedData;
     if (deletedData.partial || !author || author.bot) return;
     const imageAttachments = attachments.filter(att => att.contentType?.startsWith('image/')).map(att => att.proxyURL);
     const { modChannels: { deletedlogChannel } } = await guildconfigs.findOne({ guildId }, { projection: { modChannels: 1 } }) as Document;
@@ -994,7 +1003,7 @@ client.on('messageDelete', async (deletedData) => {
         .addSectionComponents({
             type: ComponentType.Section,
             components: [{
-                type: ComponentType.TextDisplay, content: `Message by ${author.username} was deleted in <#${channelId}>\n\n${content || 'No text content'}`
+                type: ComponentType.TextDisplay, content: `Message by ${author} was deleted in <#${channelId}>\n\n${content || 'No text content'}`
             }],
             accessory: { type: ComponentType.Thumbnail, media: { url: author.avatarURL() ?? author.defaultAvatarURL } }
         })
@@ -1007,7 +1016,8 @@ client.on('messageDelete', async (deletedData) => {
         container.addMediaGalleryComponents(new MediaGalleryBuilder({ items: imageAttachments.map(url => ({ media: { url } })) }));
     }
     container.addActionRowComponents(new ActionRowBuilder<ButtonBuilder>({ components: [new ButtonBuilder().setStyle(ButtonStyle.Link).setURL(`https://discord.com/channels/${guildId}/${channelId}/${id}`).setLabel('Event link')] }))
-    await client.rest.post(Routes.channelMessages(deletedlogChannel), { body: { flags: MessageFlags.IsComponentsV2, components: [container] } })
+    const channel = guild?.channels.cache.get(deletedlogChannel) as TextChannel
+    await channel?.send({ flags: MessageFlags.IsComponentsV2, components: [container], allowedMentions: { parse: [] } })
 })
 client.on('messageUpdate', async (oldMessage, newMessage) => {
     const { author, id, channelId, content, guildId, guild } = newMessage;
@@ -1132,7 +1142,7 @@ client.on('messageCreate', async (message) => {
     const isNewUser = Date.now() - member?.joinedTimestamp! < 2 * 24 * 60 * 60 * 1000 && level < 3
     if (isstaff) return;
     if (mentions.everyone) await message.delete();
-    const activeChecks = Object.entries(messagereasonsandweights).filter(([key]) => automodMarks[key]).map(([, check]) => ({ ...check }));
+    const activeChecks = Object.entries(messagereasonsandweights as { [x: string]: { reason: string; weight: number } }).filter(([key]) => automodMarks[key]).map(([, check]) => ({ ...check }));
     let totalWeight = activeChecks.reduce((acc, check) => acc + check.weight, 0);
     if (totalWeight == 0) return;
     await usersCollection.updateOne({ guildId: guild.id, userId: member!.user.id }, {
@@ -1161,7 +1171,7 @@ client.on('messageCreate', async (message) => {
             color: statusMap[warnType]!.color,
         }]
     });
-    const newPunishment = { _id: object, userId: author.id, moderatorId: '1420927654701301951', reasonText, duration: durationMs, timestamp: Date.now(), active: 1, weight: !bannable ? totalWeight : 1, type: warnType, guildId: guild.id, channel: channel.id, refrence: `https://discord.com/channels/${guild.id}/${channel.id}/${finalMessage.id}`, warns: isFinite(totalWarns) ? totalWarns - 1 : 0 };
+    const newPunishment = { _id: object, userId: author.id, moderatorId: client.user!.id, reason: reasonText, duration: durationMs, timestamp: Date.now(), active: 1, weight: !bannable ? totalWeight : 1, type: warnType, guildId: guild.id, channel: channel.id, refrence: `https://discord.com/channels/${guild.id}/${channel.id}/${finalMessage.id}`, warns: isFinite(totalWarns) ? totalWarns - 1 : 0 };
     await usersCollection.updateOne({ userId: author.id, guildId: guild.id }, { $push: { punishments: newPunishment as any } });
     const list = punishments ? [...punishments, newPunishment] : [newPunishment]
     const caseHistory = list.filter((r: any) => warnType === 'Ban' ? r.type === "Ban" : r.type !== 'Kick').slice(0, 10).map((p: any, idx: number) => p.refrence ? `[Case ${idx + 1}](${p.refrence})` : null).filter(Boolean);
@@ -1307,12 +1317,13 @@ client.on('interactionCreate', async (interaction) => {
         }
     }
     if (interaction.isButton()) {
-        const { guildId, member, customId, memberPermissions, channel, message, user, guild } = interaction
-        const { modChannels, appealInvite, generalchannels } = await guildconfigs.findOne({ guildId: guildId }, { projection: { modChannels: 1, appealInvite: 1, generalchannels: 1 } }) as Document
-        const isAdmin = memberPermissions?.has(PermissionFlagsBits.Administrator) || user.id == guild?.ownerId
+        const { guildId, member, customId, channel, message, user, guild } = interaction
+        const { modChannels, appealInvite, staffroles } = await guildconfigs.findOne({ guildId: guildId }, { projection: { modChannels: 1, appealInvite: 1, generalchannels: 1, staffroles: 1 } }) as Document
+
+        const isAdmin = member?.roles.cache.has(staffroles[0]) || user.id == guild?.ownerId
         if (customId.startsWith('ban_')) {
             const [, targetId, inviteCode] = customId.split('_');
-            if (memberPermissions!.has(PermissionFlagsBits.BanMembers)) return interaction.reply({ embeds: [ephemeral('jrs cannot use this button.')] })
+            if (!member?.roles.cache.has(staffroles[1]) && !isAdmin) return interaction.reply({ embeds: [new EmbedBuilder({ description: 'jrs cannot use this button.' })], flags: MessageFlags.Ephemeral })
             const targetUser = await client.users.fetch(targetId!)
             await guildconfigs.updateOne({ guildId: guildId }, { $set: { Ban: targetUser.id } });
             const doc = await usersCollection.findOne({ userId: targetUser!.id, guildId: guildId }, { projection: { punishments: 1 } });
@@ -1360,10 +1371,10 @@ client.on('interactionCreate', async (interaction) => {
             const targetUser = await client.users.fetch(userId!);
             const doc = await usersCollection.findOne({ userId, guildId: guildId }, { projection: { appeals: 1 } });
             const appeals = doc?.appeals;
-            if (!appeals) return ephemeral('I could not find any appeal entries');
-            if (!memberPermissions?.has(PermissionFlagsBits.BanMembers)) {
-                await client.rest.post(Routes.channelMessages(modChannels.adminChannel), { body: { embeds: [notice(`Letting you know <@${member?.user.id}> tried to jump the gun on an appeal.`)] } });
-                return ephemeral('Please wait for an admin to make a decision.');
+            if (!appeals) return interaction.reply({ content: 'I could not find any appeal entries', flags: MessageFlags.Ephemeral });
+            if (!member?.roles.cache.has(staffroles[1])) {
+                await client.rest.post(Routes.channelMessages(modChannels.adminChannel), { body: { embeds: [new EmbedBuilder({ description: `Letting you know <@${member?.user.id}> tried to jump the gun on an appeal.` })] } });
+                return interaction.reply({ content: 'Please wait for an admin to make a decision.', flags: MessageFlags.Ephemeral });
             }
             if (!approved) await usersCollection.deleteOne({ userId, guildId: guildId }); // wipes the whole doc
             else {
@@ -1423,7 +1434,7 @@ client.on('interactionCreate', async (interaction) => {
         else if (customId.startsWith('note-') || customId.startsWith('modlog-')) {
             const isNote = customId.startsWith('note-');
             const [, action, target, index, opener, itemId] = customId.split('-');
-            if (member!.user.id !== opener) return interaction.reply({ embeds: [ephemeral('You did not initiate this command')] });
+            if (member!.user.id !== opener) return interaction.reply({ embeds: [new EmbedBuilder({ description: 'You did not initiate this command' })], flags: MessageFlags.Ephemeral });
             const targetUser = await client.users.fetch(target!)
             let idx = parseInt(index!);
             if (action === 'del') {
@@ -1431,7 +1442,7 @@ client.on('interactionCreate', async (interaction) => {
                 if (isNote) {
                     const found = await usersCollection.findOne({ userId: target, guildId: guildId, 'notes._id': itemObjId }, { projection: { 'notes.$': 1 } });
                     const note = found?.notes?.[0];
-                    if (note && !isAdmin && Date.now() - note.timestamp >= 172_800_000) return ephemeral('Contact an admin, deletion time expired.');
+                    if (note && !isAdmin && Date.now() - note.timestamp >= 172_800_000) interaction.reply({ embeds: [new EmbedBuilder({ description: 'Contact an admin, note is too old to delete.' })] });
                     if (note) await usersCollection.updateOne({ userId: target, guildId: guildId }, { $pull: { notes: { _id: itemObjId } } as any });
                 } else {
                     await usersCollection.updateOne({ userId: target, guildId: guildId }, { $pull: { punishments: { _id: itemObjId } } as any });
@@ -1452,17 +1463,49 @@ client.on('interactionCreate', async (interaction) => {
                 }
                 idx = Math.min(idx, notes.length - 1);
                 const mod = await client.users.fetch(notes[idx].moderatorId);
-                return await interaction.update({ flags: MessageFlags.IsComponentsV2, components: [buildNoteView(notes, idx, targetUser, mod, opener!)] })
+                const n = notes[idx];
+                const container = new ContainerBuilder({ accent_color: 0xdddddd, })
+                    .addSectionComponents(new SectionBuilder({ components: [{ type: ComponentType.TextDisplay, content: `<@${user.id}> notes | \`${idx + 1} of ${notes.length}\`\n${String(n.note).split('\n').map(l => `> ${l}`).join('\n')}\n\n${subtext(`<@${mod.id}> | ${new Date(n.timestamp).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Chicago' })}`)}` }], accessory: { type: ComponentType.Thumbnail, media: { url: user.avatarURL()! } } }))
+                    .addActionRowComponents(new ActionRowBuilder<ButtonBuilder>().addComponents(
+                        new ButtonBuilder({ custom_id: `note-prev-${user.id}-${idx}-${member?.user.id}`, label: '◀️ prev', style: ButtonStyle.Secondary, disabled: idx === 0 }),
+                        new ButtonBuilder({ custom_id: `note-next-${user.id}-${idx}-${member?.user.id}`, label: '▶️ next', style: ButtonStyle.Secondary, disabled: idx >= notes.length - 1 }),
+                        new ButtonBuilder({ custom_id: `note-del-${user.id}-${idx}-${member?.user.id}-${n._id}`, label: '🗑️ delete', style: ButtonStyle.Secondary, disabled: false })
+                    ));
+                return await interaction.update({ flags: MessageFlags.IsComponentsV2, components: [container] })
             } else {
                 const doc = await usersCollection.findOne({ userId: target, guildId: guildId }, { projection: { punishments: 1 } });
                 const logs: any[] = doc?.punishments ?? [];
                 if (!logs.length) {
-                    return await interaction.reply({ embeds: [notice('All logs deleted.')], components: [] })
+                    return await interaction.reply({ embeds: [new EmbedBuilder({ description: 'All logs deleted.' })], components: [] })
                 }
                 idx = Math.min(idx, logs.length - 1);
-
+                const p = logs[idx];
+                const mins = Math.round(p.duration / 60000);
+                const hours = Math.floor(mins / 60);
+                const LOG_COLORS: Record<string, number> = { Warn: 0xffcc00, Mute: 0xff4444, Ban: 0xd10000, Kick: 0x838383 };
                 const mod = await client.users.fetch(logs[idx].moderatorId);
-                return await interaction.update(buildModlogView(logs, idx, targetUser, mod, opener!, isAdmin!))
+                const embed = new EmbedBuilder()
+                    .setColor(LOG_COLORS[p.type] ?? 0x838383)
+                    .setThumbnail(user.avatarURL())
+                    .addFields(
+                        { name: '**Member:**', value: `<@${targetUser.id}>`, inline: true },
+                        { name: '**type:**', value: `\`${p.type}\``, inline: true },
+                        { name: '**Active:**', value: `\`${p.active == 1 ? 'true' : 'false'}\``, inline: true },
+                        { name: '**Reason:**', value: `\`${p.reason}\`` },
+                        { name: '**Punishments:**', value: `${p.type == 'Ban' ? '`Ban`' : `\`${p.weight} warn\``}${p.duration ? `,\`${hours > 0 ? `${hours} hour` : `${mins} minute`} Mute\`` : ''}` },
+                        { name: '**Warns at Log Time:**', value: `\`${isFinite(p.warns) ? p.warns : 0}\`` },
+                        { name: '**Channel:**', value: `<#${p.channel}>\n\n[Event Link](${p.refrence})` },
+                    )
+                    .setFooter({ text: `Staff: ${mod.username} | log ${idx + 1} of ${logs.length} | ${new Date(p.timestamp).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Chicago' })}`, iconURL: mod.avatarURL() ?? mod.defaultAvatarURL });
+                const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                    new ButtonBuilder().setCustomId(`modlog-prev-${targetUser.id}-${index}-${member?.user.id}`).setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary).setDisabled(idx === 0),
+                    new ButtonBuilder().setCustomId(`modlog-next-${targetUser.id}-${index}-${member?.user.id}`).setLabel('Next ➡️').setStyle(ButtonStyle.Secondary).setDisabled(idx >= logs.length - 1),
+                );
+                if (isAdmin) row.addComponents(
+                    new ButtonBuilder().setCustomId(`modlog-del-${targetUser.id}-${index}-${member?.user.id}-${p._id}`).setLabel('Delete').setStyle(ButtonStyle.Danger).setDisabled(false),
+                );
+
+                return await interaction.update({ embeds: [embed], components: [row] })
             }
         }
         else if (customId.startsWith('logos')) {
@@ -1479,7 +1522,7 @@ client.on('interactionCreate', async (interaction) => {
         }
         else if (customId.startsWith('ttt-')) {
             const [, boardStr, player1, player2, currentplayer, index] = customId.split('-');
-            if (member?.user.id !== currentplayer) return interaction.reply({ embeds: [ephemeral("It's not your turn.")], flags: MessageFlags.Ephemeral }) 
+            if (member?.user.id !== currentplayer) return interaction.reply({ embeds: [new EmbedBuilder({ description: "It's not your turn." })], flags: MessageFlags.Ephemeral }) 
             const board = boardStr!.split('');
             const marker = currentplayer === player1 ? 'X' : 'O';
             board[parseInt(index!)] = marker;
@@ -1526,7 +1569,10 @@ client.on('interactionCreate', async (interaction) => {
                 if (won) {
                     const winProbability = Math.max(choice === 'higher' ? (parseInt(prevMin!) - start) : (start - parseInt(prevMin!)), 1) / (parseInt(prevMax!) - parseInt(prevMin!));
                     const gained = Math.round(8 / winProbability);
-                    const { min, max } = rangeForStreak(streak + 1);
+                    const width = Math.max(5, 100 / (1 + 2 * Math.log(streak + 1)));
+                    const center = width / 2 + (Math.random() - 0.5) * (100 - width); // range wanders, not glued to center
+                    let min = Math.ceil(Math.max(1, center - width / 2));
+                    let max = Math.ceil(Math.min(100, center + width / 2));
                     const newStart = min + Math.ceil(Math.random() * (max - min));
                     let newSecret = min + Math.ceil(Math.random() * (max - min));
                     const row = new ActionRowBuilder<ButtonBuilder>({
@@ -1556,34 +1602,17 @@ client.on('interactionCreate', async (interaction) => {
                 }
             }
         }
-        else if (customId.startsWith('verify')) {
-            if (Date.now() - (member as GuildMember)!.joinedTimestamp! < ((Math.random() + 5) * 1000)) {
-                await user.send({
-                    embeds: [{
-                        author: { name: user.username, icon_url: user.avatarURL() ?? user.defaultAvatarURL },
-                        description: `Hi <@${user.id}>, your interaction speed with the verification system was too fast for a typical human and was flagged for an auto kick.\n\nYou are free to rejoin the server through a new or public invite.`
-                    }]
-                })
-                await guild?.members.kick(user.id)
-                return;
-            }
-            await (member as GuildMember)?.roles.add('1463354464747524136');
-            const generalchannel = guild?.channels.cache.get(generalchannels[0]) as TextChannel;
-            await generalchannel.send({ embeds: [{ description: `Everyone, Welcome <@${member?.user.id}> to the server!\n\n`, thumbnail: { url: user!.avatarURL() ?? user.defaultAvatarURL }, fields: [{ name: 'Discord Join Date:', value: `<t:${Math.floor(user.createdTimestamp / 1000)}>`, inline: true }] }] })
-            await usersCollection.findOneAndUpdate({ userId: member?.user.id }, { $set: { verified: true } })
-            return await user.send({ content: `Welcome to ${guild!.name} <@${member?.user.id}>!! Be sure to grab some roles in the role claim channel!!` });
-        }
     }
     if (interaction.isChatInputCommand()) {
         const { options, commandName, guildId, user } = interaction
         const guildConfig = await guildconfigs.findOne({ guildId: guildId }, { projection: { modChannels: 1, publicChannel: 1, staffroles: 1, exponent: 1, baseMultiplier: 1, roundToNearest: 1, flatOffset: 1, Stages: 1 }, });
         const subcommand = options ? options.getSubcommand(false) : null
-        const key = subcommand ? `${commandName}.${subcommand}` : commandName;
+        const key = subcommand ? subcommand : commandName;
         const expiry = activeCooldowns.get(`${user.id}.${key}`);
         const handler = commands.get(key);
-        if (!handler) return ephemeral(`Unhandled command: ${key}`);
+        if (!handler) return interaction.reply({ content: `Unhandled command: ${key}`, flags: MessageFlags.Ephemeral });
         if (expiry && expiry > Date.now()) {
-            return await interaction.reply({ embeds: [notice(`<@${user.id}>, you can use ${subcommand ? key.split('.')[1] : commandName} command again in <t:${Math.floor(expiry / 1000)}:R>`)], flags: MessageFlags.Ephemeral })
+            return await interaction.reply({ embeds: [new EmbedBuilder({ description: `<@${user.id}>, you can use ${subcommand ? key.split('.')[1] : commandName} command again in <t:${Math.floor(expiry / 1000)}:R>` })], flags: MessageFlags.Ephemeral })
         }
         activeCooldowns.set(`${user.id}.${key}`, Date.now() + 5000);
         return await handler(interaction, guildConfig!)
