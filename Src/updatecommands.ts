@@ -35,7 +35,7 @@ const commands: RESTPostAPIChatInputApplicationCommandsJSONBody[] = [
                 .addRoleOption(new SlashCommandRoleOption().setName('role').setDescription('Role').setRequired(true))
         )
         .addSubcommand(
-            new SlashCommandSubcommandBuilder().setName('show').setDescription('show blacklist').addUserOption(new SlashCommandUserOption().setName('target').setDescription('User to Show').setRequired(true))
+            new SlashCommandSubcommandBuilder().setName('view').setDescription('show blacklist').addUserOption(new SlashCommandUserOption().setName('target').setDescription('User to Show').setRequired(true))
         ).toJSON(),
     new SlashCommandBuilder()
         .setName('dnd')
