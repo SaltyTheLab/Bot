@@ -63,6 +63,7 @@ interface GuildConfigDoc {
     guildId: string;
     name?: string | null;
     ownerId?: string;
+    verifiedRole?: string;
     staffroles?: string[];
     modChannels?: Record<string, string>;
     publicChannels?: Record<string, string>;
@@ -137,6 +138,7 @@ const elements = {
     adminRoleInput: el<HTMLInputElement>('adminRoleInput'),
     modRoleInput: el<HTMLInputElement>('modRoleInput'),
     jrRoleInput: el<HTMLInputElement>('jrRoleInput'),
+    verifiedRoleInput: el<HTMLInputElement>('verifiedRoleInput'),
     automodSection: el('AutomodSection'),
     addPublicChannelBtn: el('addPublicChannelBtn'),
     EmbedSection: el('embedContentSection'),
@@ -163,6 +165,7 @@ const rolePickers = {
     admin: makeRolePicker(elements.adminRoleInput),
     mod: makeRolePicker(elements.modRoleInput),
     jr: makeRolePicker(elements.jrRoleInput),
+    verified: makeRolePicker(elements.verifiedRoleInput),
 };
 
 
@@ -1192,7 +1195,7 @@ function confirmModal(message: string) {
     });
 }
 function getFormValues() {
-    const { modChannelsSection, publicChannelsSection, GeneralChannelsSection, reactionsSection, automodSection, Responses, adminRoleInput, modRoleInput, jrRoleInput, reasonsWeightsSection, messageReasonsWeightsSection, } = elements;
+    const { modChannelsSection, publicChannelsSection, GeneralChannelsSection, reactionsSection, automodSection, Responses, adminRoleInput, modRoleInput, jrRoleInput, verifiedRoleInput, reasonsWeightsSection, messageReasonsWeightsSection, } = elements;
 
     const modChannels = getSectionValues(modChannelsSection, 'mod');
     const publicChannels = getSectionValues(publicChannelsSection, 'public');
@@ -1204,7 +1207,7 @@ function getFormValues() {
     const responses = getSectionValues(Responses, 'response');
     const staffroles = [adminRoleInput.value.trim(), modRoleInput.value.trim(), jrRoleInput.value.trim()];
 
-    const config = { modChannels, publicChannels, generalchannels, reactions, automodsettings: { ...automodThresholds, messagereasonsandweights, automodreasonsandweights, }, Stages: getAutomodStageValues(elements.automodStagesSection), ...getXpCurveValues(elements.xpSection), responses, staffroles };
+    const config = { modChannels, publicChannels, generalchannels, reactions, automodsettings: { ...automodThresholds, messagereasonsandweights, automodreasonsandweights, }, Stages: getAutomodStageValues(elements.automodStagesSection), ...getXpCurveValues(elements.xpSection), responses, staffroles, verifiedRole: verifiedRoleInput.value.trim() };
     return config;
 }
 function showMessage(message: string, colorClass: string) {
@@ -1318,6 +1321,7 @@ async function loadSelectedGuild(guildId: string | null = null, guildconfig?: Gu
             currentGuildChannels = doc.guildChannels || [];
             staffRoles = doc.staffRoles
             currentGuildRoles = doc.guildRoles!
+            rolePickers.verified.setRoles((doc.guildRoles ?? []).filter(role => !role.managed && role.id !== guildId));
             const canEdit = doc._viewerRole === 'admin' || doc._viewerRole === 'owner';
             setDisabledState(saveConfigBtn, !canEdit);
             saveConfigBtn.title = canEdit ? '' : 'Admin role required';
@@ -1328,6 +1332,7 @@ async function loadSelectedGuild(guildId: string | null = null, guildconfig?: Gu
             adminRoleInput.value = doc.staffroles![0] ?? '';
             modRoleInput.value = doc.staffroles![1] ?? '';
             jrRoleInput.value = doc.staffroles![2] ?? '';
+            elements.verifiedRoleInput.value = doc.verifiedRole ?? '';
         } catch (error) {
             showMessage(`Failed to load config: ${errMsg(error)}`, 'bg-red-500');
         }

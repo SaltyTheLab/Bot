@@ -55,6 +55,7 @@
           <button id="publicChannelsTab" class="tab-btn" data-target="publicChannelsContent">Public Channels</button>
           <button id="GeneralTab" class="tab-btn" data-target="GeneralContent">General Channels</button>
           <button id="StaffRoles" class="tab-btn " data-target="StaffRolesContent">Staff Roles</button>
+          <button id="VerificationTab" class="tab-btn" data-target="VerificationContent">Verification</button>
           <button id="xpCurveTab" class="tab-btn" data-target="xpcurve">XP Curve</button>
           <button id="stringReactionsTab" class="tab-btn" data-target="stringReactionsContent">String Reactions</button>
           <button id="EmbedContentTab" class="tab-btn" data-target="embedContent">Embeds</button>
@@ -92,6 +93,11 @@
                 <span class="field-label">Jr Role</span>
                 <div data-role-picker-input="jrRoleInput"></div>
               </div>
+            </div>
+            <div id="VerificationContent" class="tab-content bg-gray-700 p-4 rounded-xl space-y-4 shadow-inner hidden">
+              <span class="field-label">Verified Role</span>
+              <p class="text-sm text-gray-400">Role for access to rest of server.</p>
+              <div data-role-picker-input="verifiedRoleInput"></div>
             </div>
             <div id="autoModContent" class="tab-content bg-gray-700 p-4 rounded-xl space-y-4 shadow-inner hidden">
               <div class="flex border-b border-gray-600">
