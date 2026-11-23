@@ -69,6 +69,7 @@ export async function syncEmbed(rest: REST, guildId: string, embedName: string, 
         message = await rest.post(Routes.channelMessages(channelid), { body: buildBody(), files: files.length ? files : undefined }) as APIMessage;
         for (const reaction of reactions ?? [])
             await rest.put(Routes.channelMessageOwnReaction(channelid, message.id, reaction.emoji));
+        await guildconfigs.updateOne({ guildId }, { $set: { [`messageConfigs.${embedName}`]: { ...config, messageId: message.id } } });
         return { status: 'sent', messageId: message.id };
     }
     const componentsDifferent = getComparableComponents(message.components) !== getComparableComponents(components);
