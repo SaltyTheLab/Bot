@@ -7,5 +7,5 @@ const logos = client.db("Database").collection("logos")
 const twitchconfig = client.db("Database").collection("websocket")
 const oauthSessions = client.db("Database").collection("oauthSessions")
 await oauthSessions.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-type DbInvite = Record<string, { uses: number; id: string; code: string }>;
+type DbInvite = { uses: number; inviterId?: string; code: string; bot?: boolean };
 export { usersCollection, guildconfigs, logos, twitchconfig, oauthSessions, type DbInvite }
